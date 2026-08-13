@@ -1,0 +1,22 @@
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import Script from "next/script";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Gando · Sales Cockpit",
+  description: "Cockpit commercial Gando connecté à HubSpot",
+};
+
+export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <html lang="fr" suppressHydrationWarning>
+      <body>
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||(!t&&window.matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.classList.add("dark");}}catch(e){}})();`}
+        </Script>
+        {children}
+      </body>
+    </html>
+  );
+}
