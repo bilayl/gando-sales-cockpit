@@ -1,41 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, hubspotJson } from "@/lib/hubspot";
-
-const properties = ["firstname","lastname","email","phone","mobilephone","company","jobtitle","hubspot_owner_id","statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance","minari_call_count","referly_call_outcome","referly_reason_to_reach_out","state","city","hs_last_sales_activity_timestamp","notes_last_contacted","hs_object_source_label","createdate"];
+import { hubspotJson } from "@/lib/hubspot";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const editable = ["firstname","lastname","email","phone","mobilephone","jobtitle","city","state","company","hubspot_owner_id","statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance"];
 
-const ACTIVITY_TYPES: Record<string, { path: string; associationTypeId: number; allowed: string[] }> = {
-  note: { path: "notes", associationTypeId: 202, allowed: ["hs_note_body","hs_timestamp","hubspot_owner_id"] },
-  call: { path: "calls", associationTypeId: 196, allowed: ["hs_call_title","hs_call_body","hs_call_status","hs_call_disposition","hs_call_duration","hs_timestamp","hubspot_owner_id"] },
-  task: { path: "tasks", associationTypeId: 197, allowed: ["hs_task_subject","hs_task_body","hs_task_status","hs_task_priority","hs_task_type","hs_timestamp","hubspot_owner_id"] },
-  meeting: { path: "meetings", associationTypeId: 200, allowed: ["hs_meeting_title","hs_meeting_start_time","hs_meeting_end_time","hs_meeting_location","hs_meeting_outcome","hs_timestamp","hubspot_owner_id"] },
+const ACTIVITY_TYPES: Record<string, { path: string; associationTypeId: number; allowed: string[]; type: string }> = {
+  note: { path: "notes", associationTypeId: 202, allowed: ["hs_note_body","hs_timestamp","hubspot_owner_id"], type: "note" },
+  call: { path: "calls", associationTypeId: 196, allowed: ["hs_call_title","hs_call_body","hs_call_status","hs_call_disposition","hs_call_duration","hs_timestamp","hubspot_owner_id"], type: "call" },
+  task: { path: "tasks", associationTypeId: 197, allowed: ["hs_task_subject","hs_task_body","hs_task_status","hs_task_priority","hs_task_type","hs_timestamp","hubspot_owner_id"], type: "task" },
+  meeting: { path: "meetings", associationTypeId: 200, allowed: ["hs_meeting_title","hs_meeting_start_time","hs_meeting_end_time","hs_meeting_location","hs_meeting_outcome","hs_timestamp","hubspot_owner_id"], type: "meeting" },
 };
 
-function idsFrom(record: any, type: string) {
-  return (record?.associations?.[type]?.results ?? []).map((r: any) => String(r.id)).slice(0, 20);
-}
-
-async function batch(type: string, ids: string[], properties: string[]) {
-  if (!ids.length) return [];
-  const data = await hubspotJson(`/crm/objects/2026-03/${type}/batch/read`, { method: "POST", body: JSON.stringify({ properties, inputs: ids.map(id => ({ id })) }) });
-  return data.results ?? [];
+function hubspotRecord(row: any) {
+  return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
 }
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const query = new URLSearchParams({ properties: properties.join(","), associations: "companies,notes,calls,tasks,meetings" });
-    const contact = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(id)}?${query}`);
-    const [companies, notes, calls, tasks, meetings] = await Promise.all([
-      batch("companies", idsFrom(contact, "companies"), ["name","domain","phone","city","state"]),
-      batch("notes", idsFrom(contact, "notes"), ["hs_note_body","hs_timestamp","hs_createdate","hs_object_source_label"]),
-      batch("calls", idsFrom(contact, "calls"), ["hs_call_title","hs_call_body","hs_call_status","hs_call_disposition","hs_timestamp"]),
-      batch("tasks", idsFrom(contact, "tasks"), ["hs_task_subject","hs_task_body","hs_task_status","hs_timestamp"]),
-      batch("meetings", idsFrom(contact, "meetings"), ["hs_meeting_title","hs_meeting_start_time","hs_meeting_outcome","hs_timestamp"]),
+    const { data: contact, error } = await supabaseAdmin.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
+    if (error) throw error;
+    if (!contact) return NextResponse.json({ error: "Contact introuvable dans Supabase. Lancez une synchronisation." }, { status: 404 });
+
+    const [companiesResult, activitiesResult, tasksResult] = await Promise.all([
+      contact.company_id
+        ? supabaseAdmin.from("companies").select("hubspot_id,raw_data").eq("id", contact.company_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      supabaseAdmin.from("activities").select("hubspot_id,activity_type,raw_data").eq("contact_id", contact.id),
+      supabaseAdmin.from("tasks").select("hubspot_id,raw_data").eq("contact_id", contact.id),
     ]);
-    return NextResponse.json({ contact, companies, notes, calls, tasks, meetings });
-  } catch (error) { return apiError(error); }
+    if (companiesResult.error) throw companiesResult.error;
+    if (activitiesResult.error) throw activitiesResult.error;
+    if (tasksResult.error) throw tasksResult.error;
+
+    const companies = companiesResult.data ? [hubspotRecord(companiesResult.data)] : [];
+    const activities = activitiesResult.data ?? [];
+    const notes = activities.filter(a => a.activity_type === "note").map(hubspotRecord);
+    const calls = activities.filter(a => a.activity_type === "call").map(hubspotRecord);
+    const meetings = activities.filter(a => a.activity_type === "meeting").map(hubspotRecord);
+    const tasks = (tasksResult.data ?? []).map(hubspotRecord);
+
+    return NextResponse.json({ contact: hubspotRecord(contact), companies, notes, calls, tasks, meetings });
+  } catch (error) {
+    const e = error as Error;
+    return NextResponse.json({ error: e.message || "Erreur Supabase", details: e }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -45,8 +54,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const properties = Object.fromEntries(Object.entries(body.properties ?? {}).filter(([key]) => editable.includes(key)));
     if (!Object.keys(properties).length) return NextResponse.json({ error: "Aucune propriété modifiable fournie" }, { status: 400 });
     const data = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ properties }) });
+
+    const { data: existing } = await supabaseAdmin.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
+    if (existing) {
+      const props = { ...(existing.raw_data?.properties ?? {}), ...properties };
+      const { error } = await supabaseAdmin.from("contacts").update({
+        raw_data: { ...existing.raw_data, properties: props, updatedAt: new Date().toISOString() },
+        hubspot_updated_at: new Date().toISOString(),
+        first_name: props.firstname ?? null,
+        last_name: props.lastname ?? null,
+        email: props.email ?? null,
+        phone: props.phone ?? null,
+        job_title: props.jobtitle ?? null,
+        owner_hubspot_id: props.hubspot_owner_id ?? null,
+      }).eq("hubspot_id", id);
+      if (error) console.error("Supabase update contact:", error.message);
+    }
     return NextResponse.json(data);
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    const e = error as Error & { status?: number };
+    return NextResponse.json({ error: e.message || "Erreur HubSpot", details: e }, { status: e.status || 500 });
+  }
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -70,6 +98,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         associations: [{ to: { id }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: def.associationTypeId }] }],
       }),
     });
+
+    const { data: contact } = await supabaseAdmin.from("contacts").select("id").eq("hubspot_id", id).maybeSingle();
+    if (contact) {
+      const row = {
+        hubspot_id: String(data.id),
+        activity_type: def.type,
+        contact_id: contact.id,
+        occurred_at: def.type === "meeting"
+          ? (properties.hs_meeting_start_time || properties.hs_timestamp || new Date().toISOString())
+          : (properties.hs_timestamp || new Date().toISOString()),
+        subject: def.type === "call" ? properties.hs_call_title ?? null : def.type === "meeting" ? properties.hs_meeting_title ?? null : def.type === "task" ? properties.hs_task_subject ?? null : null,
+        body: def.type === "note" ? properties.hs_note_body ?? null : def.type === "call" ? properties.hs_call_body ?? null : def.type === "task" ? properties.hs_task_body ?? null : properties.hs_meeting_location ?? null,
+        outcome: def.type === "call" ? properties.hs_call_disposition ?? null : def.type === "meeting" ? properties.hs_meeting_outcome ?? null : null,
+        owner_hubspot_id: properties.hubspot_owner_id ?? null,
+        raw_data: data,
+      };
+      const target = def.type === "task" ? "tasks" : "activities";
+      const { error } = await supabaseAdmin.from(target).upsert(row, { onConflict: "hubspot_id" });
+      if (error) console.error("Supabase upsert activity:", error.message);
+    }
     return NextResponse.json(data, { status: 201 });
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    const e = error as Error & { status?: number };
+    return NextResponse.json({ error: e.message || "Erreur HubSpot", details: e }, { status: e.status || 500 });
+  }
 }

@@ -1,11 +1,10 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, ChevronLeft, ChevronRight, Filter, ListChecks, Loader2, MoreVertical, Phone, PlusCircle, RefreshCw, Search, SlidersHorizontal, SquareKanban, Star, Table2, UserPlus, UserRound, Users } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Filter, ListFilter, Loader2, MoreVertical, Phone, RefreshCw, Search, SlidersHorizontal, SquareKanban, Star, Table2, UserPlus, Users } from "lucide-react";
 import { ContactDrawer } from "@/components/contact-drawer";
 import { CompanyDrawer } from "@/components/company-drawer";
 import { NewContactDialog } from "@/components/new-contact-dialog";
 import { ProspectionBoard } from "@/components/prospection-board";
-import { ProspectionTasks } from "@/components/prospection-tasks";
 import { formatDate, initials } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,6 +78,7 @@ export function ProspectionView() {
   const [nextAfter, setNextAfter] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [syncing, setSyncing] = useState(false);
   const [q, setQ] = useState("");
   const [owner, setOwner] = useState("");
   const [callStatus, setCallStatus] = useState("");
@@ -86,7 +86,7 @@ export function ProspectionView() {
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [companyDrawerId, setCompanyDrawerId] = useState<string | null>(null);
   const [newContactOpen, setNewContactOpen] = useState(false);
-  const [view, setView] = useState<"table" | "board" | "tasks">("table");
+  const [view, setView] = useState<"table" | "board">("table");
   const [preset, setPreset] = useState<PeriodPreset>("all");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -223,13 +223,28 @@ export function ProspectionView() {
     return loadContacts(reset, cursor, silent);
   }
 
+  async function runSync() {
+    setSyncing(true);
+    setError("");
+    try {
+      const r = await fetch("/api/sync?resource=all");
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Impossible de synchroniser avec Supabase");
+      await load(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur de synchronisation");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   function handleBoardStatusChange(id: string, status: string) {
     setContacts(prev => prev.map(c => c.id === id ? { ...c, properties: { ...c.properties, statut_prospection: status } } : c));
     load(true, undefined, true);
   }
 
-  useEffect(() => { if (view === "tasks") return; load(true); }, [objectType, segmentId, owner, callStatus, prospection, periodRange, view]);
-  useEffect(() => { if (view === "tasks") return; const t = setTimeout(() => load(true), 300); return () => clearTimeout(t); }, [q]);
+  useEffect(() => { load(true); }, [objectType, segmentId, owner, callStatus, prospection, periodRange, view]);
+  useEffect(() => { const t = setTimeout(() => load(true), 300); return () => clearTimeout(t); }, [q]);
 
   const isCompany = objectType === "0-2";
   const activeLists = lists.filter(l => l.objectTypeId === objectType);
@@ -240,15 +255,15 @@ export function ProspectionView() {
   const pending = Math.max(0, contacts.length - attempted);
 
   return (
-    <div className="flex h-full min-h-[calc(100vh-24px)] flex-col overflow-hidden">
+    <div className="page-shell flex h-screen flex-col overflow-hidden">
       {/* Segment tabs */}
-      <div className="flex shrink-0 items-end gap-1.5 border-b border-border bg-card/80 px-5 pt-3 backdrop-blur minari-scrollbar">
+      <div className="flex shrink-0 items-end gap-1.5 border-b border-border bg-card px-5 pt-3 minari-scrollbar">
         <div className="mb-2 flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
           <Button size="sm" variant={objectType === "0-1" ? "secondary" : "ghost"} className="h-8 gap-1.5 rounded-md px-3" onClick={() => switchType("0-1")}><Users size={14} /> Contacts</Button>
           <Button size="sm" variant={objectType === "0-2" ? "secondary" : "ghost"} className="h-8 gap-1.5 rounded-md px-3" onClick={() => switchType("0-2")}><Building2 size={14} /> Entreprises</Button>
         </div>
-        <Button asChild variant="ghost" size="sm" className="mb-2 h-9 gap-2 rounded-lg px-3 font-semibold text-violet-300 hover:bg-accent/60 hover:text-violet-200">
-          <a href="/segments"><PlusCircle size={15} /> New list</a>
+        <Button asChild variant="ghost" size="sm" className="mb-2 h-9 gap-2 px-3 font-semibold text-primary hover:bg-accent">
+          <a href="/segments"><ListFilter size={15} /> Gérer les segments</a>
         </Button>
         <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto">
           {activeLists.length === 0 ? <div className="flex h-11 items-center gap-2 text-sm text-muted-foreground">Aucun segment {objectType === "0-2" ? "d'entreprises" : "de contacts"}. Créez-en un sur la page Segments.</div> : null}
@@ -258,7 +273,7 @@ export function ProspectionView() {
               <button key={l.listId} onClick={() => { setAfter(undefined); setSegmentId(l.listId); }}
                 className={`relative flex h-11 shrink-0 items-center gap-2 rounded-t-xl border border-b-0 px-4 text-sm transition-colors ${
                   active
-                    ? "border-border bg-background font-semibold text-foreground before:absolute before:inset-x-3 before:top-0 before:h-[2px] before:rounded-full before:bg-violet-400 before:shadow-[0_0_10px_rgba(115,93,243,0.8)]"
+                    ? "border-border bg-background font-semibold text-foreground before:absolute before:inset-x-3 before:top-0 before:h-[2px] before:rounded-full before:bg-primary"
                     : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 }`}>
                 <span className="max-w-[160px] truncate">{l.name}</span>
@@ -270,7 +285,7 @@ export function ProspectionView() {
       </div>
 
       {/* Body */}
-      <div className="min-h-0 flex-1 overflow-hidden p-5 pt-4">
+      <div className="min-h-0 flex-1 overflow-hidden p-5 pt-4 lg:px-7">
         <Card className="flex h-full min-h-0 flex-col overflow-hidden">
           {/* Card header */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
@@ -287,36 +302,32 @@ export function ProspectionView() {
               <MoreVertical size={16} className="self-start text-muted-foreground" />
             </div>
             {isCompany ? <div className="flex items-center gap-5 text-xs">
-              <span className="flex items-center gap-1.5 font-semibold text-violet-300"><Building2 size={14} /> {total} entreprises</span>
-              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => load(true)}><RefreshCw size={13} /> Refresh</Button>
+              <span className="flex items-center gap-1.5 font-semibold text-primary"><Building2 size={14} /> {total} entreprises</span>
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => load(true)}><RefreshCw size={13} /> Actualiser</Button>
             </div> : <div className="flex items-center gap-5 text-xs">
-              <span className="flex items-center gap-1.5 font-semibold text-violet-300">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-400" />
-                </span>
+              <span className="flex items-center gap-1.5 font-semibold text-primary">
+                <span className="h-2 w-2 rounded-full bg-primary" />
                 {connected} connectés
               </span>
               <span className="flex items-center gap-1.5 text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" /> Attempted <span className="font-semibold text-foreground">{attempted}</span>
+                <span className="h-2 w-2 rounded-full bg-slate-400" /> Tentés <span className="font-semibold text-foreground">{attempted}</span>
               </span>
               <span className="flex items-center gap-1.5 text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-muted-foreground/40" /> Pending <span className="font-semibold text-foreground">{pending}</span>
+                <span className="h-2 w-2 rounded-full bg-muted-foreground/40" /> En attente <span className="font-semibold text-foreground">{pending}</span>
               </span>
-              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => load(true)}><RefreshCw size={13} /> Refresh</Button>
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => load(true)}><RefreshCw size={13} /> Actualiser</Button>
             </div>}
           </div>
 
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 border-y border-border bg-muted/20 px-4 py-2.5">
-            <div className="mr-1 flex items-center gap-0.5 rounded-lg border border-border bg-card/70 p-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]">
-              <Button variant={view === "table" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5 px-3 rounded-md" onClick={() => setView("table")}><Table2 size={14} /> Table</Button>
-              {!isCompany ? <Button variant={view === "board" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5 px-3 rounded-md" onClick={() => setView("board")}><SquareKanban size={14} /> Board</Button> : null}
-              {!isCompany ? <Button variant={view === "tasks" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5 px-3 rounded-md" onClick={() => setView("tasks")}><ListChecks size={14} /> Tâches</Button> : null}
+          <div className="flex flex-wrap items-center gap-2 border-y border-border bg-muted/30 px-4 py-2.5">
+            <div className="mr-1 flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
+              <Button variant={view === "table" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5 rounded-md px-3" onClick={() => setView("table")}><Table2 size={14} /> Tableau</Button>
+              {!isCompany ? <Button variant={view === "board" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5 rounded-md px-3" onClick={() => setView("board")}><SquareKanban size={14} /> Pipeline</Button> : null}
             </div>
             <Button size="sm" className="h-9 gap-1.5" onClick={() => setNewContactOpen(true)}><UserPlus size={14} /> Nouveau contact</Button>
-            <Button variant="outline" size="sm" className="h-9 text-muted-foreground"><Phone size={14} /> Account enabled</Button>
-            <Button variant="outline" size="sm" className="h-9 text-muted-foreground"><SlidersHorizontal size={14} /> Sorted by <Badge variant="secondary" className="ml-1 bg-accent/60 text-violet-200">Last call</Badge></Button>
+            <Button variant="outline" size="sm" className="h-9 text-muted-foreground"><Phone size={14} /> Appels activés</Button>
+            <Button variant="outline" size="sm" className="h-9 text-muted-foreground"><SlidersHorizontal size={14} /> Tri <Badge variant="secondary" className="ml-1">Dernier appel</Badge></Button>
             <Select value={owner === "" ? "all" : owner} onValueChange={v => { setAfter(undefined); setOwner(v === "all" ? "" : v); }}>
               <SelectTrigger className="h-9 w-[150px]"><SelectValue placeholder="Commercial" /></SelectTrigger>
               <SelectContent>
@@ -324,7 +335,6 @@ export function ProspectionView() {
                 {owners.map(o => <SelectItem key={o.id} value={o.id}>{[o.firstName, o.lastName].filter(Boolean).join(" ") || o.email || o.id}</SelectItem>)}
               </SelectContent>
             </Select>
-            {view !== "tasks" ? <>
             {!isCompany ? <Select value={callStatus === "" ? "all" : callStatus} onValueChange={v => { setAfter(undefined); setCallStatus(v === "all" ? "" : v); }}>
               <SelectTrigger className="h-9 w-[150px]"><SelectValue placeholder="Statut appel" /></SelectTrigger>
               <SelectContent>
@@ -359,15 +369,15 @@ export function ProspectionView() {
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher" className="h-9 w-44 pl-9" />
             </div>
-            <Button variant="outline" size="sm" className="h-9"><Filter size={14} /> Filter</Button>
-            </> : null}
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 text-muted-foreground" onClick={runSync} disabled={syncing}>
+              {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}
+            </Button>
+            <Button variant="outline" size="sm" className="h-9"><Filter size={14} /> Filtres</Button>
           </div>
 
           {error ? <div className="mx-4 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
 
           {view === "board" ? <ProspectionBoard contacts={contacts} segmentId={segmentId} loading={loading} onOpenContact={setDrawerId} onStatusChange={handleBoardStatusChange} onError={setError} /> : null}
-
-          {view === "tasks" && !isCompany ? <ProspectionTasks segmentId={segmentId} owner={owner} owners={ownerNames} onOpenContact={setDrawerId} onError={setError} onUpdated={() => load(true)} /> : null}
 
           {view === "table" && isCompany ? <div className="min-h-0 flex-1 overflow-auto border-t border-border minari-scrollbar">
             <Table className="min-w-[980px]">
@@ -393,9 +403,9 @@ export function ProspectionView() {
                         <TableRow key={c.id} className="group">
                           <TableCell className="px-4"><input type="checkbox" className="accent-violet-400" /></TableCell>
                           <TableCell className="px-3">
-                            <Button variant="ghost" size="sm" className="h-8 gap-2 rounded-full border border-white/10 bg-card/60 pl-1 pr-3 font-medium shadow-sm hover:border-violet-400/40 hover:bg-accent/40"
+                          <Button variant="ghost" size="sm" className="h-8 gap-2 rounded-md border border-border bg-card pl-1 pr-3 font-medium hover:bg-muted"
                               onClick={() => setCompanyDrawerId(c.id)}>
-                              <Avatar className="h-6 w-6 bg-accent"><AvatarFallback className="bg-accent text-[9px] font-bold text-violet-300"><Building2 size={12} /></AvatarFallback></Avatar>
+                              <Avatar className="h-6 w-6 bg-accent"><AvatarFallback className="bg-accent text-[9px] font-bold text-primary"><Building2 size={12} /></AvatarFallback></Avatar>
                               {p.name || "Sans nom"}
                             </Button>
                           </TableCell>
@@ -403,7 +413,7 @@ export function ProspectionView() {
                           <TableCell className="px-3 font-mono text-xs text-muted-foreground">{p.domain || "—"}</TableCell>
                           <TableCell className="px-3">
                             <a href={p.phone ? `tel:${p.phone}` : "#"}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/25 bg-violet-400/5 px-2.5 py-1 font-mono text-xs text-violet-200 transition-colors hover:border-violet-400/50 hover:bg-violet-400/10">
+                              className="phone-chip font-mono text-xs">
                               <Phone size={12} />{p.phone || "—"}
                             </a>
                           </TableCell>
@@ -420,7 +430,7 @@ export function ProspectionView() {
             <div className="flex items-center justify-end gap-3 border-t border-border px-4 py-3 text-sm text-muted-foreground">
               <span><span className="font-semibold text-foreground">1 - {companies.length}</span> sur {total}</span>
               <Button variant="outline" size="icon" disabled={!after} onClick={() => { setAfter(undefined); setTimeout(() => load(true), 0); }}><ChevronLeft size={15} /></Button>
-              <span className="grid h-8 w-8 place-items-center rounded-lg border border-violet-400/30 bg-accent/50 font-semibold text-violet-200">1</span>
+              <span className="grid h-8 w-8 place-items-center rounded-md border border-primary bg-accent font-semibold text-primary">1</span>
               <Button variant="outline" size="icon" disabled={!nextAfter} onClick={() => { setAfter(nextAfter); load(false, nextAfter); }}><ChevronRight size={15} /></Button>
             </div>
           </div> : null}
@@ -452,9 +462,9 @@ export function ProspectionView() {
                           <TableCell className="px-3"><Badge variant="outline" className={`font-medium ${callBadge(p.statut_de_lappel)}`}>{p.statut_de_lappel || "Pending"}</Badge></TableCell>
                           <TableCell className="px-3"><span className="inline-flex items-center gap-2 text-muted-foreground"><Phone size={14} /> {Number(p.minari_call_count || 0)}</span></TableCell>
                           <TableCell className="px-3">
-                            <Button variant="ghost" size="sm" className="h-8 gap-2 rounded-full border border-white/10 bg-card/60 pl-1 pr-3 font-medium shadow-sm hover:border-violet-400/40 hover:bg-accent/40"
+                            <Button variant="ghost" size="sm" className="h-8 gap-2 rounded-md border border-border bg-card pl-1 pr-3 font-medium hover:bg-muted"
                               onClick={() => setDrawerId(c.id)}>
-                              <Avatar className="h-6 w-6 bg-accent"><AvatarFallback className="bg-accent text-[9px] font-bold text-violet-300">{initials(p.firstname, p.lastname)}</AvatarFallback></Avatar>
+                              <Avatar className="h-6 w-6 bg-accent"><AvatarFallback className="bg-accent text-[9px] font-bold text-primary">{initials(p.firstname, p.lastname)}</AvatarFallback></Avatar>
                               {full}
                             </Button>
                           </TableCell>
@@ -464,7 +474,7 @@ export function ProspectionView() {
                           <TableCell className="px-3 text-muted-foreground">{p.resultat_prospection || "—"}</TableCell>
                           <TableCell className="px-3">
                             <a href={p.phone ? `tel:${p.phone}` : "#"}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/25 bg-violet-400/5 px-2.5 py-1 font-mono text-xs text-violet-200 transition-colors hover:border-violet-400/50 hover:bg-violet-400/10">
+                              className="phone-chip font-mono text-xs">
                               <Phone size={12} />{p.phone || p.mobilephone || "—"}
                             </a>
                           </TableCell>
@@ -479,7 +489,7 @@ export function ProspectionView() {
             <div className="flex items-center justify-end gap-3 border-t border-border px-4 py-3 text-sm text-muted-foreground">
               <span><span className="font-semibold text-foreground">1 - {contacts.length}</span> sur {total}</span>
               <Button variant="outline" size="icon" disabled={!after} onClick={() => { setAfter(undefined); setTimeout(() => load(true), 0); }}><ChevronLeft size={15} /></Button>
-              <span className="grid h-8 w-8 place-items-center rounded-lg border border-violet-400/30 bg-accent/50 font-semibold text-violet-200">1</span>
+              <span className="grid h-8 w-8 place-items-center rounded-md border border-primary bg-accent font-semibold text-primary">1</span>
               <Button variant="outline" size="icon" disabled={!nextAfter} onClick={() => { setAfter(nextAfter); load(false, nextAfter); }}><ChevronRight size={15} /></Button>
             </div>
           </div> : null}

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, hubspotJson } from "@/lib/hubspot";
-
-const properties = ["firstname","lastname","email","phone","mobilephone","company","jobtitle","hubspot_owner_id","statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance","minari_call_count","referly_call_outcome","referly_reason_to_reach_out","state","city","hs_last_sales_activity_timestamp","notes_last_contacted","hs_object_source_label","createdate"];
+import { hubspotJson } from "@/lib/hubspot";
+import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const createAllowed = ["firstname","lastname","email","phone","mobilephone","jobtitle","company","city","state","hubspot_owner_id"];
+
+function toHubSpotRecord(row: any) {
+  return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,6 +15,7 @@ export async function GET(request: NextRequest) {
     const after = url.searchParams.get("after");
     if (segmentId) {
       const internal = new URL(`/api/segments/${segmentId}/members`, request.url);
+      internal.searchParams.set("objectTypeId", "0-1");
       if (after) internal.searchParams.set("after", after);
       const res = await fetch(internal, { headers: { cookie: request.headers.get("cookie") || "" }, cache: "no-store" });
       return new NextResponse(await res.text(), { status: res.status, headers: { "content-type": "application/json" } });
@@ -22,33 +26,63 @@ export async function GET(request: NextRequest) {
     const callStatus = url.searchParams.get("callStatus")?.trim();
     const start = url.searchParams.get("start");
     const end = url.searchParams.get("end");
-    const filters = [] as { propertyName: string; operator: string; value: string }[];
-    if (owner) filters.push({ propertyName: "hubspot_owner_id", operator: "EQ", value: owner });
-    if (prospection) filters.push({ propertyName: "statut_prospection", operator: "EQ", value: prospection });
-    if (callStatus) filters.push({ propertyName: "statut_de_lappel", operator: "EQ", value: callStatus });
-    if (start) filters.push({ propertyName: "hs_last_sales_activity_timestamp", operator: "GTE", value: start });
-    if (end) filters.push({ propertyName: "hs_last_sales_activity_timestamp", operator: "LTE", value: end });
-    const body: Record<string, unknown> = { limit: 100, properties, sorts: [{ propertyName: "hs_last_sales_activity_timestamp", direction: "ASCENDING" }] };
-    if (query) body.query = query;
-    if (after) body.after = after;
-    if (filters.length) body.filterGroups = [{ filters }];
-    const data = await hubspotJson("/crm/objects/2026-03/contacts/search", { method: "POST", body: JSON.stringify(body) });
-    return NextResponse.json(data);
-  } catch (error) { return apiError(error); }
+    const offset = Math.max(0, Number(url.searchParams.get("after")) || 0);
+    const startMs = start && !Number.isNaN(Date.parse(start)) ? String(Date.parse(start)) : start;
+    const endMs = end && !Number.isNaN(Date.parse(end)) ? String(Date.parse(end)) : end;
+
+    let builder = supabaseAdmin.from("contacts").select("hubspot_id,raw_data", { count: "exact" });
+    if (owner) builder = builder.eq("owner_hubspot_id", owner);
+    if (prospection) builder = builder.filter("raw_data->properties->>statut_prospection", "eq", prospection);
+    if (callStatus) builder = builder.filter("raw_data->properties->>statut_de_lappel", "eq", callStatus);
+    if (startMs) builder = builder.filter("raw_data->properties->>hs_last_sales_activity_timestamp", "gte", startMs);
+    if (endMs) builder = builder.filter("raw_data->properties->>hs_last_sales_activity_timestamp", "lte", endMs);
+    if (query) builder = builder.or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`);
+    builder = builder.order("hubspot_updated_at", { ascending: true, nullsFirst: false }).range(offset, offset + 99);
+
+    const { data, error, count } = await builder;
+    if (error) throw error;
+    const results = (data ?? []).map(toHubSpotRecord);
+    const total = count ?? results.length;
+    const nextAfter = offset + results.length < total ? String(offset + 100) : null;
+    return NextResponse.json({
+      results,
+      total,
+      paging: nextAfter ? { next: { after: nextAfter } } : null,
+    });
+  } catch (error) {
+    const e = error as Error;
+    return NextResponse.json({ error: e.message || "Erreur Supabase", details: e }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const properties = Object.fromEntries(
+    const props = Object.fromEntries(
       Object.entries(body.properties ?? {})
         .filter(([key, value]) => createAllowed.includes(key) && value !== undefined && value !== null && String(value).trim() !== "")
         .map(([key, value]) => [key, String(value).trim()])
     );
-    if (!properties.firstname && !properties.lastname && !properties.email && !properties.phone) {
+    if (!props.firstname && !props.lastname && !props.email && !props.phone) {
       return NextResponse.json({ error: "Renseignez au moins un nom, un email ou un téléphone" }, { status: 400 });
     }
-    const data = await hubspotJson("/crm/objects/2026-03/contacts", { method: "POST", body: JSON.stringify({ properties }) });
+    const data = await hubspotJson("/crm/objects/2026-03/contacts", { method: "POST", body: JSON.stringify({ properties: props }) });
+    const row = {
+      hubspot_id: String(data.id),
+      first_name: props.firstname ?? null,
+      last_name: props.lastname ?? null,
+      email: props.email ?? null,
+      phone: props.phone ?? null,
+      job_title: props.jobtitle ?? null,
+      owner_hubspot_id: props.hubspot_owner_id ?? null,
+      raw_data: data,
+      hubspot_updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabaseAdmin.from("contacts").upsert(row, { onConflict: "hubspot_id" });
+    if (error) console.error("Supabase upsert contact:", error.message);
     return NextResponse.json(data, { status: 201 });
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    const e = error as Error & { status?: number };
+    return NextResponse.json({ error: e.message || "Erreur HubSpot", details: e }, { status: e.status || 500 });
+  }
 }
