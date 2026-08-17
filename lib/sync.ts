@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "@/lib/supabase-admin";
+﻿import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { hubspotJson } from "@/lib/hubspot";
 
 type HubSpotRecord = { id: string; properties: Record<string, string | null | undefined>; createdAt?: string; updatedAt?: string };
@@ -32,12 +32,12 @@ type SyncState = {
 };
 
 async function getState(resource: string): Promise<string | null> {
-  const { data } = await supabaseAdmin.from("hubspot_sync_state").select("after_cursor").eq("resource", resource).maybeSingle();
+  const { data } = await getSupabaseAdmin().from("hubspot_sync_state").select("after_cursor").eq("resource", resource).maybeSingle();
   return (data?.after_cursor as string | null) ?? null;
 }
 
 async function saveState(state: SyncState) {
-  await supabaseAdmin.from("hubspot_sync_state").upsert({
+  await getSupabaseAdmin().from("hubspot_sync_state").upsert({
     resource: state.resource,
     last_synced_at: state.last_synced_at ?? new Date().toISOString(),
     after_cursor: state.after_cursor ?? null,
@@ -64,14 +64,14 @@ async function runSync(
 }
 
 async function loadIdMap(table: "companies" | "contacts" | "deals") {
-  const { data, error } = await supabaseAdmin.from(table).select("hubspot_id,id");
+  const { data, error } = await getSupabaseAdmin().from(table).select("hubspot_id,id");
   if (error) throw error;
   return new Map((data ?? []).map(r => [String(r.hubspot_id), String(r.id)]));
 }
 
 async function upsertRows(table: string, rows: Record<string, unknown>[]) {
   if (!rows.length) return;
-  const { error } = await supabaseAdmin.from(table).upsert(rows, { onConflict: "hubspot_id" });
+  const { error } = await getSupabaseAdmin().from(table).upsert(rows, { onConflict: "hubspot_id" });
   if (error) throw error;
 }
 

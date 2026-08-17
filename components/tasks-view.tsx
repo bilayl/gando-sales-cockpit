@@ -71,9 +71,9 @@ function taskTypeIcon(type?: string | null) {
 }
 
 function priorityClass(priority?: string | null) {
-  if (priority === "HIGH") return "border-rose-400/30 bg-rose-400/10 text-rose-300";
-  if (priority === "MEDIUM") return "border-amber-400/30 bg-amber-400/10 text-amber-300";
-  if (priority === "LOW") return "border-sky-400/30 bg-sky-400/10 text-sky-300";
+  if (priority === "HIGH") return "border-rose-200 bg-rose-50 text-rose-700";
+  if (priority === "MEDIUM") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (priority === "LOW") return "border-sky-200 bg-sky-50 text-sky-700";
   return "border-border bg-muted text-muted-foreground";
 }
 
@@ -179,16 +179,16 @@ export function TasksView() {
   const visibleTasks = useMemo(() => tasks, [tasks]);
 
   return (
-    <div className="min-w-0 flex-1 overflow-hidden rounded-[22px] border border-border bg-card/80 backdrop-blur">
-      <div className="flex h-[calc(100vh-24px)] min-h-0 flex-col">
-        <header className="shrink-0 border-b border-border p-5 lg:px-7 lg:py-6">
+    <div className="page-shell min-h-screen">
+      <div className="flex h-screen min-h-0 flex-col">
+        <header className="shrink-0 px-5 pb-4 pt-5 lg:px-7 lg:pt-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div><h1 className="font-display text-2xl font-bold tracking-tight">Tâches</h1><p className="mt-1 text-sm text-muted-foreground">Toutes les actions HubSpot, avec synchronisation du statut en temps réel.</p></div>
-            <div className="flex gap-2"><Button variant="outline" onClick={() => load()}><RefreshCw className="h-4 w-4" /> Actualiser</Button><Button onClick={() => setCreateOpen(true)}><CirclePlus className="h-4 w-4" /> Nouvelle tâche</Button></div>
+            <div><h1 className="text-2xl font-bold tracking-[-0.035em]">Tâches</h1><p className="mt-1 text-sm text-muted-foreground">Toutes les actions HubSpot, synchronisées en temps réel.</p></div>
+            <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => load()}><RefreshCw /> Actualiser</Button><Button size="sm" onClick={() => setCreateOpen(true)}><CirclePlus /> Nouvelle tâche</Button></div>
           </div>
 
           <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
+            <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
               {PERIODS.map(item => <Button key={item.value} size="sm" variant={period === item.value ? "secondary" : "ghost"} onClick={() => setPeriod(item.value)} className="h-8">{item.label}</Button>)}
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -198,14 +198,14 @@ export function TasksView() {
           </div>
         </header>
 
-        {error ? <div role="alert" className="mx-5 mt-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
+        {error ? <div role="alert" className="mx-5 mt-4 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</div> : null}
 
-        <div className="minari-scrollbar min-h-0 flex-1 overflow-auto p-5 lg:px-7">
+        <div className="minari-scrollbar min-h-0 flex-1 overflow-auto px-5 pb-5 lg:px-7">
           <Card className="overflow-hidden shadow-none">
             <Table>
               <TableHeader><TableRow><TableHead className="w-28">Heure</TableHead><TableHead>Action</TableHead><TableHead>Prospect</TableHead><TableHead>Entreprise</TableHead><TableHead>Priorité</TableHead><TableHead>Statut</TableHead><TableHead className="w-36 text-right">Action</TableHead></TableRow></TableHeader>
               <TableBody>
-                {loading ? <TableRow><TableCell colSpan={7} className="h-56 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-violet-300" /><span className="mt-2 block text-sm text-muted-foreground">Chargement depuis HubSpot…</span></TableCell></TableRow> : null}
+                {loading ? <TableRow><TableCell colSpan={7} className="h-56 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><span className="mt-2 block text-sm text-muted-foreground">Chargement depuis HubSpot…</span></TableCell></TableRow> : null}
                 {!loading && visibleTasks.map(task => {
                   const p = task.properties;
                   const due = formatTaskDate(p.hs_timestamp);
@@ -214,12 +214,12 @@ export function TasksView() {
                   return (
                     <TableRow key={task.id} className={cn(completed && "opacity-60")}>
                       <TableCell><div className="font-mono text-sm font-semibold">{due.time}</div><div className="text-[11px] text-muted-foreground">{due.date}</div></TableCell>
-                      <TableCell><div className="flex items-start gap-2"><span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-violet-400/10 text-violet-300"><Icon className="h-3.5 w-3.5" /></span><div><div className="max-w-sm font-medium">{p.hs_task_subject || "Tâche sans titre"}</div><div className="mt-0.5 text-xs text-muted-foreground">{TYPE_LABEL[p.hs_task_type || ""] || "Autre"}</div></div></div></TableCell>
+                      <TableCell><div className="flex items-start gap-2"><span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border bg-muted text-primary"><Icon className="h-3.5 w-3.5" /></span><div><div className="max-w-sm font-medium">{p.hs_task_subject || "Tâche sans titre"}</div><div className="mt-0.5 text-xs text-muted-foreground">{TYPE_LABEL[p.hs_task_type || ""] || "Autre"}</div></div></div></TableCell>
                       <TableCell><span className="inline-flex items-center gap-1.5 text-sm"><UserRound className="h-3.5 w-3.5 text-muted-foreground" />{contactName(task)}</span></TableCell>
                       <TableCell>{task.associations?.company?.properties?.name || task.associations?.contact?.properties?.company || "—"}</TableCell>
                       <TableCell><Badge variant="outline" className={priorityClass(p.hs_task_priority)}>{p.hs_task_priority === "HIGH" ? "Haute" : p.hs_task_priority === "MEDIUM" ? "Moyenne" : p.hs_task_priority === "LOW" ? "Basse" : "Normale"}</Badge></TableCell>
                       <TableCell><Badge variant="secondary">{STATUS_LABEL[p.hs_task_status || ""] || p.hs_task_status || "À faire"}</Badge></TableCell>
-                      <TableCell className="text-right">{completed ? <span className="inline-flex items-center gap-1 text-xs text-emerald-300"><Check className="h-3.5 w-3.5" /> Terminée</span> : <Button size="sm" variant="outline" disabled={savingId === task.id} onClick={() => complete(task)}>{savingId === task.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Terminer</Button>}</TableCell>
+                      <TableCell className="text-right">{completed ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><Check className="h-3.5 w-3.5" /> Terminée</span> : <Button size="sm" variant="outline" disabled={savingId === task.id} onClick={() => complete(task)}>{savingId === task.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Terminer</Button>}</TableCell>
                     </TableRow>
                   );
                 })}

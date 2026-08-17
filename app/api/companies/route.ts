@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+﻿import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 function toHubSpotRecord(row: any) {
   return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const startMs = start && !Number.isNaN(Date.parse(start)) ? String(Date.parse(start)) : start;
     const endMs = end && !Number.isNaN(Date.parse(end)) ? String(Date.parse(end)) : end;
 
-    let builder = supabaseAdmin.from("companies").select("hubspot_id,raw_data", { count: "exact" });
+    let builder = getSupabaseAdmin().from("companies").select("hubspot_id,raw_data", { count: "exact" });
     if (owner) builder = builder.eq("owner_hubspot_id", owner);
     if (query) builder = builder.or(`name.ilike.%${query}%,domain.ilike.%${query}%,city.ilike.%${query}%`);
     if (startMs) builder = builder.filter("raw_data->properties->>hs_last_sales_activity_timestamp", "gte", startMs);

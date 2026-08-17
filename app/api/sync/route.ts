@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncAll, syncActivities, syncCompanies, syncContacts, syncDeals, syncTasks } from "@/lib/sync";
 import { apiError, isHubSpotAuthenticated } from "@/lib/hubspot";
 
+export const maxDuration = 300;
+
 export async function GET(request: NextRequest) {
   try {
-    if (!(await isHubSpotAuthenticated())) {
+    const expectedCronSecret = process.env.CRON_SECRET?.trim();
+    if (expectedCronSecret) {
+      const authorization = request.headers.get("authorization") ?? "";
+      if (authorization !== `Bearer ${expectedCronSecret}`) {
+        return NextResponse.json({ error: "UNAUTHORIZED", message: "Secret cron invalide." }, { status: 401 });
+      }
+    } else if (!(await isHubSpotAuthenticated())) {
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Reconnectez HubSpot pour continuer." }, { status: 401 });
     }
     const url = new URL(request.url);

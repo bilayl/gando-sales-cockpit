@@ -1,5 +1,6 @@
 import { hubspotJson } from "@/lib/hubspot";
 import { createReminderTask, countOpenTasksThrough } from "@/lib/hubspot/tasks";
+import { getTodayMeetingContext } from "@/lib/hubspot/meetings";
 
 export type HubSpotRecord = {
   id: string;
@@ -108,50 +109,28 @@ export function calculateContactPriority(contact: HubSpotRecord, now = new Date(
   return { eligible: true, score: 30, label: "À contacter", tone: "normal" as const, reason: reason || "Prospect actif dans la prospection.", attempts, nextReminder };
 }
 
-async function searchContactsPage(after?: string, owner?: string) {
-  const body: Record<string, unknown> = {
-    limit: 200,
-    properties: CONTACT_PROPERTIES,
-    sorts: [{ propertyName: "hs_lastmodifieddate", direction: "DESCENDING" }],
-  };
-  if (after) body.after = after;
-  if (owner) body.filterGroups = [{ filters: [{ propertyName: "hubspot_owner_id", operator: "EQ", value: owner }] }];
-  return hubspotJson("/crm/objects/2026-03/contacts/search", { method: "POST", body: JSON.stringify(body) });
-}
-
 export async function loadAllContacts(owner?: string) {
   const rows: HubSpotRecord[] = [];
   let after: string | undefined;
   do {
-    const page = await searchContactsPage(after, owner);
+    const query = new URLSearchParams({ limit: "100", properties: CONTACT_PROPERTIES.join(",") });
+    if (after) query.set("after", after);
+    const page = await hubspotJson(`/crm/objects/2026-03/contacts?${query}`);
     rows.push(...(page.results || []));
     after = page.paging?.next?.after;
-  } while (after && rows.length < 10_000);
-  return rows;
-}
-
-async function countMeetingsToday(now: Date, owner?: string) {
-  const start = startOfDay(now).toISOString();
-  const end = endOfDay(now).toISOString();
-  const filters: Array<Record<string, string>> = [
-    { propertyName: "hs_meeting_start_time", operator: "GTE", value: start },
-    { propertyName: "hs_meeting_start_time", operator: "LTE", value: end },
-  ];
-  if (owner) filters.push({ propertyName: "hubspot_owner_id", operator: "EQ", value: owner });
-  const data = await hubspotJson("/crm/objects/2026-03/meetings/search", {
-    method: "POST",
-    body: JSON.stringify({ limit: 1, properties: ["hs_meeting_start_time"], filterGroups: [{ filters }] }),
-  });
-  return Number(data.total || 0);
+  } while (after);
+  return owner ? rows.filter(contact => contact.properties.hubspot_owner_id === owner) : rows;
 }
 
 export async function getTodayCockpit(owner?: string) {
   const now = new Date();
-  const [contacts, tasksDue, meetingsToday] = await Promise.all([
+  const [contacts, tasksDue, meetingContext] = await Promise.all([
     loadAllContacts(owner),
     countOpenTasksThrough(endOfDay(now), owner),
-    countMeetingsToday(now, owner),
+    getTodayMeetingContext(owner),
   ]);
+  const scheduledContactIds = new Set(meetingContext.scheduledContactIds);
+  const scheduledCompanyNames = new Set(meetingContext.scheduledCompanyNames);
 
   const enriched = contacts.map(contact => {
     const priority = calculateContactPriority(contact, now);
@@ -168,9 +147,23 @@ export async function getTodayCockpit(owner?: string) {
   });
 
   const queue = enriched
-    .filter(contact => contact.eligible)
+    .filter(contact => contact.eligible
+      && !scheduledContactIds.has(contact.id)
+      && !scheduledCompanyNames.has(contact.properties.company?.trim().toLowerCase() || ""))
     .sort((a, b) => b.priorityScore - a.priorityScore || (a.nextReminderAt ? Date.parse(a.nextReminderAt) : Number.MAX_SAFE_INTEGER) - (b.nextReminderAt ? Date.parse(b.nextReminderAt) : Number.MAX_SAFE_INTEGER))
-    .map(({ eligible: _eligible, ...contact }) => contact as PriorityContact);
+    .map(contact => ({
+      id: contact.id,
+      properties: contact.properties,
+      associations: contact.associations,
+      createdAt: contact.createdAt,
+      updatedAt: contact.updatedAt,
+      priorityScore: contact.priorityScore,
+      priorityLabel: contact.priorityLabel,
+      priorityTone: contact.priorityTone,
+      priorityReason: contact.priorityReason,
+      nextReminderAt: contact.nextReminderAt,
+      attemptCount: contact.attemptCount,
+    } satisfies PriorityContact));
 
   const dayStart = startOfDay(now).getTime();
   const dayEnd = endOfDay(now).getTime();
@@ -186,8 +179,8 @@ export async function getTodayCockpit(owner?: string) {
       remindersToday,
       newProspects,
       tasksDue,
-      meetingsToday,
-      actionsToday: queue.length + tasksDue + meetingsToday,
+      meetingsToday: meetingContext.meetingsToday,
+      actionsToday: queue.length + tasksDue,
     },
   };
 }

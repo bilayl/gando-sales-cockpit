@@ -135,9 +135,8 @@ export async function isHubSpotAuthenticated() {
 
 export async function getHubSpotIdentity() {
   const session = await readSession();
-  if (session) return { mode: "oauth" as const, hubId: session.hubId, userId: session.userId };
-  if (privateAppToken()) return { mode: "private_app" as const };
-  return null;
+  if (!session) return privateAppToken() ? { mode: "private_app" as const } : null;
+  return { mode: "oauth" as const, hubId: session?.hubId, userId: session?.userId };
 }
 
 export async function createHubSpotState() {
@@ -192,27 +191,39 @@ export async function clearHubSpotSession() {
 }
 
 async function accessContext() {
+  const privateToken = privateAppToken();
+  if (privateToken) return { token: privateToken, session: null };
   let session = await readSession();
-  if (session) {
-    if (session.expiresAt <= Date.now() + 60_000) session = await refreshSession(session);
-    return { token: session.accessToken, session };
+  if (session?.accessToken && session?.refreshToken) {
+    if ((session?.expiresAt ?? 0) <= Date.now() + 60_000) session = await refreshSession(session);
+    return { token: session?.accessToken || "", session };
   }
-  const token = privateAppToken();
-  if (token) return { token, session: null };
   throw new Error("UNAUTHORIZED");
 }
 
 export async function hubspotFetch(path: string, init: RequestInit = {}) {
   let auth = await accessContext();
-  const execute = (token: string) => fetch(`${HUBSPOT_API}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  const execute = async (token: string) => {
+    let response: Response;
+    for (let attempt = 0; ; attempt++) {
+      response = await fetch(`${HUBSPOT_API}${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          ...(init.headers ?? {}),
+        },
+        cache: "no-store",
+      });
+      if (response.status !== 429 || attempt >= 2) return response;
+
+      const retryAfterSeconds = Number(response.headers.get("retry-after"));
+      const delay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+        ? retryAfterSeconds * 1_000
+        : 1_000 * (attempt + 1);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  };
 
   let response = await execute(auth.token);
   if (response.status === 401 && auth.session) {

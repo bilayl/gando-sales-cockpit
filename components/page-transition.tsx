@@ -7,7 +7,7 @@ export function PageTransition({ children }: { children: ReactNode }) {
   return (
     <section
       key={pathname}
-      className="animate-fade-up min-w-0 flex-1 overflow-hidden rounded-[22px] border border-border bg-background shadow-glow-lg"
+      className="animate-fade-in min-w-0 flex-1 bg-background"
     >
       {children}
     </section>

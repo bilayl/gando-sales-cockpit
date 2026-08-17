@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const createAllowed = ["firstname","lastname","email","phone","mobilephone","jobtitle","company","city","state","hubspot_owner_id"];
 
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const startMs = start && !Number.isNaN(Date.parse(start)) ? String(Date.parse(start)) : start;
     const endMs = end && !Number.isNaN(Date.parse(end)) ? String(Date.parse(end)) : end;
 
-    let builder = supabaseAdmin.from("contacts").select("hubspot_id,raw_data", { count: "exact" });
+    let builder = getSupabaseAdmin().from("contacts").select("hubspot_id,raw_data", { count: "exact" });
     if (owner) builder = builder.eq("owner_hubspot_id", owner);
     if (prospection) builder = builder.filter("raw_data->properties->>statut_prospection", "eq", prospection);
     if (callStatus) builder = builder.filter("raw_data->properties->>statut_de_lappel", "eq", callStatus);
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         .map(([key, value]) => [key, String(value).trim()])
     );
     if (!props.firstname && !props.lastname && !props.email && !props.phone) {
-      return NextResponse.json({ error: "Renseignez au moins un nom, un email ou un téléphone" }, { status: 400 });
+      return NextResponse.json({ error: "Renseignez au moins un nom, un email ou un tÃ©lÃ©phone" }, { status: 400 });
     }
     const data = await hubspotJson("/crm/objects/2026-03/contacts", { method: "POST", body: JSON.stringify({ properties: props }) });
     const row = {
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       raw_data: data,
       hubspot_updated_at: new Date().toISOString(),
     };
-    const { error } = await supabaseAdmin.from("contacts").upsert(row, { onConflict: "hubspot_id" });
+    const { error } = await getSupabaseAdmin().from("contacts").upsert(row, { onConflict: "hubspot_id" });
     if (error) console.error("Supabase upsert contact:", error.message);
     return NextResponse.json(data, { status: 201 });
   } catch (error) {

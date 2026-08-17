@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const editable = ["firstname","lastname","email","phone","mobilephone","jobtitle","city","state","company","hubspot_owner_id","statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance"];
 
@@ -18,16 +18,16 @@ function hubspotRecord(row: any) {
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const { data: contact, error } = await supabaseAdmin.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
+    const { data: contact, error } = await getSupabaseAdmin().from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
     if (error) throw error;
     if (!contact) return NextResponse.json({ error: "Contact introuvable dans Supabase. Lancez une synchronisation." }, { status: 404 });
 
     const [companiesResult, activitiesResult, tasksResult] = await Promise.all([
       contact.company_id
-        ? supabaseAdmin.from("companies").select("hubspot_id,raw_data").eq("id", contact.company_id).maybeSingle()
+        ? getSupabaseAdmin().from("companies").select("hubspot_id,raw_data").eq("id", contact.company_id).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
-      supabaseAdmin.from("activities").select("hubspot_id,activity_type,raw_data").eq("contact_id", contact.id),
-      supabaseAdmin.from("tasks").select("hubspot_id,raw_data").eq("contact_id", contact.id),
+      getSupabaseAdmin().from("activities").select("hubspot_id,activity_type,raw_data").eq("contact_id", contact.id),
+      getSupabaseAdmin().from("tasks").select("hubspot_id,raw_data").eq("contact_id", contact.id),
     ]);
     if (companiesResult.error) throw companiesResult.error;
     if (activitiesResult.error) throw activitiesResult.error;
@@ -52,13 +52,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { id } = await params;
     const body = await request.json();
     const properties = Object.fromEntries(Object.entries(body.properties ?? {}).filter(([key]) => editable.includes(key)));
-    if (!Object.keys(properties).length) return NextResponse.json({ error: "Aucune propriété modifiable fournie" }, { status: 400 });
+    if (!Object.keys(properties).length) return NextResponse.json({ error: "Aucune propriÃ©tÃ© modifiable fournie" }, { status: 400 });
     const data = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ properties }) });
 
-    const { data: existing } = await supabaseAdmin.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
+    const { data: existing } = await getSupabaseAdmin().from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
     if (existing) {
       const props = { ...(existing.raw_data?.properties ?? {}), ...properties };
-      const { error } = await supabaseAdmin.from("contacts").update({
+      const { error } = await getSupabaseAdmin().from("contacts").update({
         raw_data: { ...existing.raw_data, properties: props, updatedAt: new Date().toISOString() },
         hubspot_updated_at: new Date().toISOString(),
         first_name: props.firstname ?? null,
@@ -83,14 +83,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const body = await request.json();
     const type = String(body.type ?? "").toLowerCase();
     const def = ACTIVITY_TYPES[type];
-    if (!def) return NextResponse.json({ error: "Type d'activité invalide" }, { status: 400 });
+    if (!def) return NextResponse.json({ error: "Type d'activitÃ© invalide" }, { status: 400 });
     const properties = Object.fromEntries(
       Object.entries(body.properties ?? {})
         .filter(([key, value]) => def.allowed.includes(key) && value !== undefined && value !== null && String(value).trim() !== "")
         .map(([key, value]) => [key, String(value).trim()])
     );
     if (!properties.hs_timestamp) properties.hs_timestamp = new Date().toISOString();
-    if (!Object.keys(properties).length) return NextResponse.json({ error: "Aucune donnée à créer" }, { status: 400 });
+    if (!Object.keys(properties).length) return NextResponse.json({ error: "Aucune donnÃ©e Ã  crÃ©er" }, { status: 400 });
     const data = await hubspotJson(`/crm/objects/2026-03/${def.path}`, {
       method: "POST",
       body: JSON.stringify({
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }),
     });
 
-    const { data: contact } = await supabaseAdmin.from("contacts").select("id").eq("hubspot_id", id).maybeSingle();
+    const { data: contact } = await getSupabaseAdmin().from("contacts").select("id").eq("hubspot_id", id).maybeSingle();
     if (contact) {
       const row = {
         hubspot_id: String(data.id),
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         raw_data: data,
       };
       const target = def.type === "task" ? "tasks" : "activities";
-      const { error } = await supabaseAdmin.from(target).upsert(row, { onConflict: "hubspot_id" });
+      const { error } = await getSupabaseAdmin().from(target).upsert(row, { onConflict: "hubspot_id" });
       if (error) console.error("Supabase upsert activity:", error.message);
     }
     return NextResponse.json(data, { status: 201 });

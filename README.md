@@ -1,128 +1,81 @@
-# Gando Sales Cockpit — Vercel V1
+# Gando Sales Cockpit
 
-Application web autonome inspirée de l'ergonomie Minari, avec **HubSpot comme source de vérité**.
+Application Next.js 16 / TypeScript destinée au setter Gando. HubSpot reste la source de vérité pour les contacts, statuts, rappels, tâches, appels et rendez-vous.
 
-## Ce que contient la V1
+## Parcours disponibles
 
-- Connexion / première inscription via OAuth HubSpot.
-- Session chiffrée en cookie HttpOnly ; access token et refresh token ne sont jamais exposés au JavaScript du navigateur.
-- Rafraîchissement automatique du token HubSpot.
-- Prospection : onglets de segments HubSpot, filtres, recherche, tableau compact, téléphone cliquable, drawer contact.
-- Fiche prospect : entreprise associée, propriétés Gando, notes, appels, meetings.
-- Modification des statuts de prospection/appel directement dans HubSpot.
-- Segments : liste des segments HubSpot + création d'un segment MANUAL Contacts/Entreprises.
-- Agenda : meetings HubSpot.
-- Analytics / Historique : structure UI prête pour la V2.
-- Design Tailwind + composants façon shadcn/ui + Radix + TanStack Table installé.
+- **Aujourd’hui** : KPI du jour, file d’appels triée par score de priorité et mode session.
+- **Résultat d’appel** : mise à jour du statut, incrément du compteur d’appels et programmation d’une relance.
+- **Rappels** : création automatique d’une tâche HubSpot associée au contact et, si disponibles, à l’entreprise et au deal.
+- **Prospection** : segments HubSpot, contacts/entreprises, recherche, filtres et fiches détaillées.
+- **Tâches** : périodes, types, recherche, création et synchronisation du statut terminé.
+- **Agenda** : rendez-vous, tâches et rappels HubSpot dans une vue semaine ; Google Calendar reste optionnel.
+- **Rendez-vous** : tous les rendez-vous rattachés à l’owner `sales@gando.app` (qu’ils soient issus de Brevo ou saisis ailleurs), avec vues de suivi et actions commerciales.
+- **Stats** : appels, contacts travaillés, rendez-vous et conversion par période.
 
-## 1. Créer / configurer l'app OAuth HubSpot
+Toutes les requêtes HubSpot passent par les Route Handlers côté serveur. Le navigateur ne reçoit jamais de token HubSpot.
 
-Dans HubSpot Developer, crée une app OAuth (pas une UI Extension). Ajoute comme Redirect URL :
+## Configuration
 
-```text
-http://localhost:3000/api/auth/hubspot/callback
-```
-
-En production :
-
-```text
-https://sales.gando.app/api/auth/hubspot/callback
-```
-
-Scopes demandés par le code :
-
-```text
-oauth
-crm.objects.contacts.read
-crm.objects.contacts.write
-crm.objects.companies.read
-crm.objects.companies.write
-crm.objects.deals.read
-crm.objects.deals.write
-crm.objects.owners.read
-crm.lists.read
-crm.lists.write
-```
-
-> Les activités (notes, calls, tasks, meetings) peuvent être lues/gérées avec les scopes contacts correspondants selon les endpoints HubSpot actuels.
-
-## 2. Installer
+Copier `.env.example` vers `.env.local`, puis renseigner les valeurs localement :
 
 ```powershell
-npm install
 Copy-Item .env.example .env.local
 ```
 
-Renseigne **toi-même** les variables dans `.env.local`. Ne partage jamais le Client Secret ou les tokens dans un chat.
+Configuration OAuth recommandée :
 
 ```text
 HUBSPOT_CLIENT_ID=...
 HUBSPOT_CLIENT_SECRET=...
 HUBSPOT_REDIRECT_URI=http://localhost:3000/api/auth/hubspot/callback
+SESSION_SECRET=une-valeur-longue-et-aleatoire
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-SESSION_SECRET=une-longue-valeur-aleatoire
 ```
 
-Optionnel pour forcer le portail Gando au moment de l'autorisation :
+La Redirect URL doit être déclarée à l’identique dans l’application HubSpot. Le code demande les scopes CRM contacts, entreprises, deals, propriétaires et listes nécessaires au cockpit. Les endpoints d’activités HubSpot utilisés par l’application acceptent les scopes contacts correspondants.
+
+Pour du développement local uniquement, `HUBSPOT_PRIVATE_APP_TOKEN` permet de conserver le mode Private App existant. Cette valeur doit rester côté serveur et ne doit jamais être préfixée par `NEXT_PUBLIC_`.
+
+Tous les rendez-vous de l’owner HubSpot configuré sont affichés ; ceux réservés via Brevo sont marqués par le domaine `meet.brevo.com` (badge « Brevo »). La valeur par défaut de l’owner est `sales@gando.app` et peut être remplacée côté serveur avec `BREVO_OWNER_EMAIL`.
+
+Google Calendar est facultatif :
 
 ```text
-HUBSPOT_ACCOUNT_ID=147957432
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
 ```
 
-## 3. Lancer en local
+## Lancer et vérifier
 
 ```powershell
+npm install
 npm run dev
 ```
 
-Puis ouvre `http://localhost:3000/login` et clique **Continuer avec HubSpot**.
+Ouvrir `http://localhost:3000`. En OAuth, l’application redirige vers `/login`; en mode Private App serveur, elle ouvre directement `/today`.
 
-## 4. Déployer sur Vercel
+Vérifications de qualité :
 
 ```powershell
-vercel link
-vercel env add HUBSPOT_CLIENT_ID production
-vercel env add HUBSPOT_CLIENT_SECRET production
-vercel env add HUBSPOT_REDIRECT_URI production
-vercel env add NEXT_PUBLIC_APP_URL production
-vercel env add SESSION_SECRET production
-vercel deploy --prod
+npx tsc --noEmit
+npm run lint
+npm run build
 ```
-
-Pour `sales.gando.app`, configure :
-
-```text
-HUBSPOT_REDIRECT_URI=https://sales.gando.app/api/auth/hubspot/callback
-NEXT_PUBLIC_APP_URL=https://sales.gando.app
-```
-
-et ajoute exactement cette Redirect URL dans l'app OAuth HubSpot.
 
 ## Architecture
 
 ```text
 Navigateur
-   ↓
-sales.gando.app (Next.js / Vercel)
-   ↓ API Routes serveur
-HubSpot OAuth + HubSpot CRM API
-   ↓
-Contacts / Entreprises / Segments / Notes / Calls / Tasks / Meetings
+  → Next.js App Router / Route Handlers
+  → session OAuth chiffrée ou Private App côté serveur
+  → HubSpot CRM API 2026-03
+  → contacts, entreprises, deals, listes, tâches, appels et meetings
 ```
 
-Le navigateur ne parle jamais directement à `api.hubapi.com` et ne voit jamais le token HubSpot.
+La session OAuth est chiffrée dans un cookie HttpOnly, `SameSite=Lax`, sécurisé en production. Le refresh token permet de renouveler automatiquement l’access token expiré. Les réponses `429` HubSpot sont retentées avec un délai borné.
 
-## Important
+## Déploiement
 
-Cette V1 ne dépend plus de `hubspot.fetch()` ni de `X-HubSpot-Signature-v3`. Le problème HMAC de l'ancienne UI Extension n'existe donc plus dans cette architecture.
-
-## Suite recommandée V2
-
-- vraie DataTable TanStack avec colonnes masquables et vues sauvegardées ;
-- appels Onoff / dialer ;
-- scorecards setter et dashboard manager ;
-- tâches / rappels depuis le drawer ;
-- notes de call Windmill structurées ;
-- webhooks HubSpot ;
-- multi-utilisateurs avec rôles manager/setter ;
-- domaine `sales.gando.app`.
+Aucun déploiement n’est effectué automatiquement par ce projet. Avant une mise en production Vercel, définir les mêmes variables dans l’environnement de production et enregistrer la Redirect URL de production exacte dans HubSpot.

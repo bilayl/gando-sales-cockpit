@@ -143,16 +143,42 @@ export async function googleFetch(path: string) {
   return response;
 }
 
+export type GoogleCalendarEvent = {
+  id: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  htmlLink?: string;
+  creator?: { email?: string };
+  attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+};
+
+export async function getAllGoogleCalendarEvents(opts: { calendarId: string; timeMin: string; timeMax: string }) {
+  const items: GoogleCalendarEvent[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({
+      timeMin: opts.timeMin,
+      timeMax: opts.timeMax,
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: "250",
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+    const response = await googleFetch(`/calendars/${encodeURIComponent(opts.calendarId)}/events?${params.toString()}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error?.message || `Google Calendar ${response.status}`);
+    items.push(...((data.items || []) as GoogleCalendarEvent[]));
+    pageToken = data.nextPageToken as string | undefined;
+  } while (pageToken && items.length < 2_000);
+
+  return items;
+}
+
 export async function getGoogleCalendarEvents(opts: { calendarId: string; timeMin: string; timeMax: string }) {
-  const params = new URLSearchParams({
-    timeMin: opts.timeMin,
-    timeMax: opts.timeMax,
-    singleEvents: "true",
-    orderBy: "startTime",
-    maxResults: "250",
-  });
-  const response = await googleFetch(`/calendars/${encodeURIComponent(opts.calendarId)}/events?${params.toString()}`);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data?.error?.message || `Google Calendar ${response.status}`);
-  return data as { items: Array<{ id: string; summary: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string }; location?: string }> };
+  const items = await getAllGoogleCalendarEvents(opts);
+  return { items } as { items: GoogleCalendarEvent[] };
 }

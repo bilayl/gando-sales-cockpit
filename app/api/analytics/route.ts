@@ -18,6 +18,8 @@ async function searchTotal(body: SearchBody, path: string) {
   return data as { total: number };
 }
 
+const throttleSearch = () => new Promise(resolve => setTimeout(resolve, 225));
+
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
@@ -25,16 +27,13 @@ export async function GET(request: NextRequest) {
     const end = url.searchParams.get("end");
     if (!start || !end) return NextResponse.json({ error: "Paramètres start/end requis" }, { status: 400 });
 
-    const [calls, meetings, worked] = await Promise.all([
-      searchTotal({ limit: 1, properties: ["hs_timestamp"], filterGroups: rangeFilters("hs_timestamp", start, end) }, "/crm/objects/2026-03/calls/search"),
-      searchTotal({ limit: 1, properties: ["hs_meeting_start_time", "hs_meeting_title"], filterGroups: rangeFilters("hs_meeting_start_time", start, end) }, "/crm/objects/2026-03/meetings/search"),
-      searchTotal({ limit: 1, properties: ["statut_prospection"], filterGroups: rangeFilters("hs_last_sales_activity_timestamp", start, end) }, "/crm/objects/2026-03/contacts/search"),
-    ]);
-
-    const workedTotal = worked.total;
-    const conversion = workedTotal > 0 ? Math.round((meetings.total / workedTotal) * 100) : 0;
+    const calls = await searchTotal({ limit: 1, properties: ["hs_timestamp"], filterGroups: rangeFilters("hs_timestamp", start, end) }, "/crm/objects/2026-03/calls/search");
+    await throttleSearch();
+    const meetings = await searchTotal({ limit: 1, properties: ["hs_meeting_start_time", "hs_meeting_title"], filterGroups: rangeFilters("hs_meeting_start_time", start, end) }, "/crm/objects/2026-03/meetings/search");
+    await throttleSearch();
 
     const distribution = new Map<string, number>();
+    let workedTotal = 0;
     let after: string | undefined;
     for (let page = 0; page < MAX_PAGES; page++) {
       const body: SearchBody = {
@@ -44,13 +43,17 @@ export async function GET(request: NextRequest) {
         ...(after ? { after } : {}),
       };
       const data = await hubspotJson("/crm/objects/2026-03/contacts/search", { method: "POST", body: JSON.stringify(body) });
+      if (page === 0) workedTotal = Number(data.total || 0);
       for (const row of (data.results || []) as Array<{ properties?: Record<string, string | null | undefined> }>) {
         const statut = row.properties?.statut_prospection;
         if (statut) distribution.set(statut, (distribution.get(statut) || 0) + 1);
       }
       after = data.paging?.next?.after;
       if (!after) break;
+      await throttleSearch();
     }
+
+    const conversion = calls.total > 0 ? Math.round((meetings.total / calls.total) * 100) : 0;
 
     return NextResponse.json({
       start,

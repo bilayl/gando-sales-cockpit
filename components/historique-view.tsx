@@ -62,24 +62,20 @@ export function HistoriqueView() {
   const meetings = items.filter((x) => x.type === "meeting").length;
 
   return (
-    <div className="min-h-[calc(100vh-24px)] p-6 minari-scrollbar">
+    <div className="page-shell min-h-screen minari-scrollbar"><div className="page-content">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="mb-1 flex items-center gap-2">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(115,93,243,0.9)]" />
-            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-300">Flux</span>
-          </div>
-          <h1 className="font-display text-2xl font-bold tracking-tight">Historique</h1>
+          <h1 className="text-2xl font-bold tracking-[-0.035em]">Historique</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {loading ? "Chargement…" : `${items.length} événements — ${calls} appels · ${meetings} rendez-vous`}
           </p>
         </div>
-        <Button variant="outline" onClick={load} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
           <RefreshCw size={15} className={cn(loading && "animate-spin")} /> Actualiser
         </Button>
       </div>
 
-      <div className="mt-5 flex items-center gap-0.5 rounded-lg border border-border bg-card/70 p-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]">
+      <div className="mt-5 flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
         {([
           { key: "all", label: "Tout" },
           { key: "call", label: `Appels (${calls})` },
@@ -106,7 +102,7 @@ export function HistoriqueView() {
         <CardContent className="p-5">
           {loading ? (
             <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
-              <Loader2 className="animate-spin text-violet-300" /> Chargement de l&apos;historique…
+              <Loader2 className="animate-spin text-primary" /> Chargement de l&apos;historique…
             </div>
           ) : visible.length === 0 ? (
             <div className="border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
@@ -120,16 +116,16 @@ export function HistoriqueView() {
                   <div key={`${item.type}-${item.id}`} className="relative">
                     <span className="absolute -left-6 top-1 grid h-[18px] w-[18px] place-items-center rounded-full border border-border bg-background">
                       {item.type === "call" ? (
-                        <PhoneCall size={9} className="text-violet-300" />
+                        <PhoneCall size={9} className="text-primary" />
                       ) : (
-                        <CalendarDays size={9} className="text-violet-300" />
+                        <CalendarDays size={9} className="text-primary" />
                       )}
                     </span>
-                    <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3 transition-colors hover:border-violet-400/25 hover:bg-accent/20">
+                    <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/35">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="truncate font-semibold">{item.title}</span>
-                          <Badge variant="outline" className={cn("text-[10px] font-semibold", item.type === "call" ? "border-violet-400/25 bg-violet-400/10 text-violet-300" : "border-sky-400/25 bg-sky-400/10 text-sky-300")}>
+                          <Badge variant="outline" className={cn("text-[10px] font-semibold", item.type === "call" ? "border-border bg-accent text-primary" : "border-sky-200 bg-sky-50 text-sky-700")}>
                             {item.type === "call" ? "Appel" : "Rendez-vous"}
                           </Badge>
                         </div>
@@ -155,6 +151,6 @@ export function HistoriqueView() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </div></div>
   );
 }

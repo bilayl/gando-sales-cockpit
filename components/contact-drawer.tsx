@@ -19,8 +19,8 @@ const RESULT_STATUSES = ["", "Contact", "Intéressé", "Devis envoyé", "RDV", "
 function SectionTitle({ icon: Icon, title, count, action }: { icon: React.ComponentType<{ size?: number; className?: string }>; title: string; count?: number; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <h3 className="flex items-center gap-2.5 text-[13px] font-bold uppercase tracking-wider text-foreground">
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-300"><Icon size={14} /></span>
+      <h3 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+        <Icon size={14} className="text-primary" />
         {title}
         {count !== undefined ? <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{count}</span> : null}
       </h3>
@@ -31,8 +31,8 @@ function SectionTitle({ icon: Icon, title, count, action }: { icon: React.Compon
 
 function InfoRow({ label, value, icon: Icon }: { label: string; value?: string | null; icon: React.ComponentType<{ size?: number; className?: string }> }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 px-3 py-2.5">
-      <Icon size={15} className="shrink-0 text-violet-300" />
+    <div className="flex items-center gap-3 border-b border-border/80 py-2.5">
+      <Icon size={15} className="shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
         <div className="mt-0.5 truncate text-sm font-medium" title={value || ""}>{value || "—"}</div>
@@ -73,8 +73,8 @@ function EditableField({ label, value, icon: Icon, onSave }: { label: string; va
   function cancelEdit() { editingRef.current = false; setEditing(false); }
 
   return (
-    <div className="group flex items-center gap-3 rounded-xl border border-border bg-muted/20 px-3 py-2.5">
-      <Icon size={15} className="shrink-0 text-violet-300" />
+    <div className="group flex items-center gap-3 border-b border-border/80 py-2.5">
+      <Icon size={15} className="shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
         {editing ? (
@@ -83,12 +83,12 @@ function EditableField({ label, value, icon: Icon, onSave }: { label: string; va
               <Input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancelEdit(); }}
                 onBlur={() => commit()} className="h-8 text-sm" />
-              {busy ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-300" /> : null}
+              {busy ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" /> : null}
             </div>
             {error ? <p className="mt-1 text-[11px] font-medium text-destructive">{error}</p> : null}
           </div>
         ) : (
-          <button onClick={startEdit} className="mt-0.5 flex w-full items-center justify-between gap-2 text-left text-sm font-medium hover:text-violet-200" title={`Modifier ${label.toLowerCase()}`}>
+          <button onClick={startEdit} className="mt-0.5 flex w-full items-center justify-between gap-2 text-left text-sm font-medium hover:text-primary" title={`Modifier ${label.toLowerCase()}`}>
             <span className="truncate">{value || "—"}</span>
             <Pencil size={12} className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
           </button>
@@ -101,6 +101,21 @@ function EditableField({ label, value, icon: Icon, onSave }: { label: string; va
 function toLocalInput(d: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function noteBodyText(value?: string | null) {
+  if (!value) return "";
+  if (typeof DOMParser !== "undefined") {
+    const parsed = new DOMParser().parseFromString(value, "text/html");
+    parsed.querySelectorAll("script, style, iframe, object, embed").forEach(element => element.remove());
+    return parsed.body.textContent?.trim() || "";
+  }
+  return value
+    .replace(/<(script|style|iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .trim();
 }
 
 export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props) {
@@ -289,19 +304,19 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
 
   const modal = (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => onOpenChange(false)} />
-      <div className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[22px] border border-border bg-popover shadow-[0_24px_64px_-16px_rgba(0,0,0,0.8),0_0_0_1px_rgba(115,93,243,0.08)] supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-gradient-to-br from-violet-500/10 via-transparent to-transparent px-4 py-4 sm:px-6">
+      <div className="absolute inset-0 bg-slate-950/25 backdrop-blur-[1px]" onClick={() => onOpenChange(false)} />
+      <div className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-[0_28px_80px_-34px_rgba(15,35,42,0.42)] supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4 py-3.5 sm:px-5">
           <div className="flex min-w-0 items-center gap-3.5">
-            <Avatar className="h-14 w-14 shrink-0 rounded-2xl border border-violet-400/30 bg-gradient-to-br from-violet-500/25 to-accent">
-              <AvatarFallback className="rounded-2xl bg-transparent font-display text-xl font-bold text-violet-200">{name.slice(0, 1).toUpperCase()}</AvatarFallback>
+            <Avatar className="h-11 w-11 shrink-0 rounded-lg border border-border bg-muted">
+              <AvatarFallback className="rounded-lg bg-muted text-base font-bold text-primary">{name.slice(0, 1).toUpperCase()}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <h2 className="truncate font-display text-xl font-bold leading-tight">{name}</h2>
+              <h2 className="truncate text-lg font-bold leading-tight tracking-tight">{name}</h2>
               <p className="mt-0.5 flex items-center gap-1.5 truncate text-sm text-muted-foreground"><Building2 size={13} className="shrink-0" /> {company?.name || "Aucune entreprise"}</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {ownerName ? <Badge variant="outline" className="gap-1 border-violet-400/25 bg-violet-400/5 text-xs text-violet-200"><UserRound size={11} /> {ownerName}</Badge> : null}
-                {p.hs_object_source_label ? <Badge variant="outline" className="gap-1 border-white/10 bg-white/5 text-xs text-slate-300"><Globe size={11} /> {p.hs_object_source_label}</Badge> : null}
+                {ownerName ? <Badge variant="outline" className="gap-1 text-xs"><UserRound size={11} /> {ownerName}</Badge> : null}
+                {p.hs_object_source_label ? <Badge variant="outline" className="gap-1 text-xs text-muted-foreground"><Globe size={11} /> {p.hs_object_source_label}</Badge> : null}
               </div>
             </div>
           </div>
@@ -310,18 +325,19 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 minari-scrollbar">
-          {loading ? <div className="grid h-64 place-items-center"><Loader2 className="animate-spin text-violet-300" /></div>
-            : error ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
-            : <div className="space-y-6">
+        <div className="min-h-0 flex-1 overflow-y-auto minari-scrollbar">
+          {loading ? <div className="grid h-64 place-items-center"><Loader2 className="animate-spin text-primary" /></div>
+            : error ? <div className="m-5 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</div>
+            : <div className="grid min-h-full lg:grid-cols-[390px_1fr]">
+              <div className="space-y-6 bg-muted/45 p-5 lg:border-r lg:border-border">
               <div className="flex gap-2">
-                <Button asChild className="flex-1"><a href={p.phone ? `tel:${p.phone}` : "#"}><Phone size={15} /> Appeler</a></Button>
+                <Button asChild className="flex-1"><a href={p.phone || p.mobilephone ? `tel:${p.phone || p.mobilephone}` : "#"}><Phone size={15} /> Appeler</a></Button>
                 <Button variant="outline" asChild className="flex-1"><a href={p.email ? `mailto:${p.email}` : "#"}><Mail size={15} /> Email</a></Button>
               </div>
 
               <section>
                 <SectionTitle icon={UserRound} title="Coordonnées" action={saving ? <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Sync…</span> : undefined} />
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="mt-2 grid gap-x-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                   <EditableField icon={UserRound} label="Prénom" value={p.firstname} onSave={v => patch("firstname", v)} />
                   <EditableField icon={UserRound} label="Nom" value={p.lastname} onSave={v => patch("lastname", v)} />
                   <EditableField icon={Phone} label="Téléphone" value={p.phone} onSave={v => patch("phone", v)} />
@@ -339,19 +355,19 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
 
               {company?.name ? <section>
                 <SectionTitle icon={Building2} title="Entreprise" />
-                <div className="mt-3 rounded-xl border border-border bg-muted/20 p-4">
+                <div className="mt-3 rounded-lg border border-border bg-card p-4">
                   <div className="font-semibold text-foreground">{company.name}</div>
                   <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
-                    {company.domain ? <span className="flex items-center gap-1.5 text-muted-foreground"><Globe size={12} className="text-violet-300" /> {company.domain}</span> : null}
-                    {company.phone ? <span className="flex items-center gap-1.5 text-muted-foreground"><PhoneCall size={12} className="text-violet-300" /> {company.phone}</span> : null}
-                    {[company.city, company.state].filter(Boolean).length ? <span className="flex items-center gap-1.5 text-muted-foreground"><MapPin size={12} className="text-violet-300" /> {[company.city, company.state].filter(Boolean).join(", ")}</span> : null}
+                    {company.domain ? <span className="flex items-center gap-1.5 text-muted-foreground"><Globe size={12} /> {company.domain}</span> : null}
+                    {company.phone ? <span className="flex items-center gap-1.5 text-muted-foreground"><PhoneCall size={12} /> {company.phone}</span> : null}
+                    {[company.city, company.state].filter(Boolean).length ? <span className="flex items-center gap-1.5 text-muted-foreground"><MapPin size={12} /> {[company.city, company.state].filter(Boolean).join(", ")}</span> : null}
                   </div>
                 </div>
               </section> : null}
 
               <section>
                 <SectionTitle icon={SlidersHorizontal} title="Gestion" action={saving ? <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Sync…</span> : undefined} />
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 grid gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-muted-foreground">Statut prospection</Label>
                     <Select value={p.statut_prospection || "none"} onValueChange={v => { patch("statut_prospection", v === "none" ? "" : v).catch(() => {}); }}>
@@ -392,7 +408,7 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1.5 sm:col-span-2">
+                  <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-muted-foreground">Prochaine relance</Label>
                     <Input type="datetime-local" value={p.date_prochaine_relance ? toLocalInput(new Date(p.date_prochaine_relance)) : ""}
                       onChange={event => { const date = event.target.value ? new Date(event.target.value) : null; patch("date_prochaine_relance", date && !Number.isNaN(date.getTime()) ? date.toISOString() : "").catch(() => {}); }} />
@@ -400,15 +416,18 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
                 </div>
               </section>
 
+              </div>
+
+              <div className="space-y-7 bg-card p-5 lg:p-6">
               <section>
-                <SectionTitle icon={FileText} title="Notes commerciales" count={notes.length} action={notes.length > 3 ? <button onClick={() => setShowAllNotes(v => !v)} className="text-xs font-medium text-violet-300 hover:text-violet-200">{showAllNotes ? "Voir moins" : "Tout afficher"}</button> : undefined} />
+                <SectionTitle icon={FileText} title="Notes commerciales" count={notes.length} action={notes.length > 3 ? <button onClick={() => setShowAllNotes(v => !v)} className="text-xs font-medium text-primary hover:underline">{showAllNotes ? "Voir moins" : "Tout afficher"}</button> : undefined} />
                 <div className="mt-3 space-y-3">
-                  <div className="rounded-xl border border-violet-400/25 bg-violet-400/5 p-3">
+                  <div className="rounded-lg border border-border bg-muted/45 p-3">
                     <textarea
                       value={noteDraft}
                       onChange={e => setNoteDraft(e.target.value)}
                       placeholder="Ajouter une note commerciale…"
-                      className="min-h-[72px] w-full resize-none rounded-lg border border-border bg-card/60 px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-ring/25"
+                      className="min-h-[72px] w-full resize-none rounded-md border border-input bg-card px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary/55 focus:outline-none focus:ring-2 focus:ring-ring/15"
                     />
                     <div className="mt-2 flex justify-end">
                       <Button size="sm" className="gap-1.5" disabled={!noteDraft.trim() || savingNote} onClick={addNote}>
@@ -417,9 +436,9 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
                     </div>
                   </div>
                   {(showAllNotes ? notes : notes.slice(0, 3)).map((n: any, i: number) => (
-                    <div key={i} className="rounded-xl border border-border bg-muted/20 p-4">
+                    <div key={i} className="rounded-lg border border-border bg-card p-4">
                       <div className="flex items-center justify-between text-xs text-muted-foreground"><span className="font-mono">{formatDate(n.properties?.hs_timestamp || n.createdAt)}</span><ArrowUpRight size={13} /></div>
-                      <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-card-foreground" dangerouslySetInnerHTML={{ __html: n.properties?.hs_note_body || "" }} />
+                      <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-card-foreground">{noteBodyText(n.properties?.hs_note_body)}</div>
                     </div>
                   ))}
                   {!notes.length ? <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">Aucune note associée.</div> : null}
@@ -428,11 +447,11 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
 
               <section>
                 <SectionTitle icon={CalendarClock} title="Activité" count={activities.length} action={
-                  <button onClick={openActivity} className="flex items-center gap-1 rounded-lg border border-violet-400/30 bg-violet-400/10 px-2.5 py-1.5 text-xs font-semibold text-violet-200 transition-colors hover:bg-violet-400/20">
+                  <button onClick={openActivity} className="flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-muted">
                     {actOpen ? <X size={12} /> : <Plus size={12} />} {actOpen ? "Fermer" : "Loguer"}
                   </button>
                 } />
-                {actOpen ? <div className="mt-3 rounded-xl border border-violet-400/25 bg-violet-400/5 p-3">
+                {actOpen ? <div className="mt-3 rounded-lg border border-border bg-muted/45 p-3">
                   <div className="grid gap-2.5">
                     <div className="flex gap-2">
                       <div className="flex-1 space-y-1.5">
@@ -473,7 +492,7 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">{actType === "meeting" ? "Lieu" : "Détails"}</Label>
-                      <textarea value={actBody} onChange={e => setActBody(e.target.value)} placeholder={actType === "meeting" ? "Adresse ou lien de visio…" : "Notes libres…"} className="min-h-[56px] w-full resize-none rounded-lg border border-border bg-card/60 px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-ring/25" />
+                      <textarea value={actBody} onChange={e => setActBody(e.target.value)} placeholder={actType === "meeting" ? "Adresse ou lien de visio…" : "Notes libres…"} className="min-h-[56px] w-full resize-none rounded-md border border-input bg-card px-3 py-2 text-sm text-card-foreground placeholder:text-muted-foreground focus:border-primary/55 focus:outline-none focus:ring-2 focus:ring-ring/15" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Date</Label>
@@ -491,10 +510,10 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
                 </div> : null}
                 <div className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1 minari-scrollbar">
                   {activities.map((x: any, i: number) => (
-                    <div key={i} className="rounded-xl border border-border bg-muted/20 px-3 py-3 transition-colors hover:border-violet-400/25">
+                    <div key={i} className="rounded-lg border border-border bg-card px-3 py-3 transition-colors hover:bg-muted/35">
                       <div className="flex items-center justify-between gap-2">
                         <span className="flex min-w-0 items-center gap-2 font-medium">
-                          {x.type === "Appel" ? <PhoneCall size={14} className="shrink-0 text-violet-300" />
+                          {x.type === "Appel" ? <PhoneCall size={14} className="shrink-0 text-primary" />
                             : x.type === "RDV" ? <CalendarClock size={14} className="shrink-0 text-emerald-300" />
                             : <Circle size={14} className="shrink-0 text-sky-300" />}
                           <span className="truncate">{x.title}</span>
@@ -503,7 +522,7 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
                         <span className="shrink-0 font-mono text-xs text-muted-foreground">{formatDate(x.date)}</span>
                       </div>
                       {(x.status || x.disposition) ? <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <CheckCircle2 size={11} className="text-violet-300" /> {[x.status, x.disposition].filter(Boolean).join(" · ")}
+                        <CheckCircle2 size={11} className="text-primary" /> {[x.status, x.disposition].filter(Boolean).join(" · ")}
                       </div> : null}
                       {x.body ? <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-card-foreground/80">{x.body}</p> : null}
                     </div>
@@ -511,6 +530,7 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
                   {!activities.length ? <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">Aucune activité enregistrée.</div> : null}
                 </div>
               </section>
+              </div>
             </div>}
         </div>
       </div>

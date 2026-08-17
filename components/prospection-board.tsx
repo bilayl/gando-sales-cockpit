@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, CircleDot, Loader2, Pencil, Phone, Plus, Trash2, UserRound, X } from "lucide-react";
+import { Check, Loader2, Pencil, Phone, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,6 @@ type Props = {
 const DEFAULT_COLUMNS = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Perdu"];
 const KEY_PREFIX = "gando.board.columns.";
 const OTHER_COLUMN = "Autres";
-const COLORS = ["bg-slate-400", "bg-amber-400", "bg-sky-400", "bg-emerald-400", "bg-orange-400", "bg-rose-400", "bg-violet-400", "bg-teal-400", "bg-indigo-400", "bg-pink-400"];
 
 function loadColumns(segmentId: string): string[] {
   try {
@@ -120,9 +119,9 @@ export function ProspectionBoard({ contacts, segmentId, loading, onOpenContact, 
     const isOver = dragOver === col;
     return (
       <div key={other ? OTHER_COLUMN : col} onDragOver={e => { if (dragId) { e.preventDefault(); setDragOver(col); } }} onDragLeave={() => setDragOver(prev => (prev === col ? null : prev))} onDrop={e => { e.preventDefault(); const c = contacts.find(x => x.id === dragId); if (c) move(c, col); }}
-        className={`flex w-64 shrink-0 flex-col rounded-xl border ${isOver ? "border-violet-400/60 bg-violet-400/[0.06] shadow-glow" : "border-border bg-muted/30"} max-h-full`}>
+        className={`flex w-64 shrink-0 flex-col rounded-lg border ${isOver ? "border-primary bg-accent" : "border-border bg-muted/35"} max-h-full`}>
         <div className="flex items-center gap-2 px-3 py-2.5">
-          {!other ? <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${COLORS[(index ?? 0) % COLORS.length]}`} /> : <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-slate-500" />}
+          {!other ? <span className="h-2 w-2 shrink-0 rounded-full bg-primary" /> : <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" />}
           {isEditing
             ? <>
                 <Input autoFocus value={editing?.value ?? ""} onChange={e => setEditing({ index: editing!.index, value: e.target.value })} onKeyDown={e => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") setEditing(null); }} className="h-7 px-2 text-sm" />
@@ -144,17 +143,17 @@ export function ProspectionBoard({ contacts, segmentId, loading, onOpenContact, 
             const full = [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Sans nom";
             return (
               <div key={c.id} draggable onDragStart={e => { setDragId(c.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDragId(null)}
-                className={`cursor-grab rounded-xl border border-border bg-card p-3 shadow-sm transition hover:border-violet-400/30 hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)] active:cursor-grabbing ${dragId === c.id ? "opacity-50" : ""} ${saving && dragId === c.id ? "opacity-40" : ""}`}>
+                className={`cursor-grab rounded-lg border border-border bg-card p-3 shadow-sm transition hover:bg-muted/35 active:cursor-grabbing ${dragId === c.id ? "opacity-50" : ""} ${saving && dragId === c.id ? "opacity-40" : ""}`}>
                 <div className="flex items-start justify-between gap-2">
-                  <button onClick={() => onOpenContact(c.id)} className="inline-flex min-w-0 items-center gap-1.5 text-left text-sm font-medium text-violet-300 hover:underline">
-                    <Avatar className="h-5 w-5 shrink-0 bg-accent"><AvatarFallback className="bg-accent text-[8px] font-bold text-violet-300">{initials(p.firstname, p.lastname)}</AvatarFallback></Avatar>
+                  <button onClick={() => onOpenContact(c.id)} className="inline-flex min-w-0 items-center gap-1.5 text-left text-sm font-medium text-primary hover:underline">
+                    <Avatar className="h-5 w-5 shrink-0 bg-accent"><AvatarFallback className="bg-accent text-[8px] font-bold text-primary">{initials(p.firstname, p.lastname)}</AvatarFallback></Avatar>
                     <span className="truncate">{full}</span>
                   </button>
                 </div>
                 <div className="mt-1.5 truncate text-xs text-muted-foreground">{p.jobtitle || "—"}</div>
                 <div className="mt-0.5 truncate text-xs font-semibold">{p.company || "—"}</div>
                 <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-                  <a href={p.phone ? `tel:${p.phone}` : "#"} className="inline-flex items-center gap-1 rounded-md bg-violet-400/5 px-1.5 py-0.5 font-mono text-[11px] text-violet-200/90 hover:text-violet-100"><Phone size={11} />{p.phone || p.mobilephone || "—"}</a>
+                  <a href={p.phone ? `tel:${p.phone}` : "#"} className="phone-chip px-1.5 py-0.5 font-mono text-[11px]"><Phone size={11} />{p.phone || p.mobilephone || "—"}</a>
                   <span className="font-mono text-[11px] text-muted-foreground">{formatDate(p.hs_last_sales_activity_timestamp)}</span>
                 </div>
               </div>
@@ -168,7 +167,7 @@ export function ProspectionBoard({ contacts, segmentId, loading, onOpenContact, 
 
   return (
     <div className="relative min-h-0 flex-1 overflow-auto border-t border-border minari-scrollbar">
-      {loading ? <div className="grid h-64 place-items-center"><Loader2 className="animate-spin text-violet-300" /></div>
+      {loading ? <div className="grid h-64 place-items-center"><Loader2 className="animate-spin text-primary" /></div>
         : <div className="flex h-full items-start gap-3 overflow-x-auto p-4">
             {columns.map((col, i) => renderColumn(col, groups.map.get(col) || [], i))}
             {groups.rest.length ? renderColumn(OTHER_COLUMN, groups.rest) : null}
@@ -181,7 +180,7 @@ export function ProspectionBoard({ contacts, segmentId, loading, onOpenContact, 
                     <Button variant="ghost" size="sm" className="h-7" onClick={() => { setAdding(false); setNewCol(""); }}><X size={13} /></Button>
                   </div>
                 </div>
-              ) : <Button variant="outline" size="sm" className="h-9 justify-start gap-2 border-dashed text-muted-foreground hover:text-violet-200" onClick={() => setAdding(true)}><Plus size={15} /> Ajouter une colonne</Button>}
+              ) : <Button variant="outline" size="sm" className="h-9 justify-start gap-2 border-dashed text-muted-foreground hover:text-primary" onClick={() => setAdding(true)}><Plus size={15} /> Ajouter une colonne</Button>}
             </div>
           </div>}
     </div>

@@ -1,0 +1,30 @@
+name: HubSpot Sync
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+env:
+  SYNC_URL: https://gando-sales-cockpit-web.vercel.app/api/sync
+
+jobs:
+  sync:
+    name: Sync ${{ matrix.resource }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        resource: [companies, contacts, deals, tasks, activities]
+    steps:
+      - name: Sync ${{ matrix.resource }}
+        run: |
+          body=$(mktemp)
+          code=$(curl -sS --max-time 300 -o "$body" -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$SYNC_URL?resource=${{ matrix.resource }}")
+          echo "HTTP $code"
+          cat "$body"
+          rm "$body"
+          if [ "$code" != "200" ]; then
+            exit 1
+          fi

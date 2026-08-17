@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+﻿import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 function hubspotRecord(row: any) {
   return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
@@ -8,13 +8,13 @@ function hubspotRecord(row: any) {
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const { data: company, error } = await supabaseAdmin.from("companies").select("*").eq("hubspot_id", id).maybeSingle();
+    const { data: company, error } = await getSupabaseAdmin().from("companies").select("*").eq("hubspot_id", id).maybeSingle();
     if (error) throw error;
     if (!company) return NextResponse.json({ error: "Entreprise introuvable dans Supabase. Lancez une synchronisation." }, { status: 404 });
 
     const [contactsResult, activitiesResult] = await Promise.all([
-      supabaseAdmin.from("contacts").select("hubspot_id,raw_data").eq("company_id", company.id),
-      supabaseAdmin.from("activities").select("hubspot_id,activity_type,occurred_at,raw_data").eq("company_id", company.id),
+      getSupabaseAdmin().from("contacts").select("hubspot_id,raw_data").eq("company_id", company.id),
+      getSupabaseAdmin().from("activities").select("hubspot_id,activity_type,occurred_at,raw_data").eq("company_id", company.id),
     ]);
     if (contactsResult.error) throw contactsResult.error;
     if (activitiesResult.error) throw activitiesResult.error;
