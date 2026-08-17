@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -469,13 +470,17 @@ setMeetings(data.results || []);
       const warnings = Array.isArray(data.warnings) && data.warnings.length ? ` ${data.warnings.join(" ")}` : "";
       if (actionDialog.meeting.derived.isGoogle) {
         setMessage(`Statut synchronisé avec le CRM ; tâche de relance créée.${warnings}`);
+        toast.success("Statut synchronisé avec le CRM ; tâche de relance créée.");
       } else {
         setMessage(`HubSpot a été mis à jour.${warnings}`);
+        toast.success("HubSpot a été mis à jour.");
       }
+      if (Array.isArray(data.warnings) && data.warnings.length) toast.warning(data.warnings.join(" "));
       setActionDialog(null);
       await load(true);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Impossible d’enregistrer l’action");
+      toast.error(saveError instanceof Error ? saveError.message : "Impossible d’enregistrer l’action");
     } finally {
       setSaving(false);
     }

@@ -2,6 +2,7 @@
 import { Mail, Phone, Building2, CalendarClock, FileText, Loader2, ArrowUpRight, Globe, MapPin, UserRound, Clock, PhoneCall, Circle, CheckCircle2, X, SlidersHorizontal, Pencil, Plus, PhoneOutgoing, ListTodo, CalendarPlus } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -237,8 +238,10 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
       setData((d: any) => ({ ...d, notes: [...(d?.notes || []), { id: created.id, properties: { hs_note_body: body, hs_timestamp: new Date().toISOString(), hs_createdate: new Date().toISOString() } }] }));
       setNoteDraft("");
       onUpdated?.();
+      toast.success("Note ajoutée au contact dans HubSpot.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossible d'ajouter la note");
+      toast.error(e instanceof Error ? e.message : "Impossible d'ajouter la note");
     } finally {
       setSavingNote(false);
     }
@@ -293,8 +296,10 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
       setData((d: any) => ({ ...d, [listKey]: [...(d?.[listKey] || []), { id: created.id, properties }] }));
       setActOpen(false);
       onUpdated?.();
+      toast.success(actType === "call" ? "Appel enregistré sur le contact." : actType === "task" ? "Tâche créée sur le contact." : "Rendez-vous créé sur le contact.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossible de créer l'activité");
+      toast.error(e instanceof Error ? e.message : "Impossible de créer l'activité");
     } finally {
       setSavingAct(false);
     }

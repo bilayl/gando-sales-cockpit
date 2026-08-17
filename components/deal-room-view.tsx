@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -48,6 +49,10 @@ const emptyKPIs: DealRoomKPIs = {
   pipelineValue: 0, activeDeals: 0, atRisk: 0, noNextAction: 0, noMeeting: 0,
   closingSoon: 0, wonThisMonth: 0, wonThisMonthValue: 0, lostThisMonth: 0, weightedForecast: 0,
 };
+
+function isQuickView(value: string | null): value is DealRoomQuickView {
+  return Boolean(value) && QUICK_VIEWS.some(item => item.key === value);
+}
 
 function KpiCell({ label, value, detail, tone }: { label: string; value: string | number; detail: string; tone?: "default" | "warn" | "bad" | "good" }) {
   return (
@@ -186,12 +191,14 @@ function DealCard({ deal }: { deal: DealRoomDeal }) {
 }
 
 export function DealRoomView() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [deals, setDeals] = useState<DealRoomDeal[]>([]);
   const [kpis, setKpis] = useState<DealRoomKPIs>(emptyKPIs);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [owners, setOwners] = useState<Owner[]>([]);
-  const [view, setView] = useState<DealRoomQuickView>("all");
+  const [view, setView] = useState<DealRoomQuickView>(() => (isQuickView(searchParams.get("view")) ? searchParams.get("view") as DealRoomQuickView : "all"));
   const [query, setQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
@@ -221,6 +228,16 @@ export function DealRoomView() {
   }, [ownerFilter]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const param = searchParams.get("view");
+    setView(isQuickView(param) ? param : "all");
+  }, [searchParams]);
+
+  function selectView(next: DealRoomQuickView) {
+    setView(next);
+    router.replace(next === "all" ? "/deal-room" : `/deal-room?view=${next}`, { scroll: false });
+  }
 
   useEffect(() => {
     fetch("/api/owners")
@@ -293,7 +310,7 @@ export function DealRoomView() {
                 type="button"
                 role="tab"
                 aria-selected={view === item.key}
-                onClick={() => setView(item.key)}
+                onClick={() => selectView(item.key)}
                 className={cn(
                   "shrink-0 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                   view === item.key && "border-primary/30 bg-primary/[0.08] text-primary",

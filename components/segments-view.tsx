@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Building2, ListFilter, Loader2, Plus, RefreshCw, Search, Trash2, Users } from "lucide-react";
 import {
   AlertDialog,
@@ -82,8 +83,10 @@ export function SegmentsView() {
       setName("");
       setNotice("Le segment a été créé dans HubSpot.");
       await load();
+      toast.success(`Segment « ${data.name} » créé dans HubSpot.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Erreur lors de la création");
+      toast.error(cause instanceof Error ? cause.message : "Erreur lors de la création");
     } finally {
       setSaving(false);
     }
@@ -101,8 +104,10 @@ export function SegmentsView() {
       setLists(current => current.filter(segment => segment.listId !== segmentToDelete.listId));
       setNotice(`Le segment « ${segmentToDelete.name} » a été supprimé de HubSpot.`);
       setSegmentToDelete(null);
+      toast.success(`Segment « ${segmentToDelete.name} » supprimé de HubSpot.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Erreur lors de la suppression");
+      toast.error(cause instanceof Error ? cause.message : "Erreur lors de la suppression");
     } finally {
       setDeletingId("");
     }

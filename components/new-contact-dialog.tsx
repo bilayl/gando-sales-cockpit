@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Loader2, UserPlus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -50,8 +51,10 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: Props) {
       setForm(EMPTY);
       onCreated();
       onOpenChange(false);
+      toast.success("Contact créé dans HubSpot.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossible de créer le contact");
+      toast.error(err instanceof Error ? err.message : "Impossible de créer le contact");
     } finally {
       setSaving(false);
     }

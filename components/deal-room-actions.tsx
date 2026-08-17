@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   AlertCircle,
   Check,
@@ -288,8 +289,11 @@ export function DealActionDialog({ open, action, dealId, dealName, contacts, sta
       onOpenChange(false);
       const warnings = Array.isArray(result.warnings) && result.warnings.length ? ` ${result.warnings.join(" ")}` : "";
       onDone(`Enregistré dans HubSpot.${warnings}`);
+      toast.success(ACTION_TITLES[action] ? `${ACTION_TITLES[action]} enregistré dans HubSpot.` : "Action enregistrée dans HubSpot.");
+      if (Array.isArray(result.warnings) && result.warnings.length) toast.warning(result.warnings.join(" "));
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Impossible d’enregistrer l’action");
+      toast.error(saveError instanceof Error ? saveError.message : "Impossible d’enregistrer l’action");
     } finally {
       setSaving(false);
     }
@@ -537,8 +541,10 @@ export function StakeholderRoleDialog({ open, contact, currentRole, dealId, onOp
       await runDealAction(dealId, { action: "stakeholder_role", contactId: contact.id, role: role === "champion" ? "Champion" : "Decision Maker" });
       onOpenChange(false);
       onDone(`« ${contact.name} » est désormais ${role === "champion" ? "champion" : "décideur"} du deal (HubSpot).`);
+      toast.success(`« ${contact.name} » : rôle ${role === "champion" ? "champion" : "décideur"} enregistré sur le deal.`);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Impossible d’enregistrer le rôle");
+      toast.error(saveError instanceof Error ? saveError.message : "Impossible d’enregistrer le rôle");
     } finally {
       setSaving(false);
     }
@@ -595,8 +601,10 @@ export function ClosingPlanStepDialog({ open, stepLabel, currentStatus, dealId, 
       await runDealAction(dealId, { action: "closing_plan", stepKey, stepStatus: status });
       onOpenChange(false);
       onDone(`Étape « ${stepLabel} » enregistrée (${status === "done" ? "terminée" : status === "in_progress" ? "en cours" : "non démarrée"}) dans HubSpot.`);
+      toast.success(`Étape « ${stepLabel} » enregistrée sur le deal.`);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Impossible d’enregistrer l’étape");
+      toast.error(saveError instanceof Error ? saveError.message : "Impossible d’enregistrer l’étape");
     } finally {
       setSaving(false);
     }

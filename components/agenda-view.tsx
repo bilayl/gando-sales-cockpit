@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   BarChart3,
   BellRing,
@@ -405,8 +406,10 @@ export function AgendaView() {
         ? { ...meeting, properties: { ...meeting.properties, hs_meeting_outcome: editStatus } }
         : meeting));
       setEditMeeting(null);
+      toast.success(editMeeting.id.startsWith("gcal-") ? "Statut synchronisé avec le CRM." : "Statut enregistré dans HubSpot.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Impossible de modifier le statut");
+      toast.error(reason instanceof Error ? reason.message : "Impossible de modifier le statut");
     } finally {
       setSavingStatus(false);
     }

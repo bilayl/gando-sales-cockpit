@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { CalendarClock, Check, ChevronRight, CirclePlus, Clock3, Loader2, Mail, Phone, RefreshCw, Search, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -139,8 +140,10 @@ export function TasksView() {
         setTasks(current => current.filter(row => row.id !== task.id));
         setTotal(current => Math.max(0, current - 1));
       }
+      toast.success("Tâche marquée comme terminée dans HubSpot.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Impossible de terminer la tâche");
+      toast.error(reason instanceof Error ? reason.message : "Impossible de terminer la tâche");
     } finally {
       setSavingId(null);
     }
@@ -169,8 +172,10 @@ export function TasksView() {
       setCreateOpen(false);
       resetCreateForm();
       await load();
+      toast.success("Tâche créée dans HubSpot.");
     } catch (reason) {
       setCreateError(reason instanceof Error ? reason.message : "Impossible de créer la tâche HubSpot");
+      toast.error(reason instanceof Error ? reason.message : "Impossible de créer la tâche HubSpot");
     } finally {
       setCreating(false);
     }
