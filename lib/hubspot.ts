@@ -28,6 +28,8 @@ type HubSpotSession = {
   expiresAt: number;
   hubId?: number;
   userId?: number;
+  email?: string;
+  hubDomain?: string;
   scopes?: string[];
 };
 
@@ -36,6 +38,15 @@ type TokenResponse = {
   refresh_token?: string;
   expires_in: number;
   hub_id?: number;
+  scopes?: string[];
+};
+
+type TokenMetadata = {
+  active?: boolean;
+  hub_id?: number;
+  user_id?: number;
+  user?: string;
+  hub_domain?: string;
   scopes?: string[];
 };
 
@@ -98,21 +109,46 @@ async function tokenRequest(values: Record<string, string>): Promise<TokenRespon
   return data as TokenResponse;
 }
 
+async function introspectAccessToken(token: string): Promise<TokenMetadata> {
+  const response = await fetch(`${HUBSPOT_API}/oauth/2026-03/token/introspect`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: requireEnv("HUBSPOT_CLIENT_ID"),
+      client_secret: requireEnv("HUBSPOT_CLIENT_SECRET"),
+      token,
+      token_type_hint: "access_token",
+    }),
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.active === false) {
+    throw new Error(data?.message || data?.error_description || "Impossible d’identifier l’utilisateur HubSpot");
+  }
+  return data as TokenMetadata;
+}
+
 async function refreshSession(session: HubSpotSession) {
   const data = await tokenRequest({ grant_type: "refresh_token", refresh_token: session.refreshToken });
+  const metadata = await introspectAccessToken(data.access_token).catch(() => null);
   const refreshed: HubSpotSession = {
     ...session,
     accessToken: data.access_token,
     refreshToken: data.refresh_token || session.refreshToken,
     expiresAt: Date.now() + data.expires_in * 1000,
-    hubId: data.hub_id || session.hubId,
-    scopes: data.scopes || session.scopes,
+    hubId: metadata?.hub_id || data.hub_id || session.hubId,
+    userId: metadata?.user_id || session.userId,
+    email: metadata?.user || session.email,
+    hubDomain: metadata?.hub_domain || session.hubDomain,
+    scopes: metadata?.scopes || data.scopes || session.scopes,
   };
   await writeSession(refreshed);
   return refreshed;
 }
 
 export function privateAppToken() {
+  // Private app auth is intentionally local-only. Deployed Cockpit users must authenticate through HubSpot OAuth.
+  if (process.env.NODE_ENV === "production") return "";
   return process.env.HUBSPOT_PRIVATE_APP_TOKEN?.trim() || "";
 }
 
@@ -136,7 +172,13 @@ export async function isHubSpotAuthenticated() {
 export async function getHubSpotIdentity() {
   const session = await readSession();
   if (!session) return privateAppToken() ? { mode: "private_app" as const } : null;
-  return { mode: "oauth" as const, hubId: session?.hubId, userId: session?.userId };
+  return {
+    mode: "oauth" as const,
+    hubId: session.hubId,
+    userId: session.userId,
+    email: session.email,
+    hubDomain: session.hubDomain,
+  };
 }
 
 export async function createHubSpotState() {
@@ -177,12 +219,16 @@ export async function exchangeHubSpotCode(code: string) {
     code,
     redirect_uri: requireEnv("HUBSPOT_REDIRECT_URI"),
   });
+  const metadata = await introspectAccessToken(data.access_token);
   await writeSession({
     accessToken: data.access_token,
     refreshToken: data.refresh_token || "",
     expiresAt: Date.now() + data.expires_in * 1000,
-    hubId: data.hub_id,
-    scopes: data.scopes,
+    hubId: metadata.hub_id || data.hub_id,
+    userId: metadata.user_id,
+    email: metadata.user,
+    hubDomain: metadata.hub_domain,
+    scopes: metadata.scopes || data.scopes,
   });
 }
 
@@ -195,8 +241,8 @@ async function accessContext() {
   if (privateToken) return { token: privateToken, session: null };
   let session = await readSession();
   if (session?.accessToken && session?.refreshToken) {
-    if ((session?.expiresAt ?? 0) <= Date.now() + 60_000) session = await refreshSession(session);
-    return { token: session?.accessToken || "", session };
+    if ((session.expiresAt ?? 0) <= Date.now() + 60_000) session = await refreshSession(session);
+    return { token: session.accessToken || "", session };
   }
   throw new Error("UNAUTHORIZED");
 }
