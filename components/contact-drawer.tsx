@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { QualificationProperties } from "@/components/qualification-properties";
+import { PostCallEmailButton } from "@/components/post-call-email-button";
 
 type Props = { contactId: string | null; open: boolean; onOpenChange: (open: boolean)=>void; onUpdated?: ()=>void };
 
@@ -181,32 +182,59 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
   const notes = useMemo(() => (data?.notes || []).slice().sort((a: any, b: any) => String(b.properties?.hs_timestamp || b.createdAt).localeCompare(String(a.properties?.hs_timestamp || a.createdAt))), [data]);
 
   const activities = useMemo(() => {
-    const calls = (data?.calls || []).map((x: any) => ({
-      date: x.properties?.hs_timestamp,
-      type: "Appel" as const,
-      title: x.properties?.hs_call_title || "Appel",
-      status: x.properties?.hs_call_status,
-      disposition: x.properties?.hs_call_disposition,
-      body: x.properties?.hs_call_body,
-    }));
+    const calls = (data?.calls || []).map((x: any) => {
+      const date = x.properties?.hs_timestamp;
+      const callTime = date ? new Date(date).getTime() : Number.NaN;
+      const body = x.properties?.hs_call_body || "";
+      const nearbyTranscript = Number.isFinite(callTime)
+        ? notes
+            .map((note: any) => {
+              const text = noteBodyText(note.properties?.hs_note_body);
+              const noteDate = note.properties?.hs_timestamp || note.createdAt;
+              const noteTime = noteDate ? new Date(noteDate).getTime() : Number.NaN;
+              return { text, delta: Number.isFinite(noteTime) ? noteTime - callTime : Number.POSITIVE_INFINITY };
+            })
+            .filter((note: { text: string; delta: number }) =>
+              note.text.length >= 80 &&
+              !note.text.startsWith("[GANDO_POST_CALL_EMAIL:") &&
+              note.delta >= -10 * 60 * 1000 &&
+              note.delta <= 12 * 60 * 60 * 1000
+            )
+            .sort((a: { delta: number }, b: { delta: number }) => Math.abs(a.delta) - Math.abs(b.delta))[0]?.text || ""
+        : "";
+      return {
+        id: x.id,
+        date,
+        type: "Appel" as const,
+        title: x.properties?.hs_call_title || "Appel",
+        status: x.properties?.hs_call_status,
+        disposition: x.properties?.hs_call_disposition,
+        body,
+        transcription: nearbyTranscript || (body.length >= 80 ? body : ""),
+      };
+    });
     const meetings = (data?.meetings || []).map((x: any) => ({
+      id: x.id,
       date: x.properties?.hs_meeting_start_time || x.properties?.hs_timestamp,
       type: "RDV" as const,
       title: x.properties?.hs_meeting_title || "Rendez-vous",
       status: x.properties?.hs_meeting_outcome,
       disposition: "",
       body: "",
+      transcription: "",
     }));
     const tasks = (data?.tasks || []).map((x: any) => ({
+      id: x.id,
       date: x.properties?.hs_timestamp,
       type: "Tâche" as const,
       title: x.properties?.hs_task_subject || "Tâche",
       status: x.properties?.hs_task_status,
       disposition: "",
       body: x.properties?.hs_task_body,
+      transcription: "",
     }));
     return [...calls, ...meetings, ...tasks].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 8);
-  }, [data]);
+  }, [data, notes]);
 
   async function patch(key: string, value: string) {
     if (!contactId) return;
@@ -533,6 +561,23 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
                         <CheckCircle2 size={11} className="text-primary" /> {[x.status, x.disposition].filter(Boolean).join(" · ")}
                       </div> : null}
                       {x.body ? <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-card-foreground/80">{x.body}</p> : null}
+                      {x.type === "Appel" && x.transcription && p.email && contactId ? (
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-3">
+                          <span className="text-[11px] font-medium text-muted-foreground">Transcription disponible</span>
+                          <PostCallEmailButton
+                            contactId={contactId}
+                            callId={x.id}
+                            email={p.email}
+                            firstName={p.firstname}
+                            companyName={company?.name}
+                            senderName={ownerName}
+                            callTitle={x.title}
+                            callBody={x.body}
+                            transcription={x.transcription}
+                            onSent={() => { if (contactId) void load(contactId); }}
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                   {!activities.length ? <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">Aucune activité enregistrée.</div> : null}
