@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ContactDrawer } from "@/components/contact-drawer";
+import { QualificationProperties } from "@/components/qualification-properties";
 
 type Props = { companyId: string | null; open: boolean; onOpenChange: (open: boolean) => void };
 
@@ -103,6 +104,10 @@ export function CompanyDrawer({ companyId, open, onOpenChange }: Props) {
   const ownerName = owners[p.hubspot_owner_id] || "";
   const location = [p.city, p.state, p.country].filter(Boolean).join(", ");
   const contacts = data?.contacts || [];
+  const referenceContact = contacts.find((contact: any) => {
+    const cp = contact.properties || {};
+    return cp.ce_quil_apprecie_chez_gando || cp.objections__retours || cp.campagne_dacquisition || cp.suite || cp.statut_prospection;
+  })?.properties || contacts[0]?.properties || {};
   const meetings = data?.meetings || [];
   const nextMeeting = data?.nextMeeting || null;
   const timeline = [
@@ -188,6 +193,8 @@ export function CompanyDrawer({ companyId, open, onOpenChange }: Props) {
                 </div>
                 {p.description ? <div className="mt-3 whitespace-pre-wrap rounded-xl border border-border bg-muted/20 p-4 text-sm leading-6 text-card-foreground">{p.description}</div> : null}
               </section>
+
+              <QualificationProperties kind="company" properties={p} fallbackProperties={referenceContact} />
 
               <section>
                 <SectionTitle icon={Users} title="Contacts associés" count={contacts.length} />
