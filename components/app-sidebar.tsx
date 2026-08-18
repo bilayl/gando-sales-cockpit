@@ -6,7 +6,6 @@ import {
   BarChart3,
   CalendarCheck2,
   CalendarDays,
-  CircleGauge,
   ListFilter,
   ListTodo,
   LogOut,
@@ -20,7 +19,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const nav = [
-  { href: "/today", label: "Aujourd’hui", icon: CircleGauge },
   { href: "/prospection", label: "Prospection", icon: PhoneCall },
   { href: "/sourcing", label: "Sourcing", icon: Search },
   { href: "/segments", label: "Segments", icon: ListFilter },
@@ -46,7 +44,7 @@ export function AppSidebar({ email }: { email?: string }) {
 
   return (
     <aside className="flex h-screen w-[72px] flex-col border-r border-border bg-card px-2.5 py-4 lg:w-[216px] lg:px-3">
-      <Link href="/today" className="flex h-11 items-center justify-center gap-2.5 px-1 lg:justify-start lg:px-2">
+      <Link href="/prospection" className="flex h-11 items-center justify-center gap-2.5 px-1 lg:justify-start lg:px-2">
         <span className="brand-mark grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-bold text-white">G</span>
         <span className="hidden min-w-0 lg:block">
           <span className="block text-sm font-bold tracking-[-0.02em]">Gando</span>
