@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Building2, ListFilter, Loader2, RefreshCw, Search, Table2, Users, SquareKanban } from "lucide-react";
 import { CompanyDrawer } from "@/components/company-drawer";
-import { CompanyProspectionBoard, COMPANY_PIPELINE } from "@/components/company-prospection-board";
+import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ type List = { listId: string; name: string; objectTypeId: string; size?: number 
 type Owner = { id: string; firstName?: string; lastName?: string; email?: string };
 type ViewMode = "board" | "table";
 
-const LEAD_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(column => [column.value, column.label]));
+const STAGE_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(column => [column.value, column.label]));
 
 function callLabel(value?: string | null) {
   const labels: Record<string, string> = {
@@ -40,7 +40,7 @@ export function CompanyFirstProspectionView() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [owner, setOwner] = useState("");
-  const [leadStatus, setLeadStatus] = useState("");
+  const [stageFilter, setStageFilter] = useState<CompanyStage | "">("");
   const [view, setView] = useState<ViewMode>("board");
   const [drawerId, setDrawerId] = useState<string | null>(null);
 
@@ -89,13 +89,15 @@ export function CompanyFirstProspectionView() {
       const haystack = [p.name, p.domain, p.city, p.country, p.phone].filter(Boolean).join(" ").toLowerCase();
       return (!needle || haystack.includes(needle))
         && (!owner || p.hubspot_owner_id === owner)
-        && (!leadStatus || (p.hs_lead_status || "NEW") === leadStatus);
+        && (!stageFilter || deriveCompanyStage(company) === stageFilter);
     });
-  }, [companies, query, owner, leadStatus]);
+  }, [companies, query, owner, stageFilter]);
 
   const currentList = lists.find(item => item.listId === segmentId);
-  const reminders = filtered.filter(company => company.properties.date_de_rappel || company.properties.notes_next_activity_date).length;
-  const opportunities = filtered.filter(company => company.properties.hs_lead_status === "OPEN_DEAL" || Number(company.properties.num_associated_deals || 0) > 0).length;
+  const reminders = filtered.filter(company => deriveCompanyStage(company) === "FOLLOW_UP").length;
+  const later = filtered.filter(company => deriveCompanyStage(company) === "LATER").length;
+  const opportunities = filtered.filter(company => deriveCompanyStage(company) === "OPEN_DEAL").length;
+  const won = filtered.filter(company => deriveCompanyStage(company) === "WON").length;
 
   async function sync() {
     setSyncing(true);
@@ -111,10 +113,18 @@ export function CompanyFirstProspectionView() {
     }
   }
 
-  function handleStatusChange(id: string, status: string) {
-    setCompanies(current => current.map(company => company.id === id
-      ? { ...company, properties: { ...company.properties, hs_lead_status: status } }
-      : company));
+  function handleStatusChange(id: string, stage: CompanyStage, updated?: Record<string, string | null | undefined>) {
+    setCompanies(current => current.map(company => {
+      if (company.id !== id) return company;
+      const fallback: Record<string, string | null | undefined> = {};
+      if (stage === "WON") fallback.lifecyclestage = "customer";
+      if (stage === "LOST") fallback.hs_lead_status = "UNQUALIFIED";
+      if (stage === "LATER") fallback.hs_lead_status = "BAD_TIMING";
+      if (stage === "FOLLOW_UP") fallback.hs_lead_status = "BAD_TIMING";
+      if (["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "OPEN_DEAL"].includes(stage)) fallback.hs_lead_status = stage;
+      return { ...company, properties: { ...company.properties, ...fallback, ...(updated || {}) } };
+    }));
+    void load(true);
   }
 
   return (
@@ -136,9 +146,9 @@ export function CompanyFirstProspectionView() {
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
               <h1 className="font-display text-lg font-bold tracking-tight">{currentList?.name || "Prospection par entreprise"}</h1>
-              <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-foreground">{total}</strong> comptes HubSpot · {reminders} rappels · {opportunities} opportunités</p>
+              <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-foreground">{total}</strong> comptes · {reminders} à relancer · {later} ultérieurs · {opportunities} opportunités · {won} gagnés</p>
             </div>
-            <div className="rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2 text-xs text-muted-foreground"><strong className="text-primary">Company-first</strong> · appeler une personne, faire avancer le compte</div>
+            <div className="rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2 text-xs text-muted-foreground"><strong className="text-primary">Workflow actif</strong> · les comptes futurs ressortent automatiquement à échéance</div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-y border-border bg-muted/30 px-4 py-2.5">
@@ -147,7 +157,7 @@ export function CompanyFirstProspectionView() {
               <Button variant={view === "table" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("table")}><Table2 size={14} /> Tableau</Button>
             </div>
             <Select value={owner || "all"} onValueChange={value => setOwner(value === "all" ? "" : value)}><SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="Commercial" /></SelectTrigger><SelectContent><SelectItem value="all">Tous les commerciaux</SelectItem>{owners.map(item => <SelectItem key={item.id} value={item.id}>{ownerNames[item.id]}</SelectItem>)}</SelectContent></Select>
-            <Select value={leadStatus || "all"} onValueChange={value => setLeadStatus(value === "all" ? "" : value)}><SelectTrigger className="h-9 w-[165px]"><SelectValue placeholder="Statut compte" /></SelectTrigger><SelectContent><SelectItem value="all">Tous les statuts</SelectItem>{COMPANY_PIPELINE.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select>
+            <Select value={stageFilter || "all"} onValueChange={value => setStageFilter(value === "all" ? "" : value as CompanyStage)}><SelectTrigger className="h-9 w-[165px]"><SelectValue placeholder="Statut compte" /></SelectTrigger><SelectContent><SelectItem value="all">Tous les statuts</SelectItem>{COMPANY_PIPELINE.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select>
             <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, ville…" className="h-9 w-52 pl-9" /></div>
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>{syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}</Button>
           </div>
@@ -156,7 +166,7 @@ export function CompanyFirstProspectionView() {
 
           {view === "board" ? <CompanyProspectionBoard companies={filtered} ownerNames={ownerNames} loading={loading} onOpenCompany={setDrawerId} onStatusChange={handleStatusChange} onError={setError} /> : null}
 
-          {view === "table" ? <div className="min-h-0 flex-1 overflow-auto border-t border-border minari-scrollbar"><Table className="min-w-[1150px]"><TableHeader><TableRow><TableHead>Entreprise</TableHead><TableHead>Statut compte</TableHead><TableHead>Dernier appel</TableHead><TableHead>Rappel</TableHead><TableHead>Contacts</TableHead><TableHead>Deals</TableHead><TableHead>Commercial</TableHead><TableHead>Dernière activité</TableHead></TableRow></TableHeader><TableBody>{loading ? <TableRow><TableCell colSpan={8} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filtered.map(company => { const p = company.properties; return <TableRow key={company.id} className="cursor-pointer" onClick={() => setDrawerId(company.id)}><TableCell><div className="flex items-center gap-2"><Avatar className="h-7 w-7 rounded-lg bg-accent"><AvatarFallback className="rounded-lg bg-accent text-primary"><Building2 size={13} /></AvatarFallback></Avatar><div><div className="font-medium">{p.name || "Sans nom"}</div><div className="text-[11px] text-muted-foreground">{p.domain || "—"}</div></div></div></TableCell><TableCell><Badge variant="outline">{LEAD_LABELS[p.hs_lead_status || "NEW"] || p.hs_lead_status || "À travailler"}</Badge></TableCell><TableCell>{callLabel(p.statut_de_lappel)}</TableCell><TableCell className="text-xs text-muted-foreground">{formatDate(p.date_de_rappel || p.notes_next_activity_date)}</TableCell><TableCell>{p.num_associated_contacts || 0}</TableCell><TableCell>{p.num_associated_deals || 0}</TableCell><TableCell>{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "—" : "—"}</TableCell><TableCell className="text-xs text-muted-foreground">{formatDate(p.notes_last_updated || p.hs_last_sales_activity_timestamp)}</TableCell></TableRow>; })}{!loading && !filtered.length ? <TableRow><TableCell colSpan={8} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow> : null}</TableBody></Table></div> : null}
+          {view === "table" ? <div className="min-h-0 flex-1 overflow-auto border-t border-border minari-scrollbar"><Table className="min-w-[1150px]"><TableHeader><TableRow><TableHead>Entreprise</TableHead><TableHead>Étape workflow</TableHead><TableHead>Dernier appel</TableHead><TableHead>Prochaine reprise</TableHead><TableHead>Contacts</TableHead><TableHead>Deals</TableHead><TableHead>Commercial</TableHead><TableHead>Dernière activité</TableHead></TableRow></TableHeader><TableBody>{loading ? <TableRow><TableCell colSpan={8} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filtered.map(company => { const p = company.properties; const stage = deriveCompanyStage(company); return <TableRow key={company.id} className="cursor-pointer" onClick={() => setDrawerId(company.id)}><TableCell><div className="flex items-center gap-2"><Avatar className="h-7 w-7 rounded-lg bg-accent"><AvatarFallback className="rounded-lg bg-accent text-primary"><Building2 size={13} /></AvatarFallback></Avatar><div><div className="font-medium">{p.name || "Sans nom"}</div><div className="text-[11px] text-muted-foreground">{p.domain || "—"}</div></div></div></TableCell><TableCell><Badge variant="outline">{STAGE_LABELS[stage]}</Badge></TableCell><TableCell>{callLabel(p.statut_de_lappel)}</TableCell><TableCell className="text-xs text-muted-foreground">{stage === "LATER" || stage === "FOLLOW_UP" ? formatDate(p.date_de_rappel || p.notes_next_activity_date) : "—"}</TableCell><TableCell>{p.num_associated_contacts || 0}</TableCell><TableCell>{p.num_associated_deals || 0}</TableCell><TableCell>{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "—" : "—"}</TableCell><TableCell className="text-xs text-muted-foreground">{formatDate(p.notes_last_updated || p.hs_last_sales_activity_timestamp)}</TableCell></TableRow>; })}{!loading && !filtered.length ? <TableRow><TableCell colSpan={8} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow> : null}</TableBody></Table></div> : null}
         </Card>
       </div>
 
