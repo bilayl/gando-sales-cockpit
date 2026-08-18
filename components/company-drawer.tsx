@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ContactDrawer } from "@/components/contact-drawer";
+import { PostCallEmailButton } from "@/components/post-call-email-button";
 import { QualificationProperties } from "@/components/qualification-properties";
 
 type Props = { companyId: string | null; open: boolean; onOpenChange: (open: boolean) => void };
@@ -221,6 +222,20 @@ export function CompanyDrawer({ companyId, open, onOpenChange }: Props) {
   const referenceContact = contacts[0]?.properties || {};
   const meetings = data?.meetings || [];
   const nextMeeting = data?.nextMeeting || null;
+  const latestNotesContext = (data?.notes || [])
+    .slice()
+    .sort((a: any, b: any) => new Date(b.properties?.hs_timestamp || b.properties?.hs_createdate || 0).getTime() - new Date(a.properties?.hs_timestamp || a.properties?.hs_createdate || 0).getTime())
+    .slice(0, 5)
+    .map((note: any, index: number) => {
+      const body = plainText(note.properties?.hs_note_body);
+      if (!body) return "";
+      const date = note.properties?.hs_timestamp || note.properties?.hs_createdate;
+      const who = note.sourceContactName ? ` — ${note.sourceContactName}` : " — Entreprise";
+      return `Note ${index + 1}${who}${date ? ` (${formatDate(date)})` : ""}:\n${body}`;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+  const emailContext = latestNotesContext || "Aucune note HubSpot récente n'est disponible. Génère un email de suivi générique sans inventer de fait, de tarif ni de prochaine étape.";
 
   const timeline = [
     ...meetings.map((meeting: any) => ({
@@ -292,9 +307,22 @@ export function CompanyDrawer({ companyId, open, onOpenChange }: Props) {
           {loading ? <div className="grid h-64 place-items-center"><Loader2 className="animate-spin text-primary" /></div>
             : error ? <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</div>
             : <div className="space-y-6">
-              <div className="flex gap-2">
-                <Button asChild className="flex-1"><a href={p.phone ? `tel:${p.phone}` : "#"}><Phone size={15} /> Appeler</a></Button>
-                <Button variant="outline" asChild className="flex-1"><a href={p.domain ? `https://${p.domain}` : "#"} target="_blank" rel="noreferrer"><ArrowUpRight size={15} /> Site web</a></Button>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild className="min-w-[150px] flex-1"><a href={p.phone ? `tel:${p.phone}` : "#"}><Phone size={15} /> Appeler</a></Button>
+                {contacts[0]?.id && referenceContact.email ? (
+                  <PostCallEmailButton
+                    contactId={String(contacts[0].id)}
+                    email={referenceContact.email}
+                    firstName={referenceContact.firstname}
+                    companyName={name}
+                    callTitle="Email généré depuis les dernières notes HubSpot"
+                    transcription={emailContext}
+                    buttonLabel="Générer un email"
+                    buttonClassName="h-10 min-w-[180px] flex-1 gap-2 text-sm"
+                    onSent={() => companyId && void loadCompany(companyId)}
+                  />
+                ) : null}
+                <Button variant="outline" asChild className="min-w-[150px] flex-1"><a href={p.domain ? `https://${p.domain}` : "#"} target="_blank" rel="noreferrer"><ArrowUpRight size={15} /> Site web</a></Button>
               </div>
 
               <section>
@@ -392,6 +420,20 @@ export function CompanyDrawer({ companyId, open, onOpenChange }: Props) {
                           {cp.phone || cp.mobilephone ? <a href={`tel:${cp.phone || cp.mobilephone}`} className="inline-flex items-center gap-1.5 font-mono hover:text-primary"><PhoneCall size={11} className="text-primary" /> {cp.phone || cp.mobilephone}</a> : null}
                           {cp.hs_last_sales_activity_timestamp ? <span className="inline-flex items-center gap-1.5 font-mono"><Clock size={11} className="text-primary" /> {formatDate(cp.hs_last_sales_activity_timestamp)}</span> : null}
                         </div>
+                        {cp.email ? (
+                          <div className="mt-3 flex justify-end border-t border-border/70 pt-3">
+                            <PostCallEmailButton
+                              contactId={String(c.id)}
+                              email={cp.email}
+                              firstName={cp.firstname}
+                              companyName={name}
+                              callTitle="Email généré depuis les dernières notes HubSpot"
+                              transcription={emailContext}
+                              buttonLabel="Générer un email"
+                              onSent={() => companyId && void loadCompany(companyId)}
+                            />
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
