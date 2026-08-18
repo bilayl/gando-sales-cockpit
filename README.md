@@ -33,6 +33,15 @@ La Redirect URL doit être déclarée à l’identique dans l’application HubS
 
 Pour du développement local uniquement, `HUBSPOT_PRIVATE_APP_TOKEN` permet de conserver le mode Private App existant. Cette valeur doit rester côté serveur et ne doit jamais être préfixée par `NEXT_PUBLIC_`.
 
+Le sourcing utilise le backend d’enrichissement lorsqu’il est joignable. En secours, le Cockpit appelle OpenRouter directement côté serveur, sans passer par Vercel AI Gateway :
+
+```text
+OPENROUTER_API_KEY=...
+OPENROUTER_MODEL=openrouter/auto
+```
+
+`OPENROUTER_API_KEY` doit être configurée uniquement côté serveur (Vercel Production/Preview selon l’environnement) et ne doit jamais être préfixée par `NEXT_PUBLIC_`.
+
 Google Calendar est facultatif :
 
 ```text
