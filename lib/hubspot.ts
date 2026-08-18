@@ -56,6 +56,17 @@ function requireEnv(name: string) {
   return value;
 }
 
+export function isProductionEnvironment() {
+  // Vercel exposes VERCEL_ENV=production|preview|development. This is the source of truth
+  // because NODE_ENV is "production" for both Production and Preview builds.
+  if (process.env.VERCEL_ENV) return process.env.VERCEL_ENV === "production";
+  return process.env.NODE_ENV === "production";
+}
+
+export function isAuthBypassEnabled() {
+  return !isProductionEnvironment();
+}
+
 function sessionKey() {
   return createHash("sha256").update(requireEnv("SESSION_SECRET")).digest();
 }
@@ -147,8 +158,9 @@ async function refreshSession(session: HubSpotSession) {
 }
 
 export function privateAppToken() {
-  // Private app auth is intentionally local-only. Deployed Cockpit users must authenticate through HubSpot OAuth.
-  if (process.env.NODE_ENV === "production") return "";
+  // Preview/test uses the server-side private app token so the UI can be tested without OAuth.
+  // Production never accepts this path: every deployed production user must authenticate with HubSpot OAuth.
+  if (isProductionEnvironment()) return "";
   return process.env.HUBSPOT_PRIVATE_APP_TOKEN?.trim() || "";
 }
 
@@ -166,19 +178,25 @@ export function isHubSpotConfigured() {
 }
 
 export async function isHubSpotAuthenticated() {
-  return Boolean(privateAppToken() || (await readSession()));
+  if (isAuthBypassEnabled()) return true;
+  return Boolean(await readSession());
 }
 
 export async function getHubSpotIdentity() {
   const session = await readSession();
-  if (!session) return privateAppToken() ? { mode: "private_app" as const } : null;
-  return {
-    mode: "oauth" as const,
-    hubId: session.hubId,
-    userId: session.userId,
-    email: session.email,
-    hubDomain: session.hubDomain,
-  };
+  if (session) {
+    return {
+      mode: "oauth" as const,
+      hubId: session.hubId,
+      userId: session.userId,
+      email: session.email,
+      hubDomain: session.hubDomain,
+    };
+  }
+  if (isAuthBypassEnabled()) {
+    return { mode: "test_bypass" as const, email: "Mode test · HubSpot" };
+  }
+  return null;
 }
 
 export async function createHubSpotState() {
@@ -244,6 +262,7 @@ async function accessContext() {
     if ((session.expiresAt ?? 0) <= Date.now() + 60_000) session = await refreshSession(session);
     return { token: session.accessToken || "", session };
   }
+  if (isAuthBypassEnabled()) throw new Error("TEST_HUBSPOT_TOKEN_MISSING");
   throw new Error("UNAUTHORIZED");
 }
 
@@ -295,6 +314,9 @@ export function apiError(error: unknown) {
   const e = error as Error & { status?: number; details?: unknown };
   if (e.message === "UNAUTHORIZED") {
     return NextResponse.json({ error: "UNAUTHORIZED", message: "Reconnectez HubSpot pour continuer." }, { status: 401 });
+  }
+  if (e.message === "TEST_HUBSPOT_TOKEN_MISSING") {
+    return NextResponse.json({ error: "TEST_HUBSPOT_TOKEN_MISSING", message: "Le bypass Preview est actif mais HUBSPOT_PRIVATE_APP_TOKEN manque dans les variables Preview Vercel." }, { status: 503 });
   }
   return NextResponse.json({ error: e.message || "Erreur HubSpot", details: e.details }, { status: e.status || 500 });
 }
