@@ -9,6 +9,7 @@ import {
   CircleGauge,
   ListFilter,
   ListTodo,
+  LogOut,
   PhoneCall,
   Settings,
   Target,
@@ -128,19 +129,32 @@ export function AppSidebar({ email }: { email?: string }) {
           <span className="hidden lg:block">Paramètres</span>
         </Link>
 
-        <div className="flex items-center justify-center gap-2.5 rounded-lg bg-muted/70 p-2 lg:justify-start">
-          <Avatar className="h-7 w-7 shrink-0 border border-border">
-            <AvatarFallback className="bg-card text-[11px] font-bold text-primary">
-              {(email || "H").slice(0, 1).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="hidden min-w-0 flex-1 lg:block">
-            <div className="truncate text-[11px] font-semibold text-foreground">{email || "HubSpot connecté"}</div>
-            <div className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Connecté
+        <div className="rounded-lg bg-muted/70 p-2">
+          <div className="flex items-center justify-center gap-2.5 lg:justify-start">
+            <Avatar className="h-7 w-7 shrink-0 border border-border">
+              <AvatarFallback className="bg-card text-[11px] font-bold text-primary">
+                {(email || "H").slice(0, 1).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="hidden min-w-0 flex-1 lg:block">
+              <div className="truncate text-[11px] font-semibold text-foreground">{email || "HubSpot connecté"}</div>
+              <div className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Connecté avec HubSpot
+              </div>
             </div>
+            <div className="hidden lg:block"><ThemeToggle /></div>
           </div>
-          <div className="hidden lg:block"><ThemeToggle /></div>
+
+          <form action="/api/auth/logout" method="post" className="mt-2">
+            <button
+              type="submit"
+              title="Se déconnecter"
+              className="flex h-8 w-full items-center justify-center gap-2 rounded-md text-xs font-semibold text-muted-foreground transition-colors hover:bg-background hover:text-foreground lg:justify-start lg:px-2"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">Se déconnecter</span>
+            </button>
+          </form>
         </div>
       </div>
     </aside>
