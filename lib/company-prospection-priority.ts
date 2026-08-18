@@ -84,8 +84,8 @@ export function getCompanyProspectionDecision(
   }
 
   const reminder = dateMs(p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date);
-  if (stage === "LATER" && Number.isFinite(reminder) && reminder > now) {
-    return { bucket: "SNOOZED", priority: 80, priorityLabel: "À échéance", reason: "Relance future non échue" };
+  if (Number.isFinite(reminder) && reminder > now) {
+    return { bucket: "SNOOZED", priority: 80, priorityLabel: "À échéance", reason: "Prochaine action planifiée dans le futur" };
   }
 
   const overdueTasks = Number(p.qualification_overdue_tasks || 0);
