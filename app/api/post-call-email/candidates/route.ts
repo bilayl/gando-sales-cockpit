@@ -16,6 +16,15 @@ function timestamp(value: unknown) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function emailRequestDetected(value: string) {
+  const normalized = value.toLowerCase();
+  return [
+    /(?:envoy|transmet|adress).{0,50}(?:mail|email|e-mail|récap|récapitulatif|présentation|documentation|devis)/i,
+    /(?:mail|email|e-mail).{0,45}(?:récap|récapitulatif|présentation|documentation|devis|envoy|transmet)/i,
+    /(?:récap|récapitulatif|présentation|documentation|devis).{0,45}(?:mail|email|e-mail)/i,
+  ].some(pattern => pattern.test(normalized));
+}
+
 export async function GET() {
   try {
     const supabase = getSupabaseAdmin();
@@ -66,11 +75,17 @@ export async function GET() {
         const email = text(contact?.email || props.email);
         if (!contact || !contact.hubspot_id || !email) return null;
 
+        const callId = String(call.hubspot_id);
+        const notesForContact = notesByContact.get(String(call.contact_id)) || [];
+        const sentMarker = `[GANDO_POST_CALL_EMAIL:${callId}]`;
+        const alreadySent = notesForContact.some(note => text(note.body || note.raw_data?.properties?.hs_note_body).includes(sentMarker));
+        if (alreadySent) return null;
+
         const callAt = timestamp(call.occurred_at || call.raw_data?.properties?.hs_timestamp);
         const callBody = text(call.body || call.raw_data?.properties?.hs_call_body);
-        const nearbyNotes = (notesByContact.get(String(call.contact_id)) || [])
+        const nearbyNotes = notesForContact
           .map(note => ({ note, at: timestamp(note.occurred_at || note.raw_data?.properties?.hs_timestamp), body: text(note.body || note.raw_data?.properties?.hs_note_body) }))
-          .filter(item => item.body.length >= 80 && item.at >= callAt - 10 * 60_000 && item.at <= callAt + 12 * 60 * 60_000)
+          .filter(item => !item.body.startsWith("[GANDO_POST_CALL_EMAIL:") && item.body.length >= 80 && item.at >= callAt - 10 * 60_000 && item.at <= callAt + 12 * 60 * 60_000)
           .sort((a, b) => Math.abs(a.at - callAt) - Math.abs(b.at - callAt));
 
         const transcription = nearbyNotes[0]?.body || (callBody.length >= 80 ? callBody : "");
@@ -79,7 +94,7 @@ export async function GET() {
         const company = contact.company_id ? companyById.get(String(contact.company_id)) : null;
         const companyName = text(company?.name || company?.raw_data?.properties?.name || props.company);
         return {
-          callId: String(call.hubspot_id),
+          callId,
           contactId: String(contact.hubspot_id),
           email,
           firstName: text(contact.first_name || props.firstname),
@@ -88,11 +103,13 @@ export async function GET() {
           callTitle: text(call.subject || call.raw_data?.properties?.hs_call_title || "Appel"),
           callBody,
           transcription,
+          emailRequested: emailRequestDetected(transcription),
           occurredAt: call.occurred_at || call.raw_data?.properties?.hs_timestamp || null,
           outcome: text(call.outcome || call.raw_data?.properties?.hs_call_disposition || call.raw_data?.properties?.hs_call_status),
         };
       })
       .filter(Boolean)
+      .sort((a: any, b: any) => Number(b.emailRequested) - Number(a.emailRequested) || timestamp(b.occurredAt) - timestamp(a.occurredAt))
       .slice(0, 25);
 
     return NextResponse.json({ candidates }, { headers: { "cache-control": "no-store" } });
