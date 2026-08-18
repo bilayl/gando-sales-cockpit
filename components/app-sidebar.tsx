@@ -11,6 +11,7 @@ import {
   ListTodo,
   LogOut,
   PhoneCall,
+  Search,
   Settings,
   Target,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
 const nav = [
   { href: "/today", label: "Aujourd’hui", icon: CircleGauge },
   { href: "/prospection", label: "Prospection", icon: PhoneCall },
+  { href: "/sourcing", label: "Sourcing", icon: Search },
   { href: "/segments", label: "Segments", icon: ListFilter },
   { href: "/tasks", label: "Tâches", icon: ListTodo },
   { href: "/agenda", label: "Agenda", icon: CalendarDays },
