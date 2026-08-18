@@ -37,6 +37,18 @@ const PROSPECTION_LABEL: Record<WorkflowAction, string> = {
   LOST: "Perdu",
 };
 
+const QUALIFICATION_SCORE: Record<WorkflowAction, number> = {
+  NEW: 20,
+  OPEN: 30,
+  ATTEMPTED_TO_CONTACT: 45,
+  CONNECTED: 70,
+  FOLLOW_UP: 80,
+  LATER: 60,
+  OPEN_DEAL: 90,
+  WON: 100,
+  LOST: 5,
+};
+
 const REFERENCE_CONTACT_PROPERTIES = [
   "firstname",
   "lastname",
@@ -63,24 +75,28 @@ function contactWorkflowProperties(action: WorkflowAction, reminderAt: Date | nu
       return {
         statut_prospection: "À prospecter",
         resultat_prospection: "",
+        statut_de_lappel: "",
         ...clearDates,
       };
     case "ATTEMPTED_TO_CONTACT":
       return {
         statut_prospection: "En prospection",
         resultat_prospection: "Sans réponse",
+        statut_de_lappel: "NRP",
         ...clearDates,
       };
     case "CONNECTED":
       return {
         statut_prospection: "Conversation",
         resultat_prospection: "Conversation",
+        statut_de_lappel: "Intéressé",
         ...clearDates,
       };
     case "FOLLOW_UP":
       return {
         statut_prospection: "En prospection",
         resultat_prospection: "À rappeler",
+        statut_de_lappel: "A Rappeler",
         date_prochaine_relance: reminderAt ? reminderAt.toISOString() : "",
         date_recyclage: "",
       };
@@ -88,6 +104,7 @@ function contactWorkflowProperties(action: WorkflowAction, reminderAt: Date | nu
       return {
         statut_prospection: "À recycler",
         resultat_prospection: "",
+        statut_de_lappel: "A une date ultérieure",
         date_prochaine_relance: "",
         date_recyclage: reminderAt ? reminderAt.toISOString() : "",
       };
@@ -95,18 +112,21 @@ function contactWorkflowProperties(action: WorkflowAction, reminderAt: Date | nu
       return {
         statut_prospection: "RDV booké",
         resultat_prospection: "RDV obtenu",
+        statut_de_lappel: "Intéressé",
         ...clearDates,
       };
     case "WON":
       return {
         statut_prospection: "Gagné",
         resultat_prospection: "",
+        statut_de_lappel: "Intéressé",
         ...clearDates,
       };
     case "LOST":
       return {
         statut_prospection: "Perdu",
         resultat_prospection: "Pas intéressé",
+        statut_de_lappel: "pas intéressé",
         ...clearDates,
       };
   }
@@ -178,9 +198,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     switch (action) {
       case "NEW":
       case "OPEN":
+        properties.statut_de_lappel = "";
+        properties.date_de_rappel = "";
+        break;
       case "ATTEMPTED_TO_CONTACT":
+        properties.statut_de_lappel = "nrp";
+        properties.date_de_rappel = "";
+        break;
       case "CONNECTED":
+        properties.statut_de_lappel = "interesse";
+        properties.date_de_rappel = "";
+        break;
       case "OPEN_DEAL":
+        properties.statut_de_lappel = "interesse";
         properties.date_de_rappel = "";
         break;
       case "FOLLOW_UP":
@@ -207,9 +237,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       body: JSON.stringify({ properties }),
     });
 
-    // HubSpot workflows remain the automation engine. Update exactly one reference
-    // contact so WF01-WF04 can enroll without creating duplicate tasks for every
-    // person associated with the same company.
     const referenceContact = await findReferenceContact(company).catch(error => {
       console.error("Find workflow reference contact:", error);
       return null;
@@ -231,12 +258,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const { error } = await supabase.from("companies").update({
         raw_data: { ...existing.raw_data, ...updated, properties: merged, updatedAt: new Date().toISOString() },
         hubspot_updated_at: new Date().toISOString(),
+        prospecting_status: PROSPECTION_LABEL[action],
+        qualification_status: PROSPECTION_LABEL[action],
+        qualification_score: QUALIFICATION_SCORE[action],
+        qualification_reason: body.reason ? String(body.reason) : "Statut modifié depuis le Gando Sales Cockpit",
+        qualification_next_action_at: reminderAt?.toISOString() || null,
+        qualification_last_call_status: properties.statut_de_lappel || existing.qualification_last_call_status || null,
+        qualification_source: "sales_cockpit_manual",
       }).eq("hubspot_id", id);
       if (error) console.error("Supabase workflow company:", error.message);
     }
 
+    const companyResponse = {
+      ...updated,
+      properties: {
+        ...(updated.properties || {}),
+        qualification_status: PROSPECTION_LABEL[action],
+        qualification_score: String(QUALIFICATION_SCORE[action]),
+        qualification_reason: body.reason ? String(body.reason) : "Statut modifié depuis le Gando Sales Cockpit",
+        qualification_next_action_at: reminderAt?.toISOString() || "",
+      },
+    };
+
     return NextResponse.json({
-      company: updated,
+      company: companyResponse,
       contact: updatedContact,
       task: null,
       workflow: {
