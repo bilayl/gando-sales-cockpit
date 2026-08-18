@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generatePostCallEmail } from "@/lib/post-call-email";
+import { isPostCallEmailKind } from "@/lib/post-call-email-types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -14,6 +15,7 @@ export async function POST(request: NextRequest) {
       callBody: typeof input.callBody === "string" ? input.callBody : "",
       transcription: typeof input.transcription === "string" ? input.transcription : "",
       senderName: typeof input.senderName === "string" ? input.senderName : "",
+      kind: isPostCallEmailKind(input.kind) ? input.kind : "recap",
     });
     return NextResponse.json(draft, { headers: { "cache-control": "no-store" } });
   } catch (error) {

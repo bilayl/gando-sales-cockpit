@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import type { PostCallEmailKind } from "@/lib/post-call-email-types";
 
 export const dynamic = "force-dynamic";
 
@@ -11,18 +12,85 @@ function text(value: unknown) {
     .trim();
 }
 
+function normalized(value: unknown) {
+  return text(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function timestamp(value: unknown) {
   const time = new Date(String(value || 0)).getTime();
   return Number.isFinite(time) ? time : 0;
 }
 
 function emailRequestDetected(value: string) {
-  const normalized = value.toLowerCase();
+  const source = normalized(value);
   return [
-    /(?:envoy|transmet|adress).{0,50}(?:mail|email|e-mail|récap|récapitulatif|présentation|documentation|devis)/i,
-    /(?:mail|email|e-mail).{0,45}(?:récap|récapitulatif|présentation|documentation|devis|envoy|transmet)/i,
-    /(?:récap|récapitulatif|présentation|documentation|devis).{0,45}(?:mail|email|e-mail)/i,
-  ].some(pattern => pattern.test(normalized));
+    /(?:envoy|transmet|adress|faire suivre).{0,55}(?:mail|email|e-mail|recap|recapitulatif|presentation|documentation|devis|tarif)/,
+    /(?:mail|email|e-mail).{0,50}(?:recap|recapitulatif|presentation|documentation|devis|tarif|prix|envoy|transmet)/,
+    /(?:recap|recapitulatif|presentation|documentation|devis|tarif|prix).{0,50}(?:mail|email|e-mail)/,
+  ].some(pattern => pattern.test(source));
+}
+
+type Classification = {
+  kind: PostCallEmailKind;
+  reason: string;
+  priority: number;
+  emailRequested: boolean;
+};
+
+function classifyEmail(sourceValue: string, callTitle: string, outcome: string): Classification | null {
+  const source = normalized(`${callTitle}\n${outcome}\n${sourceValue}`);
+  const emailRequested = emailRequestDetected(sourceValue);
+  const pricingMentioned = /\b(tarif|tarifs|prix|cout|couts|frais|abonnement|offre|commission|grille tarifaire|combien)\b/.test(source);
+  const decisionMakerMentioned = /\b(gerant|gerante|dirigeant|dirigeante|direction|responsable|decisionnaire|decideur|patron|proprietaire)\b/.test(source);
+  const handoffContext = /\b(transfert|transferer|passer|joindre|absent|pas disponible|pas la|n'est pas la|contacter|adresse mail|faire suivre|premier contact)\b/.test(source);
+  const demoCompleted = [
+    /suite.{0,35}(demo|demonstration|meeting|rendez vous|rdv)/,
+    /apres.{0,35}(demo|demonstration|meeting|rendez vous|rdv)/,
+    /(demo|demonstration).{0,45}(faite|realisee|terminee|effectuee|vue|passee)/,
+    /(meeting|rendez vous|rdv).{0,45}(termine|realise|effectue|fait|passe)/,
+    /a eu.{0,25}(demo|demonstration)/,
+  ].some(pattern => pattern.test(source));
+
+  if (emailRequested && decisionMakerMentioned && handoffContext) {
+    return {
+      kind: "decision_maker_intro",
+      reason: "Email demandé pour transmettre la présentation au gérant / décisionnaire",
+      priority: 4,
+      emailRequested: true,
+    };
+  }
+
+  if (emailRequested && pricingMentioned) {
+    return {
+      kind: "pricing_info",
+      reason: "Le prospect a demandé des informations ou des tarifs par email",
+      priority: 4,
+      emailRequested: true,
+    };
+  }
+
+  if (demoCompleted) {
+    return {
+      kind: "post_demo",
+      reason: "Une démo / un rendez-vous semble déjà avoir été réalisé",
+      priority: 3,
+      emailRequested,
+    };
+  }
+
+  if (emailRequested) {
+    return {
+      kind: "recap",
+      reason: "Un récapitulatif par email a été demandé pendant l'appel",
+      priority: 2,
+      emailRequested: true,
+    };
+  }
+
+  return null;
 }
 
 export async function GET() {
@@ -91,6 +159,11 @@ export async function GET() {
         const transcription = nearbyNotes[0]?.body || (callBody.length >= 80 ? callBody : "");
         if (!transcription) return null;
 
+        const callTitle = text(call.subject || call.raw_data?.properties?.hs_call_title || "Appel");
+        const outcome = text(call.outcome || call.raw_data?.properties?.hs_call_disposition || call.raw_data?.properties?.hs_call_status);
+        const classification = classifyEmail(transcription, callTitle, outcome);
+        if (!classification) return null;
+
         const company = contact.company_id ? companyById.get(String(contact.company_id)) : null;
         const companyName = text(company?.name || company?.raw_data?.properties?.name || props.company);
         return {
@@ -100,16 +173,19 @@ export async function GET() {
           firstName: text(contact.first_name || props.firstname),
           lastName: text(contact.last_name || props.lastname),
           companyName,
-          callTitle: text(call.subject || call.raw_data?.properties?.hs_call_title || "Appel"),
+          callTitle,
           callBody,
           transcription,
-          emailRequested: emailRequestDetected(transcription),
+          emailRequested: classification.emailRequested,
+          recommendedKind: classification.kind,
+          emailReason: classification.reason,
+          automationPriority: classification.priority,
           occurredAt: call.occurred_at || call.raw_data?.properties?.hs_timestamp || null,
-          outcome: text(call.outcome || call.raw_data?.properties?.hs_call_disposition || call.raw_data?.properties?.hs_call_status),
+          outcome,
         };
       })
       .filter(Boolean)
-      .sort((a: any, b: any) => Number(b.emailRequested) - Number(a.emailRequested) || timestamp(b.occurredAt) - timestamp(a.occurredAt))
+      .sort((a: any, b: any) => Number(b.automationPriority || 0) - Number(a.automationPriority || 0) || timestamp(b.occurredAt) - timestamp(a.occurredAt))
       .slice(0, 25);
 
     return NextResponse.json({ candidates }, { headers: { "cache-control": "no-store" } });

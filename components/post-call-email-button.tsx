@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { isPostCallEmailKind, POST_CALL_EMAIL_LABELS, type PostCallEmailKind } from "@/lib/post-call-email-types";
 
 export type PostCallEmailButtonProps = {
   contactId: string;
@@ -18,6 +20,7 @@ export type PostCallEmailButtonProps = {
   callTitle?: string;
   callBody?: string;
   transcription: string;
+  emailKind?: PostCallEmailKind;
   onSent?: () => void;
 };
 
@@ -31,24 +34,28 @@ export function PostCallEmailButton({
   callTitle,
   callBody,
   transcription,
+  emailKind = "recap",
   onSent,
 }: PostCallEmailButtonProps) {
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(email);
+  const [kind, setKind] = useState<PostCallEmailKind>(emailKind);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
   const [needsGoogleAuth, setNeedsGoogleAuth] = useState(false);
 
-  async function generateDraft() {
+  async function generateDraft(kindOverride?: PostCallEmailKind) {
+    const selectedKind = kindOverride || kind;
+    setKind(selectedKind);
     setGenerating(true);
     setNeedsGoogleAuth(false);
     try {
       const response = await fetch("/api/post-call-email/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ firstName, companyName, senderName, callTitle, callBody, transcription }),
+        body: JSON.stringify({ firstName, companyName, senderName, callTitle, callBody, transcription, kind: selectedKind }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Impossible de générer l'email");
@@ -62,9 +69,21 @@ export function PostCallEmailButton({
   }
 
   async function openComposer() {
+    const selectedKind = emailKind || "recap";
     setTo(email);
+    setKind(selectedKind);
+    setSubject("");
+    setBody("");
     setOpen(true);
-    if (!subject || !body) await generateDraft();
+    await generateDraft(selectedKind);
+  }
+
+  function changeKind(value: string) {
+    if (!isPostCallEmailKind(value)) return;
+    setKind(value);
+    setSubject("");
+    setBody("");
+    void generateDraft(value);
   }
 
   function openInGmail() {
@@ -81,14 +100,15 @@ export function PostCallEmailButton({
   async function logSentEmail() {
     try {
       const marker = callId ? `[GANDO_POST_CALL_EMAIL:${callId}]\n` : "";
-      const note = `${marker}Email de récap après appel envoyé à ${to.trim()}\n\nObjet : ${subject.trim()}\n\n${body.trim()}`;
-      await fetch(`/api/contacts/${contactId}`, {
+      const note = `${marker}Email envoyé depuis le Sales Cockpit\nType : ${POST_CALL_EMAIL_LABELS[kind]}\nDestinataire : ${to.trim()}\n\nObjet : ${subject.trim()}\n\n${body.trim()}`;
+      const response = await fetch(`/api/contacts/${contactId}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ type: "note", properties: { hs_note_body: note } }),
       });
+      if (!response.ok) throw new Error("Journalisation HubSpot impossible");
     } catch {
-      // L'envoi de l'email reste prioritaire ; la synchro HubSpot pourra être refaite ensuite.
+      toast.warning("Email envoyé, mais la note HubSpot n'a pas pu être enregistrée automatiquement.");
     }
   }
 
@@ -111,7 +131,7 @@ export function PostCallEmailButton({
         throw new Error(payload.error || "Impossible d'envoyer l'email");
       }
       await logSentEmail();
-      toast.success("Email de récap envoyé et journalisé dans HubSpot.");
+      toast.success(`${POST_CALL_EMAIL_LABELS[kind]} envoyé et journalisé dans HubSpot.`);
       setOpen(false);
       onSent?.();
     } catch (error) {
@@ -130,12 +150,24 @@ export function PostCallEmailButton({
         </button>
 
         <div className="pr-10">
-          <div className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles size={16} /> Suivi après appel</div>
-          <h3 className="mt-1 text-xl font-bold tracking-tight">Email de récap au prospect</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Le brouillon est généré uniquement à partir de la transcription/note disponible. Vous pouvez tout modifier avant l'envoi.</p>
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles size={16} /> Automatisation après appel</div>
+          <h3 className="mt-1 text-xl font-bold tracking-tight">{POST_CALL_EMAIL_LABELS[kind]}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Le type d'email est proposé automatiquement à partir de l'appel. Vous pouvez le corriger avant l'envoi.</p>
         </div>
 
         <div className="mt-5 grid gap-4">
+          <div className="space-y-1.5">
+            <Label>Type d'email</Label>
+            <Select value={kind} onValueChange={changeKind} disabled={generating || sending}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="post_demo">Relance post-démo</SelectItem>
+                <SelectItem value="pricing_info">Informations & tarifs</SelectItem>
+                <SelectItem value="decision_maker_intro">Premier contact gérant</SelectItem>
+                <SelectItem value="recap">Récap après appel</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1.5">
             <Label>Destinataire</Label>
             <Input type="email" value={to} onChange={event => setTo(event.target.value)} placeholder="prospect@entreprise.fr" />
@@ -147,7 +179,7 @@ export function PostCallEmailButton({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-3">
               <Label>Message</Label>
-              <Button type="button" size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs" disabled={generating} onClick={generateDraft}>
+              <Button type="button" size="sm" variant="ghost" className="h-7 gap-1.5 px-2 text-xs" disabled={generating} onClick={() => void generateDraft()}>
                 {generating ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Régénérer
               </Button>
             </div>
@@ -155,7 +187,7 @@ export function PostCallEmailButton({
               value={body}
               onChange={event => setBody(event.target.value)}
               className="min-h-[260px] w-full resize-y rounded-md border border-input bg-card px-3 py-2.5 text-sm leading-6 text-card-foreground outline-none placeholder:text-muted-foreground focus:border-primary/55 focus:ring-2 focus:ring-ring/15"
-              placeholder={generating ? "Génération du récap…" : "Le contenu du récap apparaîtra ici."}
+              placeholder={generating ? "Génération de l'email…" : "Le contenu de l'email apparaîtra ici."}
             />
           </div>
         </div>
@@ -185,7 +217,7 @@ export function PostCallEmailButton({
   return (
     <>
       <Button type="button" size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={openComposer}>
-        <Mail size={13} /> Email de récap
+        <Mail size={13} /> {POST_CALL_EMAIL_LABELS[emailKind]}
       </Button>
       {typeof document !== "undefined" && modal ? createPortal(modal, document.body) : null}
     </>
