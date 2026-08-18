@@ -6,10 +6,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getCompanyProspectionDecision, type CompanyStage } from "@/lib/company-prospection-priority";
 import { formatDate } from "@/lib/utils";
 
+export type { CompanyStage } from "@/lib/company-prospection-priority";
+
 type Company = { id: string; properties: Record<string, string | null | undefined> };
-export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "OPEN_DEAL" | "WON" | "LOST";
 
 type Props = {
   companies: Company[];
@@ -175,6 +177,8 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                 <div className="min-h-[120px] flex-1 space-y-2 overflow-y-auto px-3 pb-3 minari-scrollbar">
                   {cards.map(company => {
                     const p = company.properties;
+                    const stage = deriveCompanyStage(company);
+                    const decision = getCompanyProspectionDecision(company, stage);
                     const contacts = Number(p.qualification_contacts_count || p.num_associated_contacts || 0);
                     const deals = Number(p.qualification_deals_count || p.num_associated_deals || 0);
                     const overdue = Number(p.qualification_overdue_tasks || 0);
@@ -193,8 +197,13 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                         <button onClick={() => onOpenCompany(company.id)} className="flex w-full items-start gap-2.5 text-left">
                           <Avatar className="h-8 w-8 shrink-0 rounded-lg bg-accent"><AvatarFallback className="rounded-lg bg-accent text-primary"><Building2 size={15} /></AvatarFallback></Avatar>
                           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold hover:text-primary">{p.name || "Entreprise sans nom"}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{p.domain || [p.city, p.country].filter(Boolean).join(", ") || "Compte HubSpot"}</span></span>
-                          {score > 0 ? <Badge variant="secondary" className="shrink-0 text-[10px]">Score {score}</Badge> : null}
+                          <span className="flex shrink-0 flex-col items-end gap-1">
+                            <Badge variant={decision.bucket === "ACTIONABLE" ? "secondary" : "outline"} className="text-[9px]">{decision.priorityLabel}</Badge>
+                            {score > 0 ? <Badge variant="outline" className="text-[9px]">Score {score}</Badge> : null}
+                          </span>
                         </button>
+
+                        <div className="mt-2 text-[10px] font-medium text-primary">{decision.reason}</div>
 
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground"><Users size={10} /> {contacts} contact{contacts > 1 ? "s" : ""}</Badge>
@@ -205,8 +214,8 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
 
                         {p.qualification_reason ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{p.qualification_reason}</p> : null}
 
-                        {reminder && deriveCompanyStage(company) !== "WON" && deriveCompanyStage(company) !== "LOST" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"><CalendarClock size={12} /> {deriveCompanyStage(company) === "LATER" ? "Reprise" : "Action"} {formatDate(reminder)}</div> : null}
-                        {deriveCompanyStage(company) === "WON" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={12} /> Client gagné</div> : null}
+                        {reminder && stage !== "WON" && stage !== "LOST" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"><CalendarClock size={12} /> {stage === "LATER" ? "Reprise" : "Action"} {formatDate(reminder)}</div> : null}
+                        {stage === "WON" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={12} /> Client gagné</div> : null}
 
                         <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
                           <span className="truncate">{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "Commercial" : "Non assigné"}</span>
