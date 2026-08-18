@@ -55,8 +55,6 @@ export function PostCallFollowupQueue({ senderName }: { senderName?: string }) {
     return () => window.clearInterval(timer);
   }, [load]);
 
-  if (!loading && !error && candidates.length === 0) return null;
-
   const requestedCount = candidates.filter(candidate => candidate.emailRequested).length;
 
   return (
@@ -65,8 +63,8 @@ export function PostCallFollowupQueue({ senderName }: { senderName?: string }) {
         <div className="mb-2 max-h-[min(68vh,620px)] overflow-hidden rounded-xl border border-border bg-popover shadow-[0_22px_65px_-24px_rgba(15,35,42,0.5)]">
           <div className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-bold"><Sparkles size={15} className="text-primary" /> Suivis après appel</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">Appels terminés avec transcription exploitable</div>
+              <div className="flex items-center gap-2 text-sm font-bold"><Sparkles size={15} className="text-primary" /> Emails après appel</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">Générer un récap à partir des appels transcrits</div>
             </div>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => void load()} disabled={loading} aria-label="Actualiser">
               {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
@@ -76,7 +74,7 @@ export function PostCallFollowupQueue({ senderName }: { senderName?: string }) {
           <div className="max-h-[min(58vh,520px)] overflow-y-auto p-3 minari-scrollbar">
             {error ? <div className="rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
             {!error && loading && candidates.length === 0 ? <div className="grid h-24 place-items-center"><Loader2 className="animate-spin text-primary" /></div> : null}
-            {!error && !loading && candidates.length === 0 ? <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">Aucun appel transcrit à traiter.</div> : null}
+            {!error && !loading && candidates.length === 0 ? <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">Aucun appel transcrit disponible pour le moment. Le bouton restera ici dès qu'une transcription sera prête.</div> : null}
             <div className="space-y-2">
               {candidates.map(candidate => {
                 const fullName = [candidate.firstName, candidate.lastName].filter(Boolean).join(" ") || candidate.email;
@@ -119,10 +117,10 @@ export function PostCallFollowupQueue({ senderName }: { senderName?: string }) {
       <button
         type="button"
         onClick={() => setOpen(value => !value)}
-        className="ml-auto flex min-h-11 items-center gap-2 rounded-full border border-border bg-popover px-4 py-2.5 text-sm font-semibold shadow-[0_12px_36px_-18px_rgba(15,35,42,0.6)] transition hover:bg-accent"
+        className="ml-auto flex min-h-11 items-center gap-2 rounded-full border border-primary/25 bg-popover px-4 py-2.5 text-sm font-semibold shadow-[0_12px_36px_-18px_rgba(15,35,42,0.6)] transition hover:bg-accent"
       >
         {loading ? <Loader2 size={15} className="animate-spin text-primary" /> : <MailCheck size={16} className="text-primary" />}
-        <span>Suivis après appel</span>
+        <span>Emails après appel</span>
         {candidates.length ? <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">{requestedCount || candidates.length}</span> : null}
         {open ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
       </button>
