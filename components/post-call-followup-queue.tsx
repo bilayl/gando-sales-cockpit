@@ -16,6 +16,7 @@ type Candidate = {
   callTitle?: string;
   callBody?: string;
   transcription: string;
+  emailRequested?: boolean;
   occurredAt?: string | null;
   outcome?: string;
 };
@@ -56,6 +57,8 @@ export function PostCallFollowupQueue({ senderName }: { senderName?: string }) {
 
   if (!loading && !error && candidates.length === 0) return null;
 
+  const requestedCount = candidates.filter(candidate => candidate.emailRequested).length;
+
   return (
     <div className="fixed bottom-4 right-4 z-[80] w-[min(390px,calc(100vw-2rem))]">
       {open ? (
@@ -84,13 +87,17 @@ export function PostCallFollowupQueue({ senderName }: { senderName?: string }) {
                         <div className="truncate text-sm font-semibold">{fullName}</div>
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">{candidate.companyName || candidate.email}</div>
                       </div>
-                      {candidate.outcome ? <Badge variant="outline" className="max-w-[130px] shrink-0 truncate text-[10px]">{candidate.outcome}</Badge> : null}
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        {candidate.emailRequested ? <Badge className="text-[10px]">Récap demandé</Badge> : null}
+                        {candidate.outcome ? <Badge variant="outline" className="max-w-[130px] truncate text-[10px]">{candidate.outcome}</Badge> : null}
+                      </div>
                     </div>
                     <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"><PhoneCall size={12} className="text-primary" /> <span className="truncate">{candidate.callTitle || "Appel"}</span>{candidate.occurredAt ? <span>· {formatWhen(candidate.occurredAt)}</span> : null}</div>
                     <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{candidate.transcription}</p>
                     <div className="mt-3 flex justify-end">
                       <PostCallEmailButton
                         contactId={candidate.contactId}
+                        callId={candidate.callId}
                         email={candidate.email}
                         firstName={candidate.firstName}
                         companyName={candidate.companyName}
@@ -98,6 +105,7 @@ export function PostCallFollowupQueue({ senderName }: { senderName?: string }) {
                         callTitle={candidate.callTitle}
                         callBody={candidate.callBody}
                         transcription={candidate.transcription}
+                        onSent={() => void load()}
                       />
                     </div>
                   </div>
@@ -115,7 +123,7 @@ export function PostCallFollowupQueue({ senderName }: { senderName?: string }) {
       >
         {loading ? <Loader2 size={15} className="animate-spin text-primary" /> : <MailCheck size={16} className="text-primary" />}
         <span>Suivis après appel</span>
-        {candidates.length ? <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">{candidates.length}</span> : null}
+        {candidates.length ? <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">{requestedCount || candidates.length}</span> : null}
         {open ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronUp size={14} className="text-muted-foreground" />}
       </button>
     </div>
