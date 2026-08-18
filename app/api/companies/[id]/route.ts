@@ -1,5 +1,22 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { hubspotJson } from "@/lib/hubspot";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+
+const EDITABLE_PROPERTIES = new Set([
+  "name",
+  "domain",
+  "phone",
+  "website",
+  "city",
+  "state",
+  "country",
+  "industry",
+  "description",
+  "hubspot_owner_id",
+  "hs_lead_status",
+  "statut_de_lappel",
+  "date_de_rappel",
+]);
 
 function hubspotRecord(row: any) {
   return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
@@ -8,22 +25,30 @@ function hubspotRecord(row: any) {
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const { data: company, error } = await getSupabaseAdmin().from("companies").select("*").eq("hubspot_id", id).maybeSingle();
+    const supabase = getSupabaseAdmin();
+    const { data: company, error } = await supabase.from("companies").select("*").eq("hubspot_id", id).maybeSingle();
     if (error) throw error;
     if (!company) return NextResponse.json({ error: "Entreprise introuvable dans Supabase. Lancez une synchronisation." }, { status: 404 });
 
-    const [contactsResult, activitiesResult] = await Promise.all([
-      getSupabaseAdmin().from("contacts").select("hubspot_id,raw_data").eq("company_id", company.id),
-      getSupabaseAdmin().from("activities").select("hubspot_id,activity_type,occurred_at,raw_data").eq("company_id", company.id),
+    const [contactsResult, activitiesResult, dealsResult, tasksResult] = await Promise.all([
+      supabase.from("contacts").select("hubspot_id,raw_data").eq("company_id", company.id),
+      supabase.from("activities").select("hubspot_id,activity_type,occurred_at,raw_data").eq("company_id", company.id),
+      supabase.from("deals").select("hubspot_id,raw_data").eq("company_id", company.id),
+      supabase.from("tasks").select("hubspot_id,raw_data").eq("company_id", company.id),
     ]);
     if (contactsResult.error) throw contactsResult.error;
     if (activitiesResult.error) throw activitiesResult.error;
+    if (dealsResult.error) throw dealsResult.error;
+    if (tasksResult.error) throw tasksResult.error;
 
     const contacts = (contactsResult.data ?? []).map(hubspotRecord);
-    const notes = (activitiesResult.data ?? [])
-      .filter(a => a.activity_type === "note")
-      .map(hubspotRecord);
-    const meetings = (activitiesResult.data ?? [])
+    const activities = activitiesResult.data ?? [];
+    const notes = activities.filter(a => a.activity_type === "note").map(hubspotRecord);
+    const calls = activities
+      .filter(a => a.activity_type === "call")
+      .map(hubspotRecord)
+      .sort((a: any, b: any) => new Date(b.properties?.hs_timestamp || 0).getTime() - new Date(a.properties?.hs_timestamp || 0).getTime());
+    const meetings = activities
       .filter(a => a.activity_type === "meeting")
       .map(hubspotRecord)
       .map((meeting: any) => {
@@ -32,13 +57,57 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         return { ...meeting, derived: { startAt, status: outcome } };
       })
       .sort((a: any, b: any) => new Date(b.derived.startAt || 0).getTime() - new Date(a.derived.startAt || 0).getTime());
+    const deals = (dealsResult.data ?? []).map(hubspotRecord);
+    const tasks = (tasksResult.data ?? []).map(hubspotRecord);
     const nextMeeting = [...meetings]
       .filter((meeting: any) => meeting.derived.status === "SCHEDULED" && new Date(meeting.derived.startAt || 0).getTime() >= Date.now())
       .sort((a: any, b: any) => new Date(a.derived.startAt).getTime() - new Date(b.derived.startAt).getTime())[0] || null;
 
-    return NextResponse.json({ company: hubspotRecord(company), contacts, notes, meetings, nextMeeting });
+    return NextResponse.json({ company: hubspotRecord(company), contacts, notes, calls, meetings, deals, tasks, nextMeeting });
   } catch (error) {
     const e = error as Error;
     return NextResponse.json({ error: e.message || "Erreur Supabase", details: e }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const properties = Object.fromEntries(
+      Object.entries(body.properties ?? {}).filter(([key, value]) => EDITABLE_PROPERTIES.has(key) && value !== undefined && value !== null),
+    ) as Record<string, string>;
+
+    if (!Object.keys(properties).length) {
+      return NextResponse.json({ error: "Aucune propriété entreprise modifiable fournie" }, { status: 400 });
+    }
+
+    const updated = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ properties }),
+    });
+
+    const supabase = getSupabaseAdmin();
+    const { data: existing } = await supabase.from("companies").select("*").eq("hubspot_id", id).maybeSingle();
+    if (existing) {
+      const merged = { ...(existing.raw_data?.properties ?? {}), ...(updated.properties ?? properties) };
+      const { error } = await supabase.from("companies").update({
+        raw_data: { ...existing.raw_data, ...updated, properties: merged, updatedAt: new Date().toISOString() },
+        hubspot_updated_at: new Date().toISOString(),
+        name: merged.name || existing.name,
+        domain: merged.domain ?? existing.domain,
+        phone: merged.phone ?? existing.phone,
+        website: merged.website ?? existing.website,
+        city: merged.city ?? existing.city,
+        country: merged.country ?? existing.country,
+        owner_hubspot_id: merged.hubspot_owner_id ?? existing.owner_hubspot_id,
+      }).eq("hubspot_id", id);
+      if (error) console.error("Supabase update company:", error.message);
+    }
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    const e = error as Error & { status?: number };
+    return NextResponse.json({ error: e.message || "Erreur HubSpot", details: e }, { status: e.status || 500 });
   }
 }
