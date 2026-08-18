@@ -12,7 +12,9 @@ type WorkflowAction =
   | "LATER"
   | "OPEN_DEAL"
   | "WON"
-  | "LOST";
+  | "NOT_INTERESTED"
+  | "OUT_OF_SCOPE"
+  | "LOST"; // Legacy alias kept for old clients during rollout.
 
 const HUBSPOT_LEAD_STATUS: Partial<Record<WorkflowAction, string>> = {
   NEW: "NEW",
@@ -22,6 +24,8 @@ const HUBSPOT_LEAD_STATUS: Partial<Record<WorkflowAction, string>> = {
   FOLLOW_UP: "BAD_TIMING",
   LATER: "BAD_TIMING",
   OPEN_DEAL: "OPEN_DEAL",
+  NOT_INTERESTED: "UNQUALIFIED",
+  OUT_OF_SCOPE: "UNQUALIFIED",
   LOST: "UNQUALIFIED",
 };
 
@@ -34,7 +38,9 @@ const PROSPECTION_LABEL: Record<WorkflowAction, string> = {
   LATER: "Ultérieur",
   OPEN_DEAL: "Opportunité",
   WON: "Gagné",
-  LOST: "Perdu",
+  NOT_INTERESTED: "Pas intéressé",
+  OUT_OF_SCOPE: "Hors cible",
+  LOST: "Pas intéressé",
 };
 
 const REFERENCE_CONTACT_PROPERTIES = [
@@ -103,10 +109,17 @@ function contactWorkflowProperties(action: WorkflowAction, reminderAt: Date | nu
         resultat_prospection: "",
         ...clearDates,
       };
+    case "NOT_INTERESTED":
     case "LOST":
       return {
         statut_prospection: "Perdu",
         resultat_prospection: "Pas intéressé",
+        ...clearDates,
+      };
+    case "OUT_OF_SCOPE":
+      return {
+        statut_prospection: "Non qualifié",
+        resultat_prospection: "",
         ...clearDates,
       };
   }
@@ -155,7 +168,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     const body = await request.json();
     const action = String(body.action || "").trim() as WorkflowAction;
-    const allowed: WorkflowAction[] = ["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "FOLLOW_UP", "LATER", "OPEN_DEAL", "WON", "LOST"];
+    const allowed: WorkflowAction[] = ["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "FOLLOW_UP", "LATER", "OPEN_DEAL", "WON", "NOT_INTERESTED", "OUT_OF_SCOPE", "LOST"];
     if (!allowed.includes(action)) return NextResponse.json({ error: "Action de workflow invalide" }, { status: 400 });
 
     const reminderAt = parseReminder(body.reminderAt);
@@ -165,7 +178,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const schema = await ensureCompanyQualificationProperties().catch(() => ({ available: [] as string[], created: [] as string[], unavailable: [] }));
-    const company = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}?properties=name,domain,hubspot_owner_id,hs_lead_status,lifecyclestage,statut_de_lappel,date_de_rappel&associations=contacts`);
+    const company = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}?properties=name,domain,hubspot_owner_id,hs_lead_status,lifecyclestage,statut_de_lappel,date_de_rappel,statut_prospection&associations=contacts`);
     const properties: Record<string, string> = {};
     const leadStatus = HUBSPOT_LEAD_STATUS[action];
     if (leadStatus) properties.hs_lead_status = leadStatus;
@@ -196,8 +209,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         properties.statut_de_lappel = "interesse";
         properties.date_de_rappel = "";
         break;
+      case "NOT_INTERESTED":
       case "LOST":
         properties.statut_de_lappel = "pas_interesse";
+        properties.date_de_rappel = "";
+        break;
+      case "OUT_OF_SCOPE":
+        properties.statut_de_lappel = "hors_cible";
         properties.date_de_rappel = "";
         break;
     }
