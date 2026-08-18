@@ -15,6 +15,7 @@ const HUBSPOT_SCOPES = [
   "crm.objects.contacts.write",
   "crm.objects.companies.read",
   "crm.objects.companies.write",
+  "crm.schemas.companies.write",
   "crm.objects.deals.read",
   "crm.objects.deals.write",
   "crm.objects.owners.read",
