@@ -12,6 +12,12 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  PROSPECTION_SEGMENT_PREFS_EVENT,
+  orderVisibleCompanySegments,
+  readProspectionSegmentPreferences,
+  type ProspectionSegmentPreferences,
+} from "@/lib/prospection-segment-preferences";
 import { formatDate } from "@/lib/utils";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
@@ -32,6 +38,7 @@ function callLabel(value?: string | null) {
 
 export function CompanyFirstProspectionView() {
   const [lists, setLists] = useState<List[]>([]);
+  const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
   const [owners, setOwners] = useState<Owner[]>([]);
   const [segmentId, setSegmentId] = useState("");
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -47,15 +54,36 @@ export function CompanyFirstProspectionView() {
   const [sessionOpen, setSessionOpen] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetch("/api/segments").then(r => r.json()), fetch("/api/owners").then(r => r.json())])
+    const initialPreferences = readProspectionSegmentPreferences();
+    setSegmentPreferences(initialPreferences);
+    Promise.all([fetch("/api/segments", { cache: "no-store" }).then(r => r.json()), fetch("/api/owners").then(r => r.json())])
       .then(([segments, ownerData]) => {
         const companyLists = ((segments.lists || []) as List[]).filter(item => item.objectTypeId === "0-2");
+        const visible = orderVisibleCompanySegments(companyLists, initialPreferences);
         setLists(companyLists);
         setOwners(ownerData.results || []);
-        setSegmentId(companyLists[0]?.listId || "");
+        setSegmentId(visible[0]?.listId || "");
       })
       .catch(error => setError(error instanceof Error ? error.message : "Impossible de charger le Cockpit"));
+
+    const refreshPreferences = () => setSegmentPreferences(readProspectionSegmentPreferences());
+    window.addEventListener(PROSPECTION_SEGMENT_PREFS_EVENT, refreshPreferences);
+    window.addEventListener("storage", refreshPreferences);
+    return () => {
+      window.removeEventListener(PROSPECTION_SEGMENT_PREFS_EVENT, refreshPreferences);
+      window.removeEventListener("storage", refreshPreferences);
+    };
   }, []);
+
+  const visibleLists = useMemo(
+    () => orderVisibleCompanySegments(lists, segmentPreferences),
+    [lists, segmentPreferences],
+  );
+
+  useEffect(() => {
+    if (!segmentId) return;
+    if (!visibleLists.some(item => item.listId === segmentId)) setSegmentId(visibleLists[0]?.listId || "");
+  }, [visibleLists, segmentId]);
 
   const ownerNames = useMemo(() => Object.fromEntries(owners.map(item => [
     item.id,
@@ -100,7 +128,7 @@ export function CompanyFirstProspectionView() {
     [filtered],
   );
 
-  const currentList = lists.find(item => item.listId === segmentId);
+  const currentList = visibleLists.find(item => item.listId === segmentId);
   const reminders = filtered.filter(company => deriveCompanyStage(company) === "FOLLOW_UP").length;
   const later = filtered.filter(company => deriveCompanyStage(company) === "LATER").length;
   const opportunities = filtered.filter(company => deriveCompanyStage(company) === "OPEN_DEAL").length;
@@ -144,7 +172,7 @@ export function CompanyFirstProspectionView() {
         <Button asChild variant="ghost" size="sm" className="mb-2 h-9 gap-2 px-3 font-semibold text-primary hover:bg-accent"><a href="/segments"><ListFilter size={15} /> Gérer les segments</a></Button>
         <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto">
           <button onClick={() => setSegmentId("")} className={`relative flex h-11 shrink-0 items-center rounded-t-xl border border-b-0 px-4 text-sm ${!segmentId ? "border-border bg-background font-semibold" : "border-transparent text-muted-foreground hover:bg-muted/60"}`}>Toutes les entreprises</button>
-          {lists.slice(0, 10).map(list => <button key={list.listId} onClick={() => setSegmentId(list.listId)} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-t-xl border border-b-0 px-4 text-sm ${segmentId === list.listId ? "border-border bg-background font-semibold text-foreground before:absolute before:inset-x-3 before:top-0 before:h-[2px] before:bg-primary" : "border-transparent text-muted-foreground hover:bg-muted/60"}`}><span className="max-w-[150px] truncate">{list.name}</span>{list.size !== undefined ? <Badge variant="secondary" className="text-[10px]">{list.size}</Badge> : null}</button>)}
+          {visibleLists.map(list => <button key={list.listId} onClick={() => setSegmentId(list.listId)} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-t-xl border border-b-0 px-4 text-sm ${segmentId === list.listId ? "border-border bg-background font-semibold text-foreground before:absolute before:inset-x-3 before:top-0 before:h-[2px] before:bg-primary" : "border-transparent text-muted-foreground hover:bg-muted/60"}`}><span className="max-w-[150px] truncate">{list.name}</span>{list.size !== undefined ? <Badge variant="secondary" className="text-[10px]">{list.size}</Badge> : null}</button>)}
         </div>
       </div>
 
