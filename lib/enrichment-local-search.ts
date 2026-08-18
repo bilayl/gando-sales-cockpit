@@ -1,14 +1,18 @@
-import { getVercelOidcToken } from "@vercel/oidc";
 import type { SourcingProspect } from "@/lib/enrichment-dedup";
 
-const AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/messages";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 function extractText(payload: any) {
-  return (payload?.content || [])
-    .filter((item: any) => item?.type === "text" && typeof item.text === "string")
-    .map((item: any) => item.text)
-    .join("\n")
-    .trim();
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .filter((item: any) => item?.type === "text" && typeof item.text === "string")
+      .map((item: any) => item.text)
+      .join("\n")
+      .trim();
+  }
+  return "";
 }
 
 function parseJson(text: string) {
@@ -24,8 +28,8 @@ export async function searchRentalCompaniesLocally(input: {
   sources?: string[];
   limit?: number;
 }) {
-  const token = process.env.AI_GATEWAY_API_KEY || await getVercelOidcToken();
-  if (!token) throw new Error("Vercel AI Gateway identity missing");
+  const token = process.env.OPENROUTER_API_KEY;
+  if (!token) throw new Error("OPENROUTER_API_KEY manquante côté serveur");
 
   const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 50);
   const target = Math.min(Math.max(limit * 2, 20), 60);
@@ -44,16 +48,24 @@ Effectue de vraies recherches web.
 Règles : uniquement professionnels/entreprises ; jamais de particuliers pair-à-pair ; chaque prospect doit avoir au moins une URL publique vérifiable ; n'invente jamais nom, téléphone, domaine, email ou localisation ; confidence entre 0 et 1 ; gandoScore entre 0 et 100 ; sourceTypes parmi leboncoin, facebook, instagram, google, directory, official_website, other.
 Réponds UNIQUEMENT avec un JSON valide de forme {"prospects":[{"companyName":"...","city":"...","territory":"...","country":"France","website":"...","domain":"...","phone":"...","publicBusinessEmail":"...","sourceUrls":["https://..."],"sourceTypes":["google"],"evidence":"...","confidence":0.9,"gandoScore":85,"qualificationReason":"..."}]}.`;
 
-  const response = await fetch(AI_GATEWAY_URL, {
+  const response = await fetch(OPENROUTER_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.ENRICHMENT_MODEL || "anthropic/claude-opus-5",
+      model: process.env.OPENROUTER_MODEL || process.env.ENRICHMENT_MODEL || "openrouter/auto",
       max_tokens: 7000,
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      tools: [
+        {
+          type: "openrouter:web_search",
+          parameters: {
+            max_results: 5,
+            max_total_results: 15,
+          },
+        },
+      ],
       messages: [{ role: "user", content: prompt }],
     }),
     cache: "no-store",
@@ -62,10 +74,13 @@ Réponds UNIQUEMENT avec un JSON valide de forme {"prospects":[{"companyName":".
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(`AI Gateway ${response.status}: ${payload?.error?.message || payload?.error || response.statusText}`);
+    throw new Error(`OpenRouter ${response.status}: ${payload?.error?.message || payload?.error || response.statusText}`);
   }
 
-  const parsed = parseJson(extractText(payload));
+  const text = extractText(payload);
+  if (!text) throw new Error("OpenRouter n'a retourné aucun contenu exploitable");
+
+  const parsed = parseJson(text);
   const prospects = (Array.isArray(parsed?.prospects) ? parsed.prospects : []) as SourcingProspect[];
   return {
     searchId: crypto.randomUUID(),
