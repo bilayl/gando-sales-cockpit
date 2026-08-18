@@ -16,6 +16,7 @@ Le Sales Cockpit prospecte des **entreprises**. Les contacts sont les personnes 
 6. La fiche entreprise doit donner accès aux contacts, rendez-vous, notes, deals et tâches associés.
 7. La vue Contacts reste disponible comme vue secondaire, mais ne pilote plus la prospection par défaut.
 8. Le sourcing crée d'abord des **Companies**. Il ne doit pas inventer ou créer automatiquement un Contact ou un Deal tant qu'une personne ou une opportunité réelle n'a pas été identifiée.
+9. Une entreprise qui refuse l'offre est **Pas intéressé**. **Hors cible** est réservé aux comptes réellement non qualifiés. Un contact avec un numéro invalide ne suffit pas à sortir toute l'entreprise de la prospection.
 
 ## Mapping HubSpot entreprise
 
@@ -37,8 +38,11 @@ Le Sales Cockpit prospecte des **entreprises**. Les contacts sont les personnes 
 | À relancer | `BAD_TIMING` |
 | Ultérieur | `BAD_TIMING` + date future + statut appel long terme |
 | Opportunité | `OPEN_DEAL` |
-| Perdu | `UNQUALIFIED` |
 | Gagné | `lifecyclestage=customer` |
+| Pas intéressé | `UNQUALIFIED` + `statut_de_lappel=pas_interesse` |
+| Hors cible | `UNQUALIFIED` + `statut_de_lappel=hors_cible` |
+
+L'ancienne valeur entreprise `Perdu` est conservée uniquement comme valeur HubSpot historique cachée pendant la migration. Elle ne doit plus être utilisée pour les nouvelles actions du Cockpit.
 
 ## Résultats d'appel
 
@@ -47,7 +51,9 @@ Le Sales Cockpit prospecte des **entreprises**. Les contacts sont les personnes 
 - `À une date ultérieure` → entreprise `BAD_TIMING / Ultérieur`, contact `À recycler` + `date_recyclage` pour WF04.
 - `Intéressé` → entreprise `CONNECTED`, contact `Conversation`.
 - `RDV pris` → entreprise `OPEN_DEAL / Opportunité`, contact `RDV booké + RDV obtenu`.
-- `Pas intéressé`, `Hors cible`, `Numéro invalide` → sortie de la file active selon le niveau de qualification correspondant.
+- `Pas intéressé` → entreprise `UNQUALIFIED / Pas intéressé`; le contact peut rester `Perdu + Pas intéressé` pour les workflows Contact existants.
+- `Hors cible` → entreprise `UNQUALIFIED / Hors cible`, contact `Non qualifié`.
+- `Numéro invalide` → le contact devient `Non qualifié`, mais l'entreprise revient/reste `OPEN / À contacter` afin de chercher ou associer un autre contact.
 
 ## Sourcing
 
