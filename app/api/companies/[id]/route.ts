@@ -26,9 +26,11 @@ const EDITABLE_PROPERTIES = new Set([
   "description",
   "hubspot_owner_id",
   "hs_lead_status",
+  "lifecyclestage",
   "statut_de_lappel",
   "date_de_rappel",
   "zip",
+  "hs_country_code",
   "taille_flotte",
   "solution_paiement_reservation",
 ]);
@@ -60,12 +62,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const cachedCompany = hubspotRecord(company);
     const companyRecord = {
       ...cachedCompany,
-      properties: { ...cachedCompany.properties, ...(freshCompany.properties ?? {}) },
+      properties: { ...cachedCompany.properties, ...(freshCompany.properties ?? {}), __hubspot_id: String(id) },
     };
 
     const cachedContacts = (contactsResult.data ?? []).map(hubspotRecord);
     const contactIds = cachedContacts.map(contact => contact.id);
-    let contacts = cachedContacts;
+    let contacts = cachedContacts.map(contact => ({
+      ...contact,
+      properties: { ...contact.properties, __hubspot_id: contact.id },
+    }));
     if (contactIds.length) {
       const freshContacts = await hubspotJson(`/crm/objects/2026-03/contacts/batch/read`, {
         method: "POST",
@@ -74,7 +79,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       const freshById = new Map((freshContacts.results ?? []).map((record: any) => [String(record.id), record.properties ?? {}]));
       contacts = cachedContacts.map(contact => ({
         ...contact,
-        properties: { ...contact.properties, ...(freshById.get(contact.id) ?? {}) },
+        properties: { ...contact.properties, ...(freshById.get(contact.id) ?? {}), __hubspot_id: contact.id },
       }));
     }
 
