@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
+const COMPANY_DETAIL_PROPERTIES = [
+  "name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id","num_associated_contacts",
+  "num_associated_deals","hs_last_sales_activity_timestamp","hs_object_source_label","createdate","hs_lead_status","lifecyclestage",
+  "statut_de_lappel","date_de_rappel","zip","hs_country_code","taille_flotte","solution_paiement_reservation",
+];
+
+const CONTACT_PROFILE_PROPERTIES = [
+  "firstname","lastname","email","phone","mobilephone","jobtitle","company","statut_prospection","statut_de_lappel",
+  "ce_quil_apprecie_chez_gando","objections__retours","zip","campagne_dacquisition","taille_de_flo","hs_country_region_code",
+  "suite","solution_paiement_reservation","hs_last_sales_activity_timestamp",
+];
+
 const EDITABLE_PROPERTIES = new Set([
   "name",
   "domain",
@@ -16,6 +28,9 @@ const EDITABLE_PROPERTIES = new Set([
   "hs_lead_status",
   "statut_de_lappel",
   "date_de_rappel",
+  "zip",
+  "taille_flotte",
+  "solution_paiement_reservation",
 ]);
 
 function hubspotRecord(row: any) {
@@ -30,18 +45,39 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (error) throw error;
     if (!company) return NextResponse.json({ error: "Entreprise introuvable dans Supabase. Lancez une synchronisation." }, { status: 404 });
 
-    const [contactsResult, activitiesResult, dealsResult, tasksResult] = await Promise.all([
+    const [contactsResult, activitiesResult, dealsResult, tasksResult, freshCompany] = await Promise.all([
       supabase.from("contacts").select("hubspot_id,raw_data").eq("company_id", company.id),
       supabase.from("activities").select("hubspot_id,activity_type,occurred_at,raw_data").eq("company_id", company.id),
       supabase.from("deals").select("hubspot_id,raw_data").eq("company_id", company.id),
       supabase.from("tasks").select("hubspot_id,raw_data").eq("company_id", company.id),
+      hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}?properties=${encodeURIComponent(COMPANY_DETAIL_PROPERTIES.join(","))}`),
     ]);
     if (contactsResult.error) throw contactsResult.error;
     if (activitiesResult.error) throw activitiesResult.error;
     if (dealsResult.error) throw dealsResult.error;
     if (tasksResult.error) throw tasksResult.error;
 
-    const contacts = (contactsResult.data ?? []).map(hubspotRecord);
+    const cachedCompany = hubspotRecord(company);
+    const companyRecord = {
+      ...cachedCompany,
+      properties: { ...cachedCompany.properties, ...(freshCompany.properties ?? {}) },
+    };
+
+    const cachedContacts = (contactsResult.data ?? []).map(hubspotRecord);
+    const contactIds = cachedContacts.map(contact => contact.id);
+    let contacts = cachedContacts;
+    if (contactIds.length) {
+      const freshContacts = await hubspotJson(`/crm/objects/2026-03/contacts/batch/read`, {
+        method: "POST",
+        body: JSON.stringify({ properties: CONTACT_PROFILE_PROPERTIES, inputs: contactIds.map(contactId => ({ id: contactId })) }),
+      });
+      const freshById = new Map((freshContacts.results ?? []).map((record: any) => [String(record.id), record.properties ?? {}]));
+      contacts = cachedContacts.map(contact => ({
+        ...contact,
+        properties: { ...contact.properties, ...(freshById.get(contact.id) ?? {}) },
+      }));
+    }
+
     const activities = activitiesResult.data ?? [];
     const notes = activities.filter(a => a.activity_type === "note").map(hubspotRecord);
     const calls = activities
@@ -63,7 +99,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       .filter((meeting: any) => meeting.derived.status === "SCHEDULED" && new Date(meeting.derived.startAt || 0).getTime() >= Date.now())
       .sort((a: any, b: any) => new Date(a.derived.startAt).getTime() - new Date(b.derived.startAt).getTime())[0] || null;
 
-    return NextResponse.json({ company: hubspotRecord(company), contacts, notes, calls, meetings, deals, tasks, nextMeeting });
+    return NextResponse.json({ company: companyRecord, contacts, notes, calls, meetings, deals, tasks, nextMeeting });
   } catch (error) {
     const e = error as Error;
     return NextResponse.json({ error: e.message || "Erreur Supabase", details: e }, { status: 500 });
@@ -99,6 +135,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         phone: merged.phone ?? existing.phone,
         website: merged.website ?? existing.website,
         city: merged.city ?? existing.city,
+        postal_code: merged.zip ?? existing.postal_code,
         country: merged.country ?? existing.country,
         owner_hubspot_id: merged.hubspot_owner_id ?? existing.owner_hubspot_id,
       }).eq("hubspot_id", id);
