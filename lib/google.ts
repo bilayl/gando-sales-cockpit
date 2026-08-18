@@ -4,10 +4,12 @@ import { cookies } from "next/headers";
 const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR = "https://www.googleapis.com/calendar/v3";
+const GOOGLE_GMAIL = "https://gmail.googleapis.com/gmail/v1";
 
-const CALENDAR_SCOPE = [
+const GOOGLE_SCOPE = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  "https://www.googleapis.com/auth/gmail.send",
 ].join(" ");
 const TOKEN_COOKIE = "gando_google_token";
 const STATE_COOKIE = "gando_google_state";
@@ -53,7 +55,7 @@ export function buildGoogleAuthUrl(state: string) {
     client_id: requireEnv("GOOGLE_CLIENT_ID"),
     redirect_uri: requireEnv("GOOGLE_REDIRECT_URI"),
     response_type: "code",
-    scope: CALENDAR_SCOPE,
+    scope: GOOGLE_SCOPE,
     access_type: "offline",
     prompt: "consent",
     state,
@@ -125,22 +127,59 @@ async function refreshGoogleToken(token: GoogleToken): Promise<GoogleToken> {
   return updated;
 }
 
-export async function googleFetch(path: string) {
+async function googleAuthorizedFetch(url: string, init: RequestInit = {}) {
   let token = await getStoredToken();
   if (!token) throw new Error("GOOGLE_UNAUTHORIZED");
   if (token.expires_at < Date.now() + 60_000) token = await refreshGoogleToken(token);
-  let response = await fetch(`${GOOGLE_CALENDAR}${path}`, {
-    headers: { Authorization: `Bearer ${token.access_token}` },
-    cache: "no-store",
-  });
+
+  const requestWithToken = (accessToken: string) => {
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${accessToken}`);
+    return fetch(url, { ...init, headers, cache: "no-store" });
+  };
+
+  let response = await requestWithToken(token.access_token);
   if (response.status === 401 && token.refresh_token) {
     token = await refreshGoogleToken(token);
-    response = await fetch(`${GOOGLE_CALENDAR}${path}`, {
-      headers: { Authorization: `Bearer ${token.access_token}` },
-      cache: "no-store",
-    });
+    response = await requestWithToken(token.access_token);
   }
   return response;
+}
+
+export async function googleFetch(path: string) {
+  return googleAuthorizedFetch(`${GOOGLE_CALENDAR}${path}`);
+}
+
+export async function sendGoogleEmail(input: { to: string; subject: string; body: string }) {
+  const to = input.to.trim();
+  const subject = input.subject.replace(/[\r\n]+/g, " ").trim();
+  const body = input.body.replace(/\r\n/g, "\n").trim();
+  if (!to || !subject || !body) throw new Error("EMAIL_INVALID");
+
+  const encodedSubject = Buffer.from(subject, "utf8").toString("base64");
+  const message = [
+    `To: ${to}`,
+    `Subject: =?UTF-8?B?${encodedSubject}?=`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    body,
+  ].join("\r\n");
+
+  const response = await googleAuthorizedFetch(`${GOOGLE_GMAIL}/users/me/messages/send`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ raw: Buffer.from(message, "utf8").toString("base64url") }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const messageText = data?.error?.message || `Gmail ${response.status}`;
+    const error = new Error(messageText) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+  return data;
 }
 
 export type GoogleCalendarEvent = {
