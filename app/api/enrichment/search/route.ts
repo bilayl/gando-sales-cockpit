@@ -3,18 +3,20 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+const DEFAULT_ENRICHMENT_BACKEND_URL = "https://gando-enrichment-backend-lenrigandoyt-9842s-projects.vercel.app";
+
 function config() {
-  const baseUrl = (process.env.ENRICHMENT_BACKEND_URL || process.env.GANDO_ENRICHMENT_BACKEND_URL || "").replace(/\/$/, "");
-  const apiKey = process.env.ENRICHMENT_INTERNAL_API_KEY || process.env.GANDO_ENRICHMENT_API_KEY || "";
+  const baseUrl = (process.env.ENRICHMENT_BACKEND_URL || process.env.GANDO_ENRICHMENT_BACKEND_URL || DEFAULT_ENRICHMENT_BACKEND_URL).replace(/\/$/, "");
+  const apiKey = process.env.ENRICHMENT_INTERNAL_API_KEY || process.env.GANDO_ENRICHMENT_API_KEY || process.env.INTERNAL_API_KEY || "";
   return { baseUrl, apiKey };
 }
 
 export async function POST(request: NextRequest) {
   try {
     const { baseUrl, apiKey } = config();
-    if (!baseUrl || !apiKey) {
+    if (!apiKey) {
       return NextResponse.json({
-        error: "Le backend de sourcing n'est pas configuré sur le Sales Cockpit.",
+        error: "La clé interne du backend de sourcing n'est pas configurée sur le Sales Cockpit.",
         code: "ENRICHMENT_NOT_CONFIGURED",
       }, { status: 503 });
     }
