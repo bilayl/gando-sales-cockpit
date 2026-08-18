@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
-export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "OPEN_DEAL" | "WON" | "LOST";
+export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "OPEN_DEAL" | "WON" | "NOT_INTERESTED" | "OUT_OF_SCOPE";
 
 type Props = {
   companies: Company[];
@@ -29,7 +29,8 @@ export const COMPANY_PIPELINE: Array<{ value: CompanyStage; label: string; tone?
   { value: "LATER", label: "Ultérieur", tone: "later" },
   { value: "OPEN_DEAL", label: "Opportunité" },
   { value: "WON", label: "Gagné", tone: "won" },
-  { value: "LOST", label: "Perdu", tone: "lost" },
+  { value: "NOT_INTERESTED", label: "Pas intéressé", tone: "lost" },
+  { value: "OUT_OF_SCOPE", label: "Hors cible", tone: "lost" },
 ];
 
 function dateMs(value?: string | null) {
@@ -40,8 +41,22 @@ function dateMs(value?: string | null) {
 
 export function deriveCompanyStage(company: Company, now = Date.now()): CompanyStage {
   const p = company.properties;
+  const callStatus = p.statut_de_lappel || "";
+  const prospectionStatus = p.statut_prospection || "";
+
   if ((p.lifecyclestage || "").toLowerCase() === "customer") return "WON";
-  if (p.hs_lead_status === "UNQUALIFIED") return "LOST";
+  if (prospectionStatus === "Pas intéressé" || callStatus === "pas_interesse") return "NOT_INTERESTED";
+  if (prospectionStatus === "Hors cible" || callStatus === "hors_cible") return "OUT_OF_SCOPE";
+
+  // Un numéro invalide invalide le contact appelé, pas l'entreprise entière :
+  // le compte reste à contacter pour chercher/associer une autre personne.
+  if (callStatus === "numero_invalide" && p.hs_lead_status === "UNQUALIFIED") return "OPEN";
+
+  // Backward compatibility for records still carrying the old hidden "Perdu" value.
+  if (p.hs_lead_status === "UNQUALIFIED") {
+    if (prospectionStatus === "Perdu" && callStatus === "pas_interesse") return "NOT_INTERESTED";
+    return "OUT_OF_SCOPE";
+  }
   if (p.hs_lead_status === "BAD_TIMING") {
     const reminder = dateMs(p.date_de_rappel || p.notes_next_activity_date);
     if (p.statut_de_lappel === "a_une_date_ulterieure" && Number.isFinite(reminder) && reminder > now) return "LATER";
@@ -153,7 +168,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                 className={`flex h-full max-h-[calc(100vh-285px)] w-72 shrink-0 flex-col rounded-xl border ${isOver ? "border-primary bg-accent/50" : terminal ? "border-border bg-muted/15" : "border-border bg-muted/30"}`}
               >
                 <header className="flex items-center gap-2 px-3 py-3">
-                  {column.value === "WON" ? <Trophy size={14} className="text-emerald-500" /> : column.value === "LOST" ? <XCircle size={14} className="text-rose-500" /> : column.value === "LATER" ? <Clock3 size={14} className="text-amber-500" /> : <span className="h-2 w-2 rounded-full bg-primary" />}
+                  {column.value === "WON" ? <Trophy size={14} className="text-emerald-500" /> : column.tone === "lost" ? <XCircle size={14} className="text-rose-500" /> : column.value === "LATER" ? <Clock3 size={14} className="text-amber-500" /> : <span className="h-2 w-2 rounded-full bg-primary" />}
                   <h3 className="text-sm font-semibold">{column.label}</h3>
                   <Badge variant="secondary" className="ml-auto text-[10px]">{cards.length}</Badge>
                 </header>
@@ -164,6 +179,8 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                     const contacts = Number(p.num_associated_contacts || 0);
                     const deals = Number(p.num_associated_deals || 0);
                     const reminder = p.date_de_rappel || p.notes_next_activity_date;
+                    const stage = deriveCompanyStage(company);
+                    const isTerminal = stage === "WON" || stage === "NOT_INTERESTED" || stage === "OUT_OF_SCOPE";
                     return (
                       <article
                         key={company.id}
@@ -183,8 +200,8 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                           {p.statut_de_lappel ? <Badge variant="outline" className="text-[10px]">{callLabel(p.statut_de_lappel)}</Badge> : null}
                         </div>
 
-                        {reminder && deriveCompanyStage(company) !== "WON" && deriveCompanyStage(company) !== "LOST" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"><CalendarClock size={12} /> {deriveCompanyStage(company) === "LATER" ? "Reprise" : "Rappel"} {formatDate(reminder)}</div> : null}
-                        {deriveCompanyStage(company) === "WON" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={12} /> Client gagné</div> : null}
+                        {reminder && !isTerminal ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"><CalendarClock size={12} /> {stage === "LATER" ? "Reprise" : "Rappel"} {formatDate(reminder)}</div> : null}
+                        {stage === "WON" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={12} /> Client gagné</div> : null}
 
                         <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
                           <span className="truncate">{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "Commercial" : "Non assigné"}</span>
