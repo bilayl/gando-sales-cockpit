@@ -4,12 +4,41 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const COMPANY_PROSPECTION_PROPERTIES = [
   "name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id",
-  "num_associated_contacts","num_associated_deals","hs_lead_status","lifecyclestage","statut_de_lappel","date_de_rappel",
+  "num_associated_contacts","num_associated_deals","hs_lead_status","lifecyclestage","statut_de_lappel","date_de_rappel","statut_prospection",
   "notes_next_activity_date","notes_last_updated","hs_last_sales_activity_timestamp","hs_object_source_label","createdate",
 ];
 
+const QUALIFICATION_SELECT = [
+  "qualification_status","qualification_score","qualification_reason","qualification_last_activity_at","qualification_next_action_at",
+  "qualification_contacts_count","qualification_open_tasks","qualification_overdue_tasks","qualification_deals_count",
+  "qualification_last_call_status","qualification_source","prospecting_status",
+].join(",");
+
+function qualificationProperties(row: any) {
+  const value = (input: unknown) => input === undefined || input === null ? undefined : String(input);
+  return {
+    qualification_status: value(row.qualification_status || row.prospecting_status),
+    qualification_score: value(row.qualification_score),
+    qualification_reason: value(row.qualification_reason),
+    qualification_last_activity_at: value(row.qualification_last_activity_at),
+    qualification_next_action_at: value(row.qualification_next_action_at),
+    qualification_contacts_count: value(row.qualification_contacts_count),
+    qualification_open_tasks: value(row.qualification_open_tasks),
+    qualification_overdue_tasks: value(row.qualification_overdue_tasks),
+    qualification_deals_count: value(row.qualification_deals_count),
+    qualification_last_call_status: value(row.qualification_last_call_status),
+    qualification_source: value(row.qualification_source),
+  };
+}
+
 function toHubSpotRecord(row: any) {
-  return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
+  return {
+    id: String(row.hubspot_id),
+    properties: {
+      ...(row.raw_data?.properties ?? {}),
+      ...qualificationProperties(row),
+    },
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -32,7 +61,7 @@ export async function GET(request: NextRequest) {
     const startMs = start && !Number.isNaN(Date.parse(start)) ? String(Date.parse(start)) : start;
     const endMs = end && !Number.isNaN(Date.parse(end)) ? String(Date.parse(end)) : end;
 
-    let builder = getSupabaseAdmin().from("companies").select("hubspot_id,raw_data", { count: "exact" });
+    let builder = getSupabaseAdmin().from("companies").select(`hubspot_id,raw_data,${QUALIFICATION_SELECT}`, { count: "exact" });
     if (owner) builder = builder.eq("owner_hubspot_id", owner);
     if (query) builder = builder.or(`name.ilike.%${query}%,domain.ilike.%${query}%,city.ilike.%${query}%`);
     if (startMs) builder = builder.filter("raw_data->properties->>hs_last_sales_activity_timestamp", "gte", startMs);
@@ -51,7 +80,10 @@ export async function GET(request: NextRequest) {
         body: JSON.stringify({ properties: COMPANY_PROSPECTION_PROPERTIES, inputs: ids.map(id => ({ id })) }),
       });
       const freshById = new Map((fresh.results ?? []).map((record: any) => [String(record.id), record.properties ?? {}]));
-      results = cached.map(record => ({ ...record, properties: { ...record.properties, ...(freshById.get(record.id) ?? {}) } }));
+      results = cached.map(record => ({
+        ...record,
+        properties: { ...record.properties, ...(freshById.get(record.id) ?? {}), qualification_status: record.properties.qualification_status },
+      }));
     }
 
     const total = count ?? results.length;
