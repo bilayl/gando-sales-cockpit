@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, ListFilter, Loader2, RefreshCw, Search, Table2, Users, SquareKanban } from "lucide-react";
+import { Building2, ListFilter, Loader2, Play, RefreshCw, Search, Table2, Users, SquareKanban } from "lucide-react";
 import { CompanyDrawer } from "@/components/company-drawer";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
+import { ProspectionSession } from "@/components/prospection-session";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export function CompanyFirstProspectionView() {
   const [stageFilter, setStageFilter] = useState<CompanyStage | "">("");
   const [view, setView] = useState<ViewMode>("board");
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [sessionOpen, setSessionOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([fetch("/api/segments").then(r => r.json()), fetch("/api/owners").then(r => r.json())])
@@ -92,6 +94,11 @@ export function CompanyFirstProspectionView() {
         && (!stageFilter || deriveCompanyStage(company) === stageFilter);
     });
   }, [companies, query, owner, stageFilter]);
+
+  const actionableCompanies = useMemo(
+    () => filtered.filter(company => !["WON", "LOST"].includes(deriveCompanyStage(company))),
+    [filtered],
+  );
 
   const currentList = lists.find(item => item.listId === segmentId);
   const reminders = filtered.filter(company => deriveCompanyStage(company) === "FOLLOW_UP").length;
@@ -148,7 +155,13 @@ export function CompanyFirstProspectionView() {
               <h1 className="font-display text-lg font-bold tracking-tight">{currentList?.name || "Prospection par entreprise"}</h1>
               <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-foreground">{total}</strong> comptes · {reminders} à relancer · {later} ultérieurs · {opportunities} opportunités · {won} gagnés</p>
             </div>
-            <div className="rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2 text-xs text-muted-foreground"><strong className="text-primary">Workflow actif</strong> · les comptes futurs ressortent automatiquement à échéance</div>
+            <div className="flex items-center gap-2">
+              <div className="hidden rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2 text-xs text-muted-foreground xl:block"><strong className="text-primary">Workflow actif</strong> · les comptes futurs ressortent automatiquement à échéance</div>
+              <Button disabled={loading || !actionableCompanies.length} onClick={() => setSessionOpen(true)} className="gap-2">
+                <Play size={15} className="fill-current" /> Démarrer la session
+                {actionableCompanies.length ? <Badge variant="secondary" className="ml-1 bg-background/80 text-foreground">{actionableCompanies.length}</Badge> : null}
+              </Button>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-y border-border bg-muted/30 px-4 py-2.5">
@@ -160,6 +173,7 @@ export function CompanyFirstProspectionView() {
             <Select value={stageFilter || "all"} onValueChange={value => setStageFilter(value === "all" ? "" : value as CompanyStage)}><SelectTrigger className="h-9 w-[165px]"><SelectValue placeholder="Statut compte" /></SelectTrigger><SelectContent><SelectItem value="all">Tous les statuts</SelectItem>{COMPANY_PIPELINE.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select>
             <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, ville…" className="h-9 w-52 pl-9" /></div>
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>{syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}</Button>
+            <span className="ml-auto text-[11px] text-muted-foreground">La session utilise exactement ces filtres.</span>
           </div>
 
           {error ? <div className="mx-4 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
@@ -170,6 +184,7 @@ export function CompanyFirstProspectionView() {
         </Card>
       </div>
 
+      <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={filtered} onOpenCompany={setDrawerId} />
       <CompanyDrawer companyId={drawerId} open={Boolean(drawerId)} onOpenChange={open => !open && setDrawerId(null)} />
     </div>
   );
