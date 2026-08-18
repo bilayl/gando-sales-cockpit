@@ -50,6 +50,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const leadStatus = HUBSPOT_LEAD_STATUS[action];
     if (leadStatus) properties.hs_lead_status = leadStatus;
 
+    // A company marked Customer is terminal in the Cockpit. If it is intentionally
+    // reactivated by dragging it back into an active stage, clear that lifecycle flag
+    // so the workflow can start again without creating a duplicate company.
+    if (action !== "WON" && String(company.properties?.lifecyclestage || "").toLowerCase() === "customer") {
+      properties.lifecyclestage = "";
+    }
+
     switch (action) {
       case "NEW":
       case "OPEN":
