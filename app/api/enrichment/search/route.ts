@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enrichmentAuthHeaders, enrichmentBackendUrl } from "@/lib/enrichment-auth";
 import { dedupeSourcingCandidates, listHubSpotCompaniesForSourcing, type SourcingProspect } from "@/lib/enrichment-dedup";
 import { searchRentalCompaniesLocally } from "@/lib/enrichment-local-search";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+const SOURCING_ENGINE = "openrouter-direct-v3";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,43 +20,11 @@ export async function POST(request: NextRequest) {
       minConfidence,
     };
 
-    const companiesPromise = listHubSpotCompaniesForSourcing();
-    const authHeaders = await enrichmentAuthHeaders();
-    let payload: any = null;
-    let source = "backend";
-    let backendError: string | null = null;
+    const [payload, companies] = await Promise.all([
+      searchRentalCompaniesLocally(body),
+      listHubSpotCompaniesForSourcing(),
+    ]);
 
-    if (Object.keys(authHeaders).length) {
-      try {
-        const response = await fetch(`${enrichmentBackendUrl()}/api/search/rental-companies`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...authHeaders,
-          },
-          body: JSON.stringify(body),
-          cache: "no-store",
-          signal: AbortSignal.timeout(20_000),
-        });
-        const upstream = await response.json().catch(() => ({ error: `Backend sourcing: HTTP ${response.status}` }));
-        if (response.ok) {
-          payload = upstream;
-        } else {
-          backendError = upstream.error || upstream.message || `HTTP ${response.status}`;
-        }
-      } catch (error) {
-        backendError = error instanceof Error ? error.message : "Backend sourcing indisponible";
-      }
-    } else {
-      backendError = "Aucune identité inter-projets disponible";
-    }
-
-    if (!payload) {
-      source = "cockpit-fallback";
-      payload = await searchRentalCompaniesLocally(body);
-    }
-
-    const companies = await companiesPromise;
     const candidates = (Array.isArray(payload.prospects) ? payload.prospects : []) as SourcingProspect[];
     const deduped = dedupeSourcingCandidates(candidates, companies, limit, minConfidence);
 
@@ -69,15 +38,25 @@ export async function POST(request: NextRequest) {
       newProspects: deduped.prospects.length,
       prospects: deduped.prospects,
       excluded: deduped.excluded,
-      source,
-      backendError: source === "backend" ? null : backendError,
+      source: "openrouter-direct",
+      sourcingEngine: SOURCING_ENGINE,
+      backendError: null,
     }, {
-      headers: { "cache-control": "no-store" },
+      headers: {
+        "cache-control": "no-store",
+        "x-gando-sourcing-engine": SOURCING_ENGINE,
+      },
     });
   } catch (error) {
     const message = error instanceof Error
       ? error.name === "TimeoutError" ? "La recherche a dépassé le délai maximum. Réduisez la limite ou les territoires." : error.message
       : "Erreur de sourcing";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: message, sourcingEngine: SOURCING_ENGINE }, {
+      status: 502,
+      headers: {
+        "cache-control": "no-store",
+        "x-gando-sourcing-engine": SOURCING_ENGINE,
+      },
+    });
   }
 }
