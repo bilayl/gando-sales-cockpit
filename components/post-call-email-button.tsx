@@ -21,6 +21,8 @@ export type PostCallEmailButtonProps = {
   callBody?: string;
   transcription: string;
   emailKind?: PostCallEmailKind;
+  buttonLabel?: string;
+  buttonClassName?: string;
   onSent?: () => void;
 };
 
@@ -35,6 +37,8 @@ export function PostCallEmailButton({
   callBody,
   transcription,
   emailKind = "recap",
+  buttonLabel,
+  buttonClassName,
   onSent,
 }: PostCallEmailButtonProps) {
   const [open, setOpen] = useState(false);
@@ -152,7 +156,7 @@ export function PostCallEmailButton({
         <div className="pr-10">
           <div className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles size={16} /> Automatisation après appel</div>
           <h3 className="mt-1 text-xl font-bold tracking-tight">{POST_CALL_EMAIL_LABELS[kind]}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Le type d'email est proposé automatiquement à partir de l'appel. Vous pouvez le corriger avant l'envoi.</p>
+          <p className="mt-1 text-sm text-muted-foreground">L'email est généré à partir du contexte HubSpot transmis à la fiche. Vous pouvez choisir le type d'email et tout modifier avant l'envoi.</p>
         </div>
 
         <div className="mt-5 grid gap-4">
@@ -216,8 +220,8 @@ export function PostCallEmailButton({
 
   return (
     <>
-      <Button type="button" size="sm" variant="outline" className="h-7 gap-1.5 px-2.5 text-xs" onClick={openComposer}>
-        <Mail size={13} /> {POST_CALL_EMAIL_LABELS[emailKind]}
+      <Button type="button" size="sm" variant="outline" className={buttonClassName || "h-7 gap-1.5 px-2.5 text-xs"} onClick={openComposer}>
+        <Mail size={13} /> {buttonLabel || POST_CALL_EMAIL_LABELS[emailKind]}
       </Button>
       {typeof document !== "undefined" && modal ? createPortal(modal, document.body) : null}
     </>
