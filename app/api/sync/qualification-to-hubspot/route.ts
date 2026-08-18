@@ -5,6 +5,9 @@ import { apiError, isHubSpotAuthenticated } from "@/lib/hubspot";
 
 export const maxDuration = 300;
 
+// Dedicated server-side backfill endpoint. It refreshes Companies from HubSpot,
+// recalculates the consolidated Company qualification in Supabase, then pushes
+// only properties that differ back to HubSpot.
 export async function POST(request: NextRequest) {
   try {
     const expectedCronSecret = process.env.CRON_SECRET?.trim();
