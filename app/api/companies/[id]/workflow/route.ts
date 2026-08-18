@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
+import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
 import { createCompanyReminderTask } from "@/lib/hubspot/tasks";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -25,6 +26,18 @@ const HUBSPOT_LEAD_STATUS: Partial<Record<WorkflowAction, string>> = {
   LOST: "UNQUALIFIED",
 };
 
+const PROSPECTION_LABEL: Record<WorkflowAction, string> = {
+  NEW: "À travailler",
+  OPEN: "À contacter",
+  ATTEMPTED_TO_CONTACT: "Tentative",
+  CONNECTED: "Contact établi",
+  FOLLOW_UP: "À relancer",
+  LATER: "Ultérieur",
+  OPEN_DEAL: "Opportunité",
+  WON: "Gagné",
+  LOST: "Perdu",
+};
+
 function parseReminder(value: unknown) {
   if (!value) return null;
   const date = new Date(String(value));
@@ -45,10 +58,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (reminderAt.getTime() <= Date.now()) return NextResponse.json({ error: "La date de reprise doit être dans le futur" }, { status: 400 });
     }
 
+    const schema = await ensureCompanyQualificationProperties().catch(() => ({ available: [] as string[], created: [] as string[], unavailable: [] }));
     const company = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}?properties=name,domain,hubspot_owner_id,hs_lead_status,lifecyclestage,statut_de_lappel,date_de_rappel`);
     const properties: Record<string, string> = {};
     const leadStatus = HUBSPOT_LEAD_STATUS[action];
     if (leadStatus) properties.hs_lead_status = leadStatus;
+    if (schema.available.includes("statut_prospection")) properties.statut_prospection = PROSPECTION_LABEL[action];
 
     // A company marked Customer is terminal in the Cockpit. If it is intentionally
     // reactivated by dragging it back into an active stage, clear that lifecycle flag
