@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { enrichmentAuthHeaders, enrichmentBackendUrl, hasEnrichmentAuth } from "@/lib/enrichment-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const DEFAULT_ENRICHMENT_BACKEND_URL = "https://gando-enrichment-backend-lenrigandoyt-9842s-projects.vercel.app";
-
-function config() {
-  const baseUrl = (process.env.ENRICHMENT_BACKEND_URL || process.env.GANDO_ENRICHMENT_BACKEND_URL || DEFAULT_ENRICHMENT_BACKEND_URL).replace(/\/$/, "");
-  const apiKey = process.env.ENRICHMENT_INTERNAL_API_KEY || process.env.GANDO_ENRICHMENT_API_KEY || process.env.INTERNAL_API_KEY || "";
-  return { baseUrl, apiKey };
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const { baseUrl, apiKey } = config();
-    if (!apiKey) {
+    if (!hasEnrichmentAuth()) {
       return NextResponse.json({
-        error: "La clé interne du backend de sourcing n'est pas configurée sur le Sales Cockpit.",
+        error: "Aucune identité serveur n'est disponible pour joindre le backend de sourcing.",
         code: "ENRICHMENT_NOT_CONFIGURED",
       }, { status: 503 });
     }
@@ -30,11 +22,11 @@ export async function POST(request: NextRequest) {
       minConfidence: Math.min(Math.max(Number(input.minConfidence) || 0.65, 0), 1),
     };
 
-    const response = await fetch(`${baseUrl}/api/search/rental-companies`, {
+    const response = await fetch(`${enrichmentBackendUrl()}/api/search/rental-companies`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-gando-api-key": apiKey,
+        ...enrichmentAuthHeaders(),
       },
       body: JSON.stringify(body),
       cache: "no-store",
