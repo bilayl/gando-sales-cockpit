@@ -27,6 +27,7 @@ import { QualificationProperties } from "@/components/qualification-properties";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
 
@@ -56,18 +57,6 @@ type Props = {
 };
 
 const STAGE_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(column => [column.value, column.label])) as Record<CompanyStage, string>;
-
-const STAGE_ORDER: Record<CompanyStage, number> = {
-  FOLLOW_UP: 0,
-  ATTEMPTED_TO_CONTACT: 1,
-  OPEN: 2,
-  NEW: 3,
-  CONNECTED: 4,
-  OPEN_DEAL: 5,
-  LATER: 6,
-  WON: 99,
-  LOST: 99,
-};
 
 function taskRank(summary?: TaskSummary) {
   if (!summary) return 4;
@@ -300,8 +289,12 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
     setIndex(0);
     setDone(new Set());
     setError("");
+    const now = Date.now();
     const activeIds = companies
-      .filter(company => !["WON", "LOST"].includes(deriveCompanyStage(company)))
+      .filter(company => {
+        const stage = deriveCompanyStage(company, now);
+        return getCompanyProspectionDecision(company, stage, now).bucket === "ACTIONABLE";
+      })
       .map(company => company.id)
       .slice(0, 100);
     if (!activeIds.length) {
@@ -326,20 +319,21 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   }, [open, companies]);
 
   const queue = useMemo(() => {
+    const now = Date.now();
     return companies
-      .map(company => ({ company, stage: deriveCompanyStage(company), summary: summaries[company.id] }))
-      .filter(item => !["WON", "LOST"].includes(item.stage))
+      .map(company => {
+        const stage = deriveCompanyStage(company, now);
+        return { company, stage, summary: summaries[company.id], decision: getCompanyProspectionDecision(company, stage, now) };
+      })
+      .filter(item => item.decision.bucket === "ACTIONABLE")
       .sort((a, b) => {
-        const stage = STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage];
-        if (stage !== 0) return stage;
         const tasks = taskRank(a.summary) - taskRank(b.summary);
         if (tasks !== 0) return tasks;
+        const priority = compareCompanyProspectionPriority(a, b, now);
+        if (priority !== 0) return priority;
         const aDue = a.summary?.nextTask?.dueAt ? Date.parse(a.summary.nextTask.dueAt) : Number.MAX_SAFE_INTEGER;
         const bDue = b.summary?.nextTask?.dueAt ? Date.parse(b.summary.nextTask.dueAt) : Number.MAX_SAFE_INTEGER;
-        if (aDue !== bDue) return aDue - bDue;
-        const aReminder = Date.parse(a.company.properties.date_de_rappel || "") || Number.MAX_SAFE_INTEGER;
-        const bReminder = Date.parse(b.company.properties.date_de_rappel || "") || Number.MAX_SAFE_INTEGER;
-        return aReminder - bReminder;
+        return aDue - bDue;
       });
   }, [companies, summaries]);
 
@@ -371,9 +365,9 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
         <DialogHeader className="border-b border-border px-6 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <DialogTitle>Session de prospection</DialogTitle>
+              <DialogTitle>Session de prospection priorisée</DialogTitle>
               <DialogDescription className="mt-1">
-                {queue.length} comptes issus des filtres actuels · statut puis tâches HubSpot · fiche entreprise ouverte automatiquement.
+                {queue.length} comptes actionnables uniquement · tâches en retard/du jour d’abord · puis relances et statut commercial.
               </DialogDescription>
             </div>
             <Badge variant="secondary">{remaining.length} restant{remaining.length > 1 ? "s" : ""}</Badge>
@@ -391,7 +385,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
             <div>
               <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><CheckCircle2 /></span>
               <h3 className="mt-4 text-lg font-semibold">Session terminée</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Tous les comptes correspondant aux filtres ont été parcourus.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Tous les comptes actionnables correspondant aux filtres ont été parcourus.</p>
             </div>
           </div>
         ) : (
@@ -403,9 +397,11 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="truncate text-lg font-bold tracking-tight">{p.name || p.domain || "Entreprise sans nom"}</h2>
+                      <Badge variant="secondary">{current.decision.priorityLabel}</Badge>
                       <Badge variant="outline">{STAGE_LABELS[current.stage]}</Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{[p.city, p.country, p.domain].filter(Boolean).join(" · ") || "Aucune localisation"}</p>
+                    <p className="mt-1 text-xs font-medium text-primary">{current.decision.reason}</p>
                   </div>
                 </div>
 
@@ -435,7 +431,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                 <div className="grid gap-2">
                   <div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Statut</div><div className="mt-1 text-sm font-semibold">{STAGE_LABELS[current.stage]}</div></div>
                   <div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Dernier appel</div><div className="mt-1 text-sm font-semibold">{p.statut_de_lappel || "—"}</div></div>
-                  <div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Rappel</div><div className="mt-1 text-sm font-semibold">{formatDateTime(p.date_de_rappel)}</div></div>
+                  <div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Rappel</div><div className="mt-1 text-sm font-semibold">{formatDateTime(p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date)}</div></div>
                 </div>
 
                 <div className="space-y-2 border-t border-border pt-4">
