@@ -1,12 +1,20 @@
 import { CompanyFirstProspectionView } from "@/components/company-first-prospection-view";
+import { PostCallFollowupQueue } from "@/components/post-call-followup-queue";
 import { ProspectionView } from "@/components/prospection-view";
+import { getHubSpotIdentity, isAuthBypassEnabled } from "@/lib/hubspot";
 import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProspectionPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   const params = await searchParams;
-  if (params.mode === "contacts") return <ProspectionView />;
+  const bypass = isAuthBypassEnabled();
+  const identity = bypass ? null : await getHubSpotIdentity().catch(() => null);
+  const followup = <PostCallFollowupQueue senderName={identity?.email || undefined} />;
+
+  if (params.mode === "contacts") {
+    return <><ProspectionView />{followup}</>;
+  }
 
   // Keep the account qualification model self-healing: opening the Company-first
   // cockpit ensures every qualification field exists as a real HubSpot Company property.
@@ -15,5 +23,5 @@ export default async function ProspectionPage({ searchParams }: { searchParams: 
     console.error("HubSpot qualification schema bootstrap:", error);
   });
 
-  return <CompanyFirstProspectionView />;
+  return <><CompanyFirstProspectionView />{followup}</>;
 }
