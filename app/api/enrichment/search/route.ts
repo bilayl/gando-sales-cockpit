@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enrichmentAuthHeaders, enrichmentBackendUrl, hasEnrichmentAuth } from "@/lib/enrichment-auth";
+import { enrichmentAuthHeaders, enrichmentBackendUrl } from "@/lib/enrichment-auth";
 import { dedupeSourcingCandidates, listHubSpotCompaniesForSourcing, type SourcingProspect } from "@/lib/enrichment-dedup";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +7,8 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    if (!hasEnrichmentAuth()) {
+    const authHeaders = await enrichmentAuthHeaders();
+    if (!Object.keys(authHeaders).length) {
       return NextResponse.json({
         error: "Aucune identité serveur n'est disponible pour joindre le backend de sourcing.",
         code: "ENRICHMENT_NOT_CONFIGURED",
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          ...enrichmentAuthHeaders(),
+          ...authHeaders,
         },
         body: JSON.stringify(body),
         cache: "no-store",
