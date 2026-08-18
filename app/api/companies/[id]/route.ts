@@ -122,7 +122,7 @@ async function updateLocalCompany(id: string, updated: any, fallbackProperties?:
   if (error) console.error("Supabase update company:", error.message);
 }
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const supabase = getSupabaseAdmin();
@@ -232,7 +232,33 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       .filter((meeting: any) => meeting.derived.status === "SCHEDULED" && new Date(meeting.derived.startAt || 0).getTime() >= Date.now())
       .sort((a: any, b: any) => new Date(a.derived.startAt).getTime() - new Date(b.derived.startAt).getTime())[0] || null;
 
-    return NextResponse.json({ company: companyRecord, contacts, notes, calls, meetings, deals, tasks, nextMeeting, qualificationSchema });
+    let centralized: Record<string, unknown> = {};
+    try {
+      const internal = new URL(`/api/companies/${encodeURIComponent(id)}/centralized`, request.url);
+      const response = await fetch(internal, {
+        headers: { cookie: request.headers.get("cookie") || "" },
+        cache: "no-store",
+      });
+      if (response.ok) centralized = await response.json();
+      else console.error("Centralized HubSpot company detail:", response.status, await response.text());
+    } catch (centralError) {
+      console.error("Centralized HubSpot company detail:", centralError);
+    }
+
+    return NextResponse.json({
+      company: companyRecord,
+      contacts,
+      notes,
+      calls,
+      meetings,
+      deals,
+      tasks,
+      nextMeeting,
+      qualificationSchema,
+      ...centralized,
+      company: companyRecord,
+      qualificationSchema,
+    });
   } catch (error) {
     const e = error as Error;
     return NextResponse.json({ error: e.message || "Erreur Supabase", details: e }, { status: 500 });
