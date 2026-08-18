@@ -1,4 +1,4 @@
-import type { CompanyStage } from "@/components/company-prospection-board";
+export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "OPEN_DEAL" | "WON" | "LOST";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
 
