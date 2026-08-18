@@ -1,6 +1,25 @@
 import type { SourcingProspect } from "@/lib/enrichment-dedup";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+async function getOpenRouterApiKey() {
+  const envKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (envKey) return envKey;
+
+  try {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.rpc("get_server_secret", { p_name: "openrouter_api_key" });
+    if (error) throw error;
+    const vaultKey = typeof data === "string" ? data.trim() : "";
+    if (vaultKey) return vaultKey;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`OpenRouter non configuré côté serveur (env/Vault): ${message}`);
+  }
+
+  throw new Error("OpenRouter non configuré côté serveur (env/Vault)");
+}
 
 function extractText(payload: any) {
   const content = payload?.choices?.[0]?.message?.content;
@@ -28,8 +47,7 @@ export async function searchRentalCompaniesLocally(input: {
   sources?: string[];
   limit?: number;
 }) {
-  const token = process.env.OPENROUTER_API_KEY;
-  if (!token) throw new Error("OPENROUTER_API_KEY manquante côté serveur");
+  const token = await getOpenRouterApiKey();
 
   const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 50);
   const target = Math.min(Math.max(limit * 2, 20), 60);
@@ -53,6 +71,8 @@ Réponds UNIQUEMENT avec un JSON valide de forme {"prospects":[{"companyName":".
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
+      "HTTP-Referer": "https://gando.app",
+      "X-Title": "Gando Sales Cockpit",
     },
     body: JSON.stringify({
       model: process.env.OPENROUTER_MODEL || process.env.ENRICHMENT_MODEL || "openrouter/auto",
@@ -87,6 +107,6 @@ Réponds UNIQUEMENT avec un JSON valide de forme {"prospects":[{"companyName":".
     searchedAt: new Date().toISOString(),
     candidatesFound: prospects.length,
     prospects,
-    source: "cockpit-fallback" as const,
+    source: "openrouter-direct" as const,
   };
 }
