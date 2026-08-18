@@ -38,6 +38,10 @@ export async function syncCompanyContactLinks() {
       method: "POST",
       body: JSON.stringify({ inputs: ids.map(id => ({ id })) }),
     });
+
+    const { error: deleteError } = await supabase.from("company_contacts").delete().in("hubspot_contact_id", ids);
+    if (deleteError) throw deleteError;
+
     const rows: Array<Record<string, string>> = [];
     for (const association of data.results ?? []) {
       const hubspotContactId = String(association.from?.id || association.fromObjectId || "");
@@ -75,7 +79,7 @@ export async function refreshCompanyQualifications() {
 function desiredHubSpotProperties(row: any) {
   const base = STATUS_TO_HUBSPOT[String(row.qualification_status || "")] || null;
   if (!base) return null;
-  const properties = { ...base };
+  const properties: Record<string, string> = { ...base };
   if (["À relancer", "Ultérieur"].includes(String(row.qualification_status)) && row.qualification_next_action_at) {
     properties.date_de_rappel = new Date(row.qualification_next_action_at).toISOString();
   }
@@ -109,14 +113,6 @@ export async function pushCompanyQualificationsToHubSpot() {
       body: JSON.stringify({ inputs }),
     });
     updated += inputs.length;
-  }
-
-  if (updated) {
-    const fresh = await hubspotJson("/crm/objects/2026-03/companies/search", {
-      method: "POST",
-      body: JSON.stringify({ limit: 1, properties: ["statut_prospection"] }),
-    }).catch(() => null);
-    void fresh;
   }
 
   return { checked: data?.length ?? 0, toUpdate: changes.length, updated };
