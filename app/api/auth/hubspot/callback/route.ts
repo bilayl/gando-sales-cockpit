@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   }
   try {
     await exchangeHubSpotCode(code);
-    return NextResponse.redirect(new URL("/today", request.url));
+    return NextResponse.redirect(new URL("/prospection", request.url));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Échec de la connexion HubSpot";
     return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, request.url));

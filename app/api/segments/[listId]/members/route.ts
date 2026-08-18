@@ -1,10 +1,14 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const contactProps = ["firstname","lastname","email","phone","mobilephone","company","jobtitle","hubspot_owner_id","statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance","minari_call_count","referly_call_outcome","referly_reason_to_reach_out","state","city","hs_last_sales_activity_timestamp","notes_last_contacted","hs_object_source_label","createdate"];
 
-const companyProps = ["name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id","num_associated_contacts","hs_last_sales_activity_timestamp","hs_object_source_label","createdate"];
+const companyProps = [
+  "name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id",
+  "num_associated_contacts","num_associated_deals","hs_lead_status","lifecyclestage","statut_de_lappel","date_de_rappel",
+  "notes_next_activity_date","notes_last_updated","hs_last_sales_activity_timestamp","hs_object_source_label","createdate",
+];
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ listId: string }> }) {
   try {
@@ -25,17 +29,31 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .in("hubspot_id", ids);
     if (error) throw error;
     const byId = new Map((data ?? []).map(r => [String(r.hubspot_id), r.raw_data]));
+
+    if (objectTypeId === "0-2") {
+      const fresh = await hubspotJson(`/crm/objects/2026-03/${objectPath}/batch/read`, {
+        method: "POST",
+        body: JSON.stringify({ properties: props, inputs: ids.map((id: string) => ({ id })) }),
+      });
+      const freshById = new Map((fresh.results ?? []).map((r: any) => [String(r.id), r.properties ?? {}]));
+      const results = ids.map((id: string) => ({
+        id,
+        properties: { ...(byId.get(id)?.properties ?? {}), ...(freshById.get(id) ?? {}) },
+      }));
+      return NextResponse.json({ results, total: memberships.total ?? results.length, paging: memberships.paging ?? null });
+    }
+
     const results = ids
       .filter((id: string) => byId.has(id))
       .map((id: string) => ({ id, properties: byId.get(id)?.properties ?? {} }));
     const missing = ids.length - results.length;
 
     if (missing > 0) {
-      const data = await hubspotJson(`/crm/objects/2026-03/${objectPath}/batch/read`, {
+      const fallbackData = await hubspotJson(`/crm/objects/2026-03/${objectPath}/batch/read`, {
         method: "POST",
         body: JSON.stringify({ properties: props, inputs: ids.map((id: string) => ({ id })) }),
       });
-      const fallback = new Map((data.results ?? []).map((r: any) => [String(r.id), r.properties]));
+      const fallback = new Map((fallbackData.results ?? []).map((r: any) => [String(r.id), r.properties]));
       const merged = ids.map((id: string) => {
         const existing = byId.get(id);
         return { id, properties: existing?.properties ?? fallback.get(id) ?? {} };

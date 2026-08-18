@@ -1,5 +1,12 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { hubspotJson } from "@/lib/hubspot";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+
+const COMPANY_PROSPECTION_PROPERTIES = [
+  "name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id",
+  "num_associated_contacts","num_associated_deals","hs_lead_status","lifecyclestage","statut_de_lappel","date_de_rappel",
+  "notes_next_activity_date","notes_last_updated","hs_last_sales_activity_timestamp","hs_object_source_label","createdate",
+];
 
 function toHubSpotRecord(row: any) {
   return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
@@ -34,7 +41,19 @@ export async function GET(request: NextRequest) {
 
     const { data, error, count } = await builder;
     if (error) throw error;
-    const results = (data ?? []).map(toHubSpotRecord);
+    const cached = (data ?? []).map(toHubSpotRecord);
+    const ids = cached.map(record => record.id);
+    let results = cached;
+
+    if (ids.length) {
+      const fresh = await hubspotJson(`/crm/objects/2026-03/companies/batch/read`, {
+        method: "POST",
+        body: JSON.stringify({ properties: COMPANY_PROSPECTION_PROPERTIES, inputs: ids.map(id => ({ id })) }),
+      });
+      const freshById = new Map((fresh.results ?? []).map((record: any) => [String(record.id), record.properties ?? {}]));
+      results = cached.map(record => ({ ...record, properties: { ...record.properties, ...(freshById.get(record.id) ?? {}) } }));
+    }
+
     const total = count ?? results.length;
     const nextAfter = offset + results.length < total ? String(offset + 100) : null;
     return NextResponse.json({
