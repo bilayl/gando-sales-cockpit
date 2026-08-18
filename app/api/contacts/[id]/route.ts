@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const CONTACT_DETAIL_PROPERTIES = [
   "firstname","lastname","email","phone","mobilephone","jobtitle","city","state","country","company","hubspot_owner_id",
-  "statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance","minari_call_count","referly_reason_to_reach_out",
+  "statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance","date_recyclage","minari_call_count","referly_reason_to_reach_out",
   "notes_last_contacted","hs_last_sales_activity_timestamp","hs_object_source_label","createdate",
   "ce_quil_apprecie_chez_gando","objections__retours","zip","campagne_dacquisition","taille_de_flo","hs_country_region_code",
   "suite","solution_paiement_reservation",
@@ -12,7 +12,7 @@ const CONTACT_DETAIL_PROPERTIES = [
 
 const editable = [
   "firstname","lastname","email","phone","mobilephone","jobtitle","city","state","country","company","hubspot_owner_id",
-  "statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance","ce_quil_apprecie_chez_gando",
+  "statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance","date_recyclage","ce_quil_apprecie_chez_gando",
   "objections__retours","zip","campagne_dacquisition","taille_de_flo","hs_country_region_code","suite","solution_paiement_reservation",
 ];
 
