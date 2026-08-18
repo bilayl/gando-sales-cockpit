@@ -203,6 +203,20 @@ const OUTCOME_MAP: Record<string, { callStatus: string; prospectionStatus?: stri
   "Intéressé mais": { callStatus: "Intéressé mais", prospectionStatus: "Conversation" },
 };
 
+const COMPANY_OUTCOME_MAP: Record<string, { callStatus: string; leadStatus?: string }> = {
+  "NRP": { callStatus: "nrp", leadStatus: "ATTEMPTED_TO_CONTACT" },
+  "Occupé": { callStatus: "occupe", leadStatus: "ATTEMPTED_TO_CONTACT" },
+  "À rappeler": { callStatus: "a_rappeler", leadStatus: "BAD_TIMING" },
+  "A Rappeler": { callStatus: "a_rappeler", leadStatus: "BAD_TIMING" },
+  "Intéressé": { callStatus: "interesse", leadStatus: "CONNECTED" },
+  "RDV pris": { callStatus: "interesse", leadStatus: "OPEN_DEAL" },
+  "Pas intéressé": { callStatus: "pas_interesse" },
+  "Hors cible": { callStatus: "hors_cible", leadStatus: "UNQUALIFIED" },
+  "Numéro invalide": { callStatus: "numero_invalide", leadStatus: "UNQUALIFIED" },
+  "A une date ultérieure": { callStatus: "a_une_date_ulterieure", leadStatus: "BAD_TIMING" },
+  "Intéressé mais": { callStatus: "interesse_mais", leadStatus: "CONNECTED" },
+};
+
 export async function saveCallOutcome(contactId: string, outcome: string, reminderAt?: string) {
   const mapped = OUTCOME_MAP[outcome];
   if (!mapped) throw new Error("Résultat d’appel invalide");
@@ -230,7 +244,22 @@ export async function saveCallOutcome(contactId: string, outcome: string, remind
     body: JSON.stringify({ properties }),
   });
 
+  let updatedCompany = null;
+  const companyId = contact.associations?.companies?.results?.[0]?.id;
+  const companyOutcome = COMPANY_OUTCOME_MAP[outcome];
+  if (companyId && companyOutcome) {
+    const companyProperties: Record<string, string> = {
+      statut_de_lappel: companyOutcome.callStatus,
+      date_de_rappel: parsedReminder ? parsedReminder.toISOString() : "",
+    };
+    if (companyOutcome.leadStatus) companyProperties.hs_lead_status = companyOutcome.leadStatus;
+    updatedCompany = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(companyId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ properties: companyProperties }),
+    });
+  }
+
   let task = null;
   if (parsedReminder) task = await createReminderTask(contact, parsedReminder);
-  return { contact: updatedContact, task };
+  return { contact: updatedContact, company: updatedCompany, task };
 }
