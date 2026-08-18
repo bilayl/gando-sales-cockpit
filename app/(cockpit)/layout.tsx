@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { PageTransition } from "@/components/page-transition";
-import { PostCallFollowupQueue } from "@/components/post-call-followup-queue";
 import { getHubSpotIdentity, isAuthBypassEnabled, isHubSpotAuthenticated } from "@/lib/hubspot";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +24,6 @@ export default async function CockpitLayout({ children }: { children: ReactNode 
         <AppSidebar email={accountLabel} />
       </div>
       <PageTransition>{children}</PageTransition>
-      <PostCallFollowupQueue senderName={identity?.email || undefined} />
     </main>
   );
 }
