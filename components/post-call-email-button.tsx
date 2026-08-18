@@ -90,17 +90,6 @@ export function PostCallEmailButton({
     void generateDraft(value);
   }
 
-  function openInGmail() {
-    const params = new URLSearchParams({
-      view: "cm",
-      fs: "1",
-      to: to.trim(),
-      su: subject.trim(),
-      body: body.trim(),
-    });
-    window.open(`https://mail.google.com/mail/?${params.toString()}`, "_blank", "noopener,noreferrer");
-  }
-
   async function logSentEmail() {
     try {
       const marker = callId ? `[GANDO_POST_CALL_EMAIL:${callId}]\n` : "";
@@ -127,15 +116,27 @@ export function PostCallEmailButton({
       const response = await fetch("/api/post-call-email/send", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ to, subject, body }),
+        body: JSON.stringify({
+          to,
+          subject,
+          body,
+          contactId,
+          callId,
+          kind,
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (payload.reauthRequired) setNeedsGoogleAuth(true);
         throw new Error(payload.error || "Impossible d'envoyer l'email");
       }
+
       await logSentEmail();
-      toast.success(`${POST_CALL_EMAIL_LABELS[kind]} envoyé et journalisé dans HubSpot.`);
+      if (payload.historyLogged === false) {
+        toast.warning("Email envoyé, mais l'historique du Cockpit n'a pas pu être enregistré.");
+      } else {
+        toast.success(`${POST_CALL_EMAIL_LABELS[kind]} envoyé depuis le serveur et enregistré dans l'historique.`);
+      }
       setOpen(false);
       onSent?.();
     } catch (error) {
@@ -156,7 +157,7 @@ export function PostCallEmailButton({
         <div className="pr-10">
           <div className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles size={16} /> Automatisation après appel</div>
           <h3 className="mt-1 text-xl font-bold tracking-tight">{POST_CALL_EMAIL_LABELS[kind]}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">L'email est généré à partir du contexte HubSpot transmis à la fiche. Vous pouvez choisir le type d'email et tout modifier avant l'envoi.</p>
+          <p className="mt-1 text-sm text-muted-foreground">L'email est généré à partir du contexte HubSpot. Quand vous cliquez sur Envoyer, il part directement depuis le backend du Sales Cockpit via Gmail API puis est enregistré dans l'historique.</p>
         </div>
 
         <div className="mt-5 grid gap-4">
@@ -190,7 +191,7 @@ export function PostCallEmailButton({
             <textarea
               value={body}
               onChange={event => setBody(event.target.value)}
-              className="min-h-[260px] w-full resize-y rounded-md border border-input bg-card px-3 py-2.5 text-sm leading-6 text-card-foreground outline-none placeholder:text-muted-foreground focus:border-primary/55 focus:ring-2 focus:ring-ring/15"
+              className="min-h-[300px] w-full resize-y rounded-md border border-input bg-card px-3 py-2.5 text-sm leading-6 text-card-foreground outline-none placeholder:text-muted-foreground focus:border-primary/55 focus:ring-2 focus:ring-ring/15"
               placeholder={generating ? "Génération de l'email…" : "Le contenu de l'email apparaîtra ici."}
             />
           </div>
@@ -198,21 +199,16 @@ export function PostCallEmailButton({
 
         {needsGoogleAuth ? (
           <div className="mt-4 rounded-lg border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-900 dark:text-amber-200">
-            Google doit être reconnecté une fois pour autoriser l'envoi Gmail. Vous pouvez aussi ouvrir ce brouillon dans Gmail immédiatement.
+            Google doit être reconnecté pour que le backend puisse envoyer l'email depuis le compte Gando autorisé.
             <div className="mt-2"><Button asChild size="sm" variant="outline"><a href="/api/auth/google"><ExternalLink size={14} /> Reconnecter Google</a></Button></div>
           </div>
         ) : null}
 
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-          <Button type="button" variant="outline" onClick={openInGmail} disabled={!to.trim() || !subject.trim() || !body.trim()}>
-            <ExternalLink size={15} /> Ouvrir dans Gmail
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Annuler</Button>
+          <Button type="button" className="gap-1.5" onClick={sendEmail} disabled={sending || generating || !to.trim() || !subject.trim() || !body.trim()}>
+            {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer depuis Gando
           </Button>
-          <div className="flex gap-2 sm:justify-end">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Annuler</Button>
-            <Button type="button" className="gap-1.5" onClick={sendEmail} disabled={sending || generating || !to.trim() || !subject.trim() || !body.trim()}>
-              {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Envoyer
-            </Button>
-          </div>
         </div>
       </div>
     </div>
