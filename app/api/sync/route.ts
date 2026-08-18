@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncAll, syncActivities, syncCompanies, syncContacts, syncDeals, syncTasks } from "@/lib/sync";
+import { syncActivities, syncCompanies, syncContacts, syncDeals, syncTasks } from "@/lib/sync";
+import { refreshCompanyQualifications, syncCompanyContactLinks } from "@/lib/company-qualification-sync";
 import { apiError, isHubSpotAuthenticated } from "@/lib/hubspot";
 
 export const maxDuration = 300;
@@ -15,16 +16,45 @@ export async function GET(request: NextRequest) {
     } else if (!(await isHubSpotAuthenticated())) {
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Reconnectez HubSpot pour continuer." }, { status: 401 });
     }
+
     const url = new URL(request.url);
     const resource = url.searchParams.get("resource") ?? "all";
     let results: Record<string, unknown>;
+
     switch (resource) {
-      case "companies": results = { companies: await syncCompanies() }; break;
-      case "contacts": results = { contacts: await syncContacts() }; break;
-      case "deals": results = { deals: await syncDeals() }; break;
-      case "tasks": results = { tasks: await syncTasks() }; break;
-      case "activities": results = { activities: await syncActivities() }; break;
-      case "all": results = await syncAll(); break;
+      case "companies":
+        results = { companies: await syncCompanies(), qualification: await refreshCompanyQualifications() };
+        break;
+      case "contacts":
+        results = {
+          contacts: await syncContacts(),
+          associations: await syncCompanyContactLinks(),
+          qualification: await refreshCompanyQualifications(),
+        };
+        break;
+      case "deals":
+        results = { deals: await syncDeals(), qualification: await refreshCompanyQualifications() };
+        break;
+      case "tasks":
+        results = { tasks: await syncTasks(), qualification: await refreshCompanyQualifications() };
+        break;
+      case "activities":
+        results = { activities: await syncActivities(), qualification: await refreshCompanyQualifications() };
+        break;
+      case "qualification":
+        results = { associations: await syncCompanyContactLinks(), qualification: await refreshCompanyQualifications() };
+        break;
+      case "all": {
+        const companies = await syncCompanies();
+        const contacts = await syncContacts();
+        const associations = await syncCompanyContactLinks();
+        const deals = await syncDeals();
+        const tasks = await syncTasks();
+        const activities = await syncActivities();
+        const qualification = await refreshCompanyQualifications();
+        results = { companies, contacts, associations, deals, tasks, activities, qualification };
+        break;
+      }
       default:
         return NextResponse.json({ error: `Ressource inconnue: ${resource}` }, { status: 400 });
     }
