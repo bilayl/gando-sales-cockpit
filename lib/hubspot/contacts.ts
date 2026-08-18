@@ -67,9 +67,10 @@ const COMPANY_OUTCOME_MAP: Record<string, { callStatus: string; leadStatus?: str
   "A Rappeler": { callStatus: "a_rappeler", leadStatus: "BAD_TIMING", prospectionStatus: "À relancer" },
   "Intéressé": { callStatus: "interesse", leadStatus: "CONNECTED", prospectionStatus: "Contact établi" },
   "RDV pris": { callStatus: "interesse", leadStatus: "OPEN_DEAL", prospectionStatus: "Opportunité" },
-  "Pas intéressé": { callStatus: "pas_interesse", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },
-  "Hors cible": { callStatus: "hors_cible", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },
-  "Numéro invalide": { callStatus: "numero_invalide", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },
+  "Pas intéressé": { callStatus: "pas_interesse", leadStatus: "UNQUALIFIED", prospectionStatus: "Pas intéressé" },
+  "Hors cible": { callStatus: "hors_cible", leadStatus: "UNQUALIFIED", prospectionStatus: "Hors cible" },
+  // Un numéro invalide invalide le contact, pas forcément l'entreprise. Le compte reste à travailler.
+  "Numéro invalide": { callStatus: "numero_invalide", leadStatus: "OPEN", prospectionStatus: "À contacter" },
   "A une date ultérieure": { callStatus: "a_une_date_ulterieure", leadStatus: "BAD_TIMING", prospectionStatus: "Ultérieur" },
   "Intéressé mais": { callStatus: "interesse_mais", leadStatus: "BAD_TIMING", prospectionStatus: "À relancer" },
 };
