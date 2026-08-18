@@ -24,7 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { formatDate, initials } from "@/lib/utils";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -222,7 +222,7 @@ export function CompanyDrawer({ companyId, open, onOpenChange }: Props) {
   const meetings = data?.meetings || [];
   const nextMeeting = data?.nextMeeting || null;
 
-  const timeline = useMemo(() => [
+  const timeline = [
     ...meetings.map((meeting: any) => ({
       id: `meeting-${meeting.id}`,
       type: "meeting",
@@ -258,7 +258,7 @@ export function CompanyDrawer({ companyId, open, onOpenChange }: Props) {
       body: task.properties?.hs_task_body,
       sourceContactName: task.sourceContactName,
     })),
-  ].sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()), [data, meetings]);
+  ].sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
 
   const contactCount = contacts.length;
   const activityCount = data?.activitySummary?.total ?? timeline.length;
