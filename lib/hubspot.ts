@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { CompactEncrypt, compactDecrypt } from "jose";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "./supabase-admin";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const HUBSPOT_AUTHORIZE = "https://app.hubspot.com/oauth/authorize";
@@ -94,6 +95,29 @@ async function readSession() {
   return decryptSession((await cookies()).get(SESSION_COOKIE)?.value);
 }
 
+let lastAutomationCredentialSyncAt = 0;
+
+async function syncHubSpotAutomationCredentials(session: HubSpotSession) {
+  if (!isProductionEnvironment()) return;
+  if (!session.accessToken || !session.refreshToken || !session.expiresAt) return;
+  if (Date.now() - lastAutomationCredentialSyncAt < 60_000) return;
+
+  const clientId = process.env.HUBSPOT_CLIENT_ID?.trim();
+  const clientSecret = process.env.HUBSPOT_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) return;
+
+  const admin = getSupabaseAdmin();
+  const { error } = await admin.rpc("sync_hubspot_automation_credentials", {
+    p_access_token: session.accessToken,
+    p_refresh_token: session.refreshToken,
+    p_expires_at_ms: Math.trunc(session.expiresAt),
+    p_client_id: clientId,
+    p_client_secret: clientSecret,
+  });
+  if (error) throw error;
+  lastAutomationCredentialSyncAt = Date.now();
+}
+
 async function writeSession(session: HubSpotSession) {
   (await cookies()).set(SESSION_COOKIE, await encryptSession(session), {
     httpOnly: true,
@@ -102,6 +126,10 @@ async function writeSession(session: HubSpotSession) {
     path: "/",
     maxAge: SESSION_MAX_AGE,
     priority: "high",
+  });
+
+  syncHubSpotAutomationCredentials(session).catch((error) => {
+    console.error("Unable to sync HubSpot automation credentials", error);
   });
 }
 
@@ -186,6 +214,9 @@ export async function isHubSpotAuthenticated() {
 export async function getHubSpotIdentity() {
   const session = await readSession();
   if (session) {
+    syncHubSpotAutomationCredentials(session).catch((error) => {
+      console.error("Unable to sync HubSpot automation credentials", error);
+    });
     return {
       mode: "oauth" as const,
       hubId: session.hubId,
@@ -261,6 +292,9 @@ async function accessContext() {
   let session = await readSession();
   if (session?.accessToken && session?.refreshToken) {
     if ((session.expiresAt ?? 0) <= Date.now() + 60_000) session = await refreshSession(session);
+    syncHubSpotAutomationCredentials(session).catch((error) => {
+      console.error("Unable to sync HubSpot automation credentials", error);
+    });
     return { token: session.accessToken || "", session };
   }
   if (isAuthBypassEnabled()) throw new Error("TEST_HUBSPOT_TOKEN_MISSING");
