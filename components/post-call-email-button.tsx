@@ -73,7 +73,7 @@ export function PostCallEmailButton({
       fs: "1",
       to: to.trim(),
       su: subject.trim(),
-      body: body.trim(),
+      body: body.trim().replace(/\*\*(.+?)\*\*/g, "$1"),
     });
     window.open(`https://mail.google.com/mail/?${params.toString()}`, "_blank", "noopener,noreferrer");
   }
@@ -132,7 +132,7 @@ export function PostCallEmailButton({
         <div className="pr-10">
           <div className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles size={16} /> Suivi après appel</div>
           <h3 className="mt-1 text-xl font-bold tracking-tight">Email de récap au prospect</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Le brouillon est généré uniquement à partir de la transcription/note disponible. Vous pouvez tout modifier avant l'envoi.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Le brouillon est synthétisé uniquement à partir de la transcription/note disponible. Les éléments entre ** ** seront envoyés en gras. Vous pouvez tout modifier avant l'envoi.</p>
         </div>
 
         <div className="mt-5 grid gap-4">
