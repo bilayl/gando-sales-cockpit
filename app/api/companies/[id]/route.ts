@@ -246,7 +246,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     return NextResponse.json({
-      company: companyRecord,
       contacts,
       notes,
       calls,
@@ -254,7 +253,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       deals,
       tasks,
       nextMeeting,
-      qualificationSchema,
       ...centralized,
       company: companyRecord,
       qualificationSchema,
