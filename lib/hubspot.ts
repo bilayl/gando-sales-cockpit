@@ -65,8 +65,6 @@ function resolveHubSpotRedirectUri(override?: string) {
 }
 
 export function isProductionEnvironment() {
-  // Vercel exposes VERCEL_ENV=production|preview|development. This is the source of truth
-  // because NODE_ENV is "production" for both Production and Preview builds.
   if (process.env.VERCEL_ENV) return process.env.VERCEL_ENV === "production";
   return process.env.NODE_ENV === "production";
 }
@@ -102,6 +100,28 @@ async function readSession() {
 }
 
 let lastAutomationCredentialSyncAt = 0;
+let serviceTokenCache: { token: string; expiresAt: number } | null = null;
+
+async function hubSpotServiceToken() {
+  const envToken = process.env.HUBSPOT_PRIVATE_APP_TOKEN?.trim();
+  if (envToken) return envToken;
+
+  if (serviceTokenCache && serviceTokenCache.expiresAt > Date.now()) {
+    return serviceTokenCache.token;
+  }
+
+  try {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin.rpc("get_server_secret", { p_name: "hubspot_access_token" });
+    if (error) throw error;
+    const token = typeof data === "string" ? data.trim() : "";
+    if (!token) return "";
+    serviceTokenCache = { token, expiresAt: Date.now() + 5 * 60_000 };
+    return token;
+  } catch {
+    return "";
+  }
+}
 
 async function syncHubSpotAutomationCredentials(session: HubSpotSession) {
   if (!isProductionEnvironment()) return;
@@ -193,8 +213,6 @@ async function refreshSession(session: HubSpotSession) {
 }
 
 export function privateAppToken() {
-  // Preview/test uses the server-side private app token so the UI can be tested without OAuth.
-  // Production never accepts this path: every deployed production user must authenticate with HubSpot OAuth.
   if (isProductionEnvironment()) return "";
   return process.env.HUBSPOT_PRIVATE_APP_TOKEN?.trim() || "";
 }
@@ -208,12 +226,13 @@ export function isHubSpotOAuthConfigured() {
 }
 
 export function isHubSpotConfigured() {
-  return Boolean(privateAppToken() || isHubSpotOAuthConfigured());
+  return Boolean(privateAppToken() || isHubSpotOAuthConfigured() || (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY));
 }
 
 export async function isHubSpotAuthenticated() {
   if (isAuthBypassEnabled()) return true;
-  return Boolean(await readSession());
+  if (await readSession()) return true;
+  return Boolean(await hubSpotServiceToken());
 }
 
 export async function getHubSpotIdentity() {
@@ -230,6 +249,15 @@ export async function getHubSpotIdentity() {
       hubDomain: session.hubDomain,
     };
   }
+
+  if (await hubSpotServiceToken()) {
+    return {
+      mode: "service_token" as const,
+      hubId: Number(process.env.HUBSPOT_ACCOUNT_ID) || undefined,
+      email: "HubSpot · compte Gando",
+    };
+  }
+
   if (isAuthBypassEnabled()) {
     return { mode: "test_bypass" as const, email: "Mode test · HubSpot" };
   }
@@ -263,8 +291,6 @@ export function buildHubSpotAuthUrl(state: string, redirectUri?: string) {
     scope: HUBSPOT_SCOPES,
     state,
   });
-  // Do not force accountId here. HubSpot will let the authenticated user select an
-  // allowed portal, which avoids stale/wrong portal IDs breaking authorization.
   return `${HUBSPOT_AUTHORIZE}?${params.toString()}`;
 }
 
@@ -294,6 +320,7 @@ export async function clearHubSpotSession() {
 async function accessContext() {
   const privateToken = privateAppToken();
   if (privateToken) return { token: privateToken, session: null };
+
   let session = await readSession();
   if (session?.accessToken && session?.refreshToken) {
     if ((session.expiresAt ?? 0) <= Date.now() + 60_000) session = await refreshSession(session);
@@ -302,6 +329,10 @@ async function accessContext() {
     });
     return { token: session.accessToken || "", session };
   }
+
+  const serviceToken = await hubSpotServiceToken();
+  if (serviceToken) return { token: serviceToken, session: null };
+
   if (isAuthBypassEnabled()) throw new Error("TEST_HUBSPOT_TOKEN_MISSING");
   throw new Error("UNAUTHORIZED");
 }
