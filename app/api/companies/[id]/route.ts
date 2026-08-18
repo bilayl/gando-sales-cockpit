@@ -12,8 +12,14 @@ const BASE_COMPANY_DETAIL_PROPERTIES = [
 const CONTACT_PROFILE_PROPERTIES = [
   "firstname","lastname","email","phone","mobilephone","jobtitle","company","statut_prospection","statut_de_lappel",
   "ce_quil_apprecie_chez_gando","objections__retours","zip","campagne_dacquisition","taille_de_flo","hs_country_region_code",
-  "suite","solution_paiement_reservation","hs_last_sales_activity_timestamp",
+  "suite","solution_paiement_reservation","hs_last_sales_activity_timestamp","hubspot_owner_id",
 ];
+
+const NOTE_PROPERTIES = ["hs_note_body","hs_timestamp","hs_createdate","hs_object_source_label","hubspot_owner_id"];
+const CALL_PROPERTIES = ["hs_call_title","hs_call_body","hs_call_status","hs_call_disposition","hs_call_duration","hs_timestamp","hubspot_owner_id"];
+const MEETING_PROPERTIES = ["hs_meeting_title","hs_meeting_start_time","hs_meeting_end_time","hs_meeting_location","hs_meeting_outcome","hs_internal_meeting_notes","hs_timestamp","hubspot_owner_id"];
+const TASK_PROPERTIES = ["hs_task_subject","hs_task_body","hs_task_status","hs_task_priority","hs_task_type","hs_timestamp","hubspot_owner_id"];
+const DEAL_PROPERTIES = ["dealname","amount","pipeline","dealstage","closedate","createdate","hubspot_owner_id"];
 
 const CUSTOM_QUALIFICATION_PROPERTIES = new Set(COMPANY_QUALIFICATION_SCHEMAS.map(property => property.name));
 
@@ -36,6 +42,15 @@ const CONTACT_TO_COMPANY_CALL: Record<string, string> = {
   "En attente décision": "en_attente_decision",
   "Autres": "autres",
   "Numéro invalide": "numero_invalide",
+};
+
+type HubSpotRecord = {
+  id: string;
+  properties?: Record<string, string | null | undefined>;
+  associations?: Record<string, { results?: Array<{ id: string }> }>;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
 };
 
 function hubspotRecord(row: any) {
@@ -102,6 +117,41 @@ function sortContactsByActivity(contacts: any[]) {
   });
 }
 
+function associationIds(record: any, key: string) {
+  return (record?.associations?.[key]?.results || []).map((item: { id: string }) => String(item.id));
+}
+
+function hasAssociationKey(record: any, key: string) {
+  return Boolean(record?.associations && Object.prototype.hasOwnProperty.call(record.associations, key));
+}
+
+function unique(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function chunks<T>(items: T[], size = 100) {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
+}
+
+async function readHubSpotBatch(objectPath: string, ids: string[], properties: string[]) {
+  const records: HubSpotRecord[] = [];
+  for (const batch of chunks(unique(ids))) {
+    if (!batch.length) continue;
+    try {
+      const data = await hubspotJson(`/crm/objects/2026-03/${objectPath}/batch/read`, {
+        method: "POST",
+        body: JSON.stringify({ properties, inputs: batch.map(id => ({ id })) }),
+      });
+      records.push(...(data.results || []));
+    } catch (error) {
+      console.error(`HubSpot batch read ${objectPath}:`, error);
+    }
+  }
+  return records;
+}
+
 async function updateLocalCompany(id: string, updated: any, fallbackProperties?: Record<string, string>) {
   const supabase = getSupabaseAdmin();
   const { data: existing } = await supabase.from("companies").select("*").eq("hubspot_id", id).maybeSingle();
@@ -122,6 +172,13 @@ async function updateLocalCompany(id: string, updated: any, fallbackProperties?:
   if (error) console.error("Supabase update company:", error.message);
 }
 
+function mergeById(primary: any[], fallback: any[]) {
+  const map = new Map<string, any>();
+  for (const item of fallback) map.set(String(item.id), item);
+  for (const item of primary) map.set(String(item.id), { ...(map.get(String(item.id)) || {}), ...item, properties: { ...(map.get(String(item.id))?.properties || {}), ...(item.properties || {}) } });
+  return [...map.values()];
+}
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -137,17 +194,17 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     }));
     const companyProperties = [...BASE_COMPANY_DETAIL_PROPERTIES, ...qualificationSchema.available];
 
-    const [contactsResult, activitiesResult, dealsResult, tasksResult, freshCompany] = await Promise.all([
-      supabase.from("contacts").select("hubspot_id,raw_data").eq("company_id", company.id),
-      supabase.from("activities").select("hubspot_id,activity_type,occurred_at,raw_data").eq("company_id", company.id),
+    const [localLinkedContacts, localCompanyActivities, localCompanyTasks, localCompanyDeals, freshCompany] = await Promise.all([
+      supabase.from("contacts").select("id,hubspot_id,raw_data").eq("company_id", company.id),
+      supabase.from("activities").select("hubspot_id,activity_type,occurred_at,contact_id,raw_data").eq("company_id", company.id),
+      supabase.from("tasks").select("hubspot_id,contact_id,raw_data").eq("company_id", company.id),
       supabase.from("deals").select("hubspot_id,raw_data").eq("company_id", company.id),
-      supabase.from("tasks").select("hubspot_id,raw_data").eq("company_id", company.id),
-      hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}?properties=${encodeURIComponent(companyProperties.join(","))}`),
+      hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}?properties=${encodeURIComponent(companyProperties.join(","))}&associations=contacts,deals,notes,calls,meetings,tasks`),
     ]);
-    if (contactsResult.error) throw contactsResult.error;
-    if (activitiesResult.error) throw activitiesResult.error;
-    if (dealsResult.error) throw dealsResult.error;
-    if (tasksResult.error) throw tasksResult.error;
+    if (localLinkedContacts.error) throw localLinkedContacts.error;
+    if (localCompanyActivities.error) throw localCompanyActivities.error;
+    if (localCompanyTasks.error) throw localCompanyTasks.error;
+    if (localCompanyDeals.error) throw localCompanyDeals.error;
 
     const cachedCompany = hubspotRecord(company);
     let companyRecord = {
@@ -155,22 +212,68 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       properties: { ...cachedCompany.properties, ...(freshCompany.properties ?? {}), __hubspot_id: String(id) },
     };
 
-    const cachedContacts = (contactsResult.data ?? []).map(hubspotRecord);
-    const contactIds = cachedContacts.map(contact => contact.id);
-    let contacts = cachedContacts.map(contact => ({
-      ...contact,
-      properties: { ...contact.properties, __hubspot_id: contact.id },
-    }));
+    // HubSpot is the source of truth for associations. Supabase is used only as a fallback
+    // when the association collection is not returned by HubSpot.
+    const localContactIds = (localLinkedContacts.data || []).map((contact: any) => String(contact.hubspot_id));
+    const contactIds = hasAssociationKey(freshCompany, "contacts")
+      ? associationIds(freshCompany, "contacts")
+      : localContactIds;
+
+    const { data: cachedContactRows, error: cachedContactError } = contactIds.length
+      ? await supabase.from("contacts").select("id,hubspot_id,raw_data").in("hubspot_id", contactIds)
+      : { data: [], error: null } as any;
+    if (cachedContactError) throw cachedContactError;
+
+    const cachedContactMap = new Map((cachedContactRows || []).map((row: any) => [String(row.hubspot_id), row]));
+    let freshContacts: HubSpotRecord[] = [];
     if (contactIds.length) {
-      const freshContacts = await hubspotJson(`/crm/objects/2026-03/contacts/batch/read`, {
+      const data = await hubspotJson(`/crm/objects/2026-03/contacts/batch/read?associations=notes,calls,meetings,tasks`, {
         method: "POST",
         body: JSON.stringify({ properties: CONTACT_PROFILE_PROPERTIES, inputs: contactIds.map(contactId => ({ id: contactId })) }),
       });
-      const freshById = new Map((freshContacts.results ?? []).map((record: any) => [String(record.id), record.properties ?? {}]));
-      contacts = cachedContacts.map(contact => ({
-        ...contact,
-        properties: { ...contact.properties, ...(freshById.get(contact.id) ?? {}), __hubspot_id: contact.id },
-      }));
+      freshContacts = data.results || [];
+    }
+
+    const freshContactMap = new Map(freshContacts.map(contact => [String(contact.id), contact]));
+    const contacts = contactIds.map(contactId => {
+      const cached = cachedContactMap.get(contactId);
+      const fresh = freshContactMap.get(contactId);
+      return {
+        ...(fresh || {}),
+        id: contactId,
+        properties: {
+          ...(cached?.raw_data?.properties || {}),
+          ...(fresh?.properties || {}),
+          __hubspot_id: contactId,
+        },
+        associations: fresh?.associations || cached?.raw_data?.associations || {},
+      };
+    });
+
+    // Keep the local company_id synchronized with the real HubSpot association set.
+    if (contacts.length) {
+      const localRows = contacts.map((contact: any) => {
+        const properties = contact.properties || {};
+        const cached = cachedContactMap.get(String(contact.id));
+        return {
+          hubspot_id: String(contact.id),
+          company_id: company.id,
+          first_name: properties.firstname ?? null,
+          last_name: properties.lastname ?? null,
+          email: properties.email ?? null,
+          phone: properties.phone || properties.mobilephone || null,
+          job_title: properties.jobtitle ?? null,
+          owner_hubspot_id: properties.hubspot_owner_id ?? null,
+          raw_data: {
+            ...(cached?.raw_data || {}),
+            ...contact,
+            properties: { ...(cached?.raw_data?.properties || {}), ...properties },
+          },
+          hubspot_updated_at: contact.updatedAt || new Date().toISOString(),
+        };
+      });
+      const { error: localSyncError } = await supabase.from("contacts").upsert(localRows, { onConflict: "hubspot_id" });
+      if (localSyncError) console.error("Supabase sync HubSpot company contacts:", localSyncError.message);
     }
 
     // Promote existing contact-level qualification history to the company the first time it is missing there.
@@ -212,28 +315,107 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    const activities = activitiesResult.data ?? [];
-    const notes = activities.filter(a => a.activity_type === "note").map(hubspotRecord);
-    const calls = activities
-      .filter(a => a.activity_type === "call")
-      .map(hubspotRecord)
+    // Build a centralized activity index: direct company activities + every activity
+    // associated with any HubSpot contact of the company.
+    const contactNameById = new Map<string, string>();
+    const activitySourceContact = {
+      notes: new Map<string, string>(),
+      calls: new Map<string, string>(),
+      meetings: new Map<string, string>(),
+      tasks: new Map<string, string>(),
+    };
+
+    for (const contact of contacts) {
+      const cp = contact.properties || {};
+      contactNameById.set(String(contact.id), [cp.firstname, cp.lastname].filter(Boolean).join(" ") || cp.email || "Contact");
+      for (const type of ["notes", "calls", "meetings", "tasks"] as const) {
+        for (const activityId of associationIds(contact, type)) {
+          if (!activitySourceContact[type].has(activityId)) activitySourceContact[type].set(activityId, String(contact.id));
+        }
+      }
+    }
+
+    const directIds = {
+      notes: hasAssociationKey(freshCompany, "notes") ? associationIds(freshCompany, "notes") : [],
+      calls: hasAssociationKey(freshCompany, "calls") ? associationIds(freshCompany, "calls") : [],
+      meetings: hasAssociationKey(freshCompany, "meetings") ? associationIds(freshCompany, "meetings") : [],
+      tasks: hasAssociationKey(freshCompany, "tasks") ? associationIds(freshCompany, "tasks") : [],
+      deals: hasAssociationKey(freshCompany, "deals") ? associationIds(freshCompany, "deals") : (localCompanyDeals.data || []).map((deal: any) => String(deal.hubspot_id)),
+    };
+
+    const noteIds = unique([...directIds.notes, ...activitySourceContact.notes.keys()]);
+    const callIds = unique([...directIds.calls, ...activitySourceContact.calls.keys()]);
+    const meetingIds = unique([...directIds.meetings, ...activitySourceContact.meetings.keys()]);
+    const taskIds = unique([...directIds.tasks, ...activitySourceContact.tasks.keys()]);
+
+    const localContactInternalIds = (cachedContactRows || []).map((row: any) => row.id).filter(Boolean);
+    const [localContactActivities, localContactTasks, freshNotes, freshCalls, freshMeetings, freshTasks, freshDeals] = await Promise.all([
+      localContactInternalIds.length
+        ? supabase.from("activities").select("hubspot_id,activity_type,occurred_at,contact_id,raw_data").in("contact_id", localContactInternalIds)
+        : Promise.resolve({ data: [], error: null }),
+      localContactInternalIds.length
+        ? supabase.from("tasks").select("hubspot_id,contact_id,raw_data").in("contact_id", localContactInternalIds)
+        : Promise.resolve({ data: [], error: null }),
+      readHubSpotBatch("notes", noteIds, NOTE_PROPERTIES),
+      readHubSpotBatch("calls", callIds, CALL_PROPERTIES),
+      readHubSpotBatch("meetings", meetingIds, MEETING_PROPERTIES),
+      readHubSpotBatch("tasks", taskIds, TASK_PROPERTIES),
+      readHubSpotBatch("deals", directIds.deals, DEAL_PROPERTIES),
+    ]);
+
+    const localActivityRows = [...(localCompanyActivities.data || []), ...(localContactActivities.data || [])];
+    const localTaskRows = [...(localCompanyTasks.data || []), ...(localContactTasks.data || [])];
+
+    const sourceFor = (type: "notes" | "calls" | "meetings" | "tasks", record: any) => {
+      const contactId = activitySourceContact[type].get(String(record.id));
+      return contactId
+        ? { sourceType: "contact", sourceContactId: contactId, sourceContactName: contactNameById.get(contactId) || "Contact" }
+        : { sourceType: "company", sourceContactId: null, sourceContactName: null };
+    };
+
+    const localNotes = localActivityRows.filter((row: any) => row.activity_type === "note").map(hubspotRecord);
+    const localCalls = localActivityRows.filter((row: any) => row.activity_type === "call").map(hubspotRecord);
+    const localMeetings = localActivityRows.filter((row: any) => row.activity_type === "meeting").map(hubspotRecord);
+    const localTasks = localTaskRows.map(hubspotRecord);
+
+    const notes = mergeById(freshNotes, localNotes).map((record: any) => ({ ...record, ...sourceFor("notes", record) }));
+    const calls = mergeById(freshCalls, localCalls)
+      .map((record: any) => ({ ...record, ...sourceFor("calls", record) }))
       .sort((a: any, b: any) => new Date(b.properties?.hs_timestamp || 0).getTime() - new Date(a.properties?.hs_timestamp || 0).getTime());
-    const meetings = activities
-      .filter(a => a.activity_type === "meeting")
-      .map(hubspotRecord)
-      .map((meeting: any) => {
-        const startAt = meeting.properties?.hs_meeting_start_time || meeting.properties?.hs_timestamp || null;
-        const outcome = meeting.properties?.hs_meeting_outcome || (startAt && new Date(startAt).getTime() >= Date.now() ? "SCHEDULED" : "UNREVIEWED");
-        return { ...meeting, derived: { startAt, status: outcome } };
+    const meetings = mergeById(freshMeetings, localMeetings)
+      .map((record: any) => {
+        const startAt = record.properties?.hs_meeting_start_time || record.properties?.hs_timestamp || null;
+        const outcome = record.properties?.hs_meeting_outcome || (startAt && new Date(startAt).getTime() >= Date.now() ? "SCHEDULED" : "UNREVIEWED");
+        return { ...record, ...sourceFor("meetings", record), derived: { startAt, status: outcome } };
       })
       .sort((a: any, b: any) => new Date(b.derived.startAt || 0).getTime() - new Date(a.derived.startAt || 0).getTime());
-    const deals = (dealsResult.data ?? []).map(hubspotRecord);
-    const tasks = (tasksResult.data ?? []).map(hubspotRecord);
+    const tasks = mergeById(freshTasks, localTasks)
+      .map((record: any) => ({ ...record, ...sourceFor("tasks", record) }))
+      .sort((a: any, b: any) => new Date(b.properties?.hs_timestamp || 0).getTime() - new Date(a.properties?.hs_timestamp || 0).getTime());
+    const deals = mergeById(freshDeals, (localCompanyDeals.data || []).map(hubspotRecord));
+
     const nextMeeting = [...meetings]
       .filter((meeting: any) => meeting.derived.status === "SCHEDULED" && new Date(meeting.derived.startAt || 0).getTime() >= Date.now())
       .sort((a: any, b: any) => new Date(a.derived.startAt).getTime() - new Date(b.derived.startAt).getTime())[0] || null;
 
-    return NextResponse.json({ company: companyRecord, contacts, notes, calls, meetings, deals, tasks, nextMeeting, qualificationSchema });
+    return NextResponse.json({
+      company: companyRecord,
+      contacts,
+      notes,
+      calls,
+      meetings,
+      deals,
+      tasks,
+      nextMeeting,
+      qualificationSchema,
+      activitySummary: {
+        notes: notes.length,
+        calls: calls.length,
+        meetings: meetings.length,
+        tasks: tasks.length,
+        total: notes.length + calls.length + meetings.length + tasks.length,
+      },
+    });
   } catch (error) {
     const e = error as Error;
     return NextResponse.json({ error: e.message || "Erreur Supabase", details: e }, { status: 500 });
