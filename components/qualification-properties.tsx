@@ -54,11 +54,22 @@ function splitMulti(value?: string | null) {
 }
 
 function companyProspectionLabel(p: CRMProperties) {
-  if (p.statut_prospection) return String(p.statut_prospection);
+  const explicitStatus = String(p.statut_prospection || "").trim();
+  const callStatus = String(p.statut_de_lappel || "").trim();
+
   if ((p.lifecyclestage || "").toLowerCase() === "customer") return "Gagné";
-  if (p.hs_lead_status === "UNQUALIFIED") return "Perdu";
+  if (explicitStatus && explicitStatus !== "Perdu") return explicitStatus;
+
+  // Normalise les anciennes fiches HubSpot encore stockées avec "Perdu".
+  // Le Cockpit ne doit plus afficher cette valeur métier.
+  if (p.hs_lead_status === "UNQUALIFIED" || explicitStatus === "Perdu") {
+    if (callStatus === "pas_interesse") return "Pas intéressé";
+    if (callStatus === "numero_invalide") return "À contacter";
+    return "Hors cible";
+  }
+
   if (p.hs_lead_status === "OPEN_DEAL") return "Opportunité";
-  if (p.hs_lead_status === "BAD_TIMING") return p.statut_de_lappel === "a_une_date_ulterieure" ? "Ultérieur" : "À relancer";
+  if (p.hs_lead_status === "BAD_TIMING") return callStatus === "a_une_date_ulterieure" ? "Ultérieur" : "À relancer";
   if (p.hs_lead_status === "CONNECTED") return "Contact établi";
   if (p.hs_lead_status === "ATTEMPTED_TO_CONTACT") return "Tentative";
   if (p.hs_lead_status === "OPEN") return "À contacter";
@@ -67,15 +78,16 @@ function companyProspectionLabel(p: CRMProperties) {
 
 function companyStatusProperties(value: string) {
   const map: Record<string, Record<string, string>> = {
-    "À travailler": { statut_prospection: value, hs_lead_status: "NEW", lifecyclestage: "" },
-    "À contacter": { statut_prospection: value, hs_lead_status: "OPEN", lifecyclestage: "" },
-    "Tentative": { statut_prospection: value, hs_lead_status: "ATTEMPTED_TO_CONTACT", lifecyclestage: "" },
+    "À travailler": { statut_prospection: value, hs_lead_status: "NEW", statut_de_lappel: "", lifecyclestage: "" },
+    "À contacter": { statut_prospection: value, hs_lead_status: "OPEN", statut_de_lappel: "", lifecyclestage: "" },
+    "Tentative": { statut_prospection: value, hs_lead_status: "ATTEMPTED_TO_CONTACT", statut_de_lappel: "", lifecyclestage: "" },
     "Contact établi": { statut_prospection: value, hs_lead_status: "CONNECTED", lifecyclestage: "" },
     "À relancer": { statut_prospection: value, hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_rappeler", lifecyclestage: "" },
     "Ultérieur": { statut_prospection: value, hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_une_date_ulterieure", lifecyclestage: "" },
     "Opportunité": { statut_prospection: value, hs_lead_status: "OPEN_DEAL", lifecyclestage: "opportunity" },
-    "Gagné": { statut_prospection: value, hs_lead_status: "OPEN_DEAL", lifecyclestage: "customer" },
-    "Perdu": { statut_prospection: value, hs_lead_status: "UNQUALIFIED", lifecyclestage: "" },
+    "Gagné": { statut_prospection: value, hs_lead_status: "OPEN_DEAL", statut_de_lappel: "interesse", lifecyclestage: "customer" },
+    "Pas intéressé": { statut_prospection: value, hs_lead_status: "UNQUALIFIED", statut_de_lappel: "pas_interesse", lifecyclestage: "" },
+    "Hors cible": { statut_prospection: value, hs_lead_status: "UNQUALIFIED", statut_de_lappel: "hors_cible", lifecyclestage: "" },
   };
   return map[value] || { statut_prospection: value };
 }
@@ -120,7 +132,7 @@ function EditablePropertyCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
-  const options = definition?.options || [];
+  const options = (definition?.options || []).filter(option => option.value !== "Perdu");
   const multiValues = useMemo(() => new Set(splitMulti(draft)), [draft]);
   const Icon = spec.icon;
   const label = definition?.label || spec.fallbackLabel;
