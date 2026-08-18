@@ -174,6 +174,23 @@ export async function createReminderTask(contact: any, reminderAt: Date) {
   return createTask(properties, associations);
 }
 
+export async function createCompanyReminderTask(company: any, reminderAt: Date, reason?: string) {
+  const p = company.properties || {};
+  const companyName = p.name || p.domain || "Entreprise";
+  const properties: Record<string, string> = {
+    hs_task_subject: `Réactiver — ${companyName}`,
+    hs_task_body: reason?.trim()
+      ? `Relance long terme planifiée depuis Gando Sales Cockpit. Motif : ${reason.trim()}`
+      : "Relance long terme planifiée depuis Gando Sales Cockpit.",
+    hs_timestamp: reminderAt.toISOString(),
+    hs_task_status: "NOT_STARTED",
+    hs_task_priority: "HIGH",
+    hs_task_type: "CALL",
+  };
+  if (p.hubspot_owner_id) properties.hubspot_owner_id = String(p.hubspot_owner_id);
+  return createTask(properties, [{ id: String(company.id), associationTypeId: 192 }]);
+}
+
 export async function updateTaskStatus(taskId: string, status: string) {
   const allowed = new Set(["COMPLETED", "DEFERRED", "IN_PROGRESS", "NOT_STARTED", "WAITING"]);
   if (!allowed.has(status)) throw new Error("Statut de tâche invalide");
