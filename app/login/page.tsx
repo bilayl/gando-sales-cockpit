@@ -1,14 +1,16 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { ArrowRight, Building2, CheckCircle2, ShieldCheck, UserRound } from "lucide-react";
-import { isHubSpotAuthenticated, isHubSpotOAuthConfigured } from "@/lib/hubspot";
+import { isAuthBypassEnabled, isHubSpotAuthenticated, isHubSpotOAuthConfigured } from "@/lib/hubspot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  if (isAuthBypassEnabled()) redirect("/prospection");
   if (await isHubSpotAuthenticated()) redirect("/prospection");
+
   const { error } = await searchParams;
   const oauthReady = isHubSpotOAuthConfigured();
   const requestOrigin = `https://${(await headers()).get("host") || ""}`;
