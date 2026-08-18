@@ -32,6 +32,18 @@ export const COMPANY_PIPELINE: Array<{ value: CompanyStage; label: string; tone?
   { value: "LOST", label: "Perdu", tone: "lost" },
 ];
 
+const QUALIFICATION_STAGE: Record<string, CompanyStage> = {
+  "À travailler": "NEW",
+  "À contacter": "OPEN",
+  "Tentative": "ATTEMPTED_TO_CONTACT",
+  "Contact établi": "CONNECTED",
+  "À relancer": "FOLLOW_UP",
+  "Ultérieur": "LATER",
+  "Opportunité": "OPEN_DEAL",
+  "Gagné": "WON",
+  "Perdu": "LOST",
+};
+
 function dateMs(value?: string | null) {
   if (!value) return NaN;
   const n = Number(value);
@@ -40,6 +52,8 @@ function dateMs(value?: string | null) {
 
 export function deriveCompanyStage(company: Company, now = Date.now()): CompanyStage {
   const p = company.properties;
+  const consolidated = p.qualification_status || p.prospecting_status;
+  if (consolidated && QUALIFICATION_STAGE[consolidated]) return QUALIFICATION_STAGE[consolidated];
   if ((p.lifecyclestage || "").toLowerCase() === "customer") return "WON";
   if (p.hs_lead_status === "UNQUALIFIED") return "LOST";
   if (p.hs_lead_status === "BAD_TIMING") {
@@ -161,9 +175,13 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                 <div className="min-h-[120px] flex-1 space-y-2 overflow-y-auto px-3 pb-3 minari-scrollbar">
                   {cards.map(company => {
                     const p = company.properties;
-                    const contacts = Number(p.num_associated_contacts || 0);
-                    const deals = Number(p.num_associated_deals || 0);
-                    const reminder = p.date_de_rappel || p.notes_next_activity_date;
+                    const contacts = Number(p.qualification_contacts_count || p.num_associated_contacts || 0);
+                    const deals = Number(p.qualification_deals_count || p.num_associated_deals || 0);
+                    const overdue = Number(p.qualification_overdue_tasks || 0);
+                    const score = Number(p.qualification_score || 0);
+                    const lastCall = p.qualification_last_call_status || p.statut_de_lappel;
+                    const reminder = p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date;
+                    const lastActivity = p.qualification_last_activity_at || p.notes_last_updated || p.hs_last_sales_activity_timestamp;
                     return (
                       <article
                         key={company.id}
@@ -175,20 +193,24 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                         <button onClick={() => onOpenCompany(company.id)} className="flex w-full items-start gap-2.5 text-left">
                           <Avatar className="h-8 w-8 shrink-0 rounded-lg bg-accent"><AvatarFallback className="rounded-lg bg-accent text-primary"><Building2 size={15} /></AvatarFallback></Avatar>
                           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold hover:text-primary">{p.name || "Entreprise sans nom"}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{p.domain || [p.city, p.country].filter(Boolean).join(", ") || "Compte HubSpot"}</span></span>
+                          {score > 0 ? <Badge variant="secondary" className="shrink-0 text-[10px]">Score {score}</Badge> : null}
                         </button>
 
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground"><Users size={10} /> {contacts} contact{contacts > 1 ? "s" : ""}</Badge>
                           {deals > 0 ? <Badge variant="outline" className="text-[10px] text-primary">{deals} deal{deals > 1 ? "s" : ""}</Badge> : null}
-                          {p.statut_de_lappel ? <Badge variant="outline" className="text-[10px]">{callLabel(p.statut_de_lappel)}</Badge> : null}
+                          {lastCall ? <Badge variant="outline" className="text-[10px]">{callLabel(lastCall)}</Badge> : null}
+                          {overdue > 0 ? <Badge variant="destructive" className="text-[10px]">{overdue} tâche{overdue > 1 ? "s" : ""} en retard</Badge> : null}
                         </div>
 
-                        {reminder && deriveCompanyStage(company) !== "WON" && deriveCompanyStage(company) !== "LOST" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"><CalendarClock size={12} /> {deriveCompanyStage(company) === "LATER" ? "Reprise" : "Rappel"} {formatDate(reminder)}</div> : null}
+                        {p.qualification_reason ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{p.qualification_reason}</p> : null}
+
+                        {reminder && deriveCompanyStage(company) !== "WON" && deriveCompanyStage(company) !== "LOST" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"><CalendarClock size={12} /> {deriveCompanyStage(company) === "LATER" ? "Reprise" : "Action"} {formatDate(reminder)}</div> : null}
                         {deriveCompanyStage(company) === "WON" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={12} /> Client gagné</div> : null}
 
                         <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2 text-[11px] text-muted-foreground">
                           <span className="truncate">{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "Commercial" : "Non assigné"}</span>
-                          {p.phone && !terminal ? <a href={`tel:${p.phone}`} onClick={event => event.stopPropagation()} className="inline-flex shrink-0 items-center gap-1 hover:text-primary"><Phone size={11} /> Appeler</a> : terminal ? <span className="inline-flex items-center gap-1"><RotateCcw size={10} /> Réactivable</span> : <span>{formatDate(p.notes_last_updated || p.hs_last_sales_activity_timestamp)}</span>}
+                          {p.phone && !terminal ? <a href={`tel:${p.phone}`} onClick={event => event.stopPropagation()} className="inline-flex shrink-0 items-center gap-1 hover:text-primary"><Phone size={11} /> Appeler</a> : terminal ? <span className="inline-flex items-center gap-1"><RotateCcw size={10} /> Réactivable</span> : <span>{formatDate(lastActivity)}</span>}
                         </div>
                       </article>
                     );
