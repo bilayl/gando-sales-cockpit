@@ -13,7 +13,7 @@ const CONTACT_DETAIL_PROPERTIES = [
 const editable = [
   "firstname","lastname","email","phone","mobilephone","jobtitle","city","state","country","company","hubspot_owner_id",
   "statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance","ce_quil_apprecie_chez_gando",
-  "objections__retours","zip","campagne_dacquisition","taille_de_flo","suite","solution_paiement_reservation",
+  "objections__retours","zip","campagne_dacquisition","taille_de_flo","hs_country_region_code","suite","solution_paiement_reservation",
 ];
 
 const ACTIVITY_TYPES: Record<string, { path: string; associationTypeId: number; allowed: string[]; type: string }> = {
@@ -50,7 +50,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const cachedContact = hubspotRecord(contact);
     const contactRecord = {
       ...cachedContact,
-      properties: { ...cachedContact.properties, ...(freshContact.properties ?? {}) },
+      properties: { ...cachedContact.properties, ...(freshContact.properties ?? {}), __hubspot_id: String(id) },
     };
     const companies = companiesResult.data ? [hubspotRecord(companiesResult.data)] : [];
     const activities = activitiesResult.data ?? [];
