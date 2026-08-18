@@ -1,6 +1,4 @@
 import { hubspotJson } from "@/lib/hubspot";
-import { countOpenTasksThrough } from "@/lib/hubspot/tasks";
-import { getTodayMeetingContext } from "@/lib/hubspot/meetings";
 
 export type HubSpotRecord = {
   id: string;
@@ -8,15 +6,6 @@ export type HubSpotRecord = {
   associations?: Record<string, { results?: Array<{ id: string; type?: string }> }>;
   createdAt?: string;
   updatedAt?: string;
-};
-
-export type PriorityContact = HubSpotRecord & {
-  priorityScore: number;
-  priorityLabel: string;
-  priorityTone: "urgent" | "today" | "normal" | "healthy";
-  priorityReason: string;
-  nextReminderAt: string | null;
-  attemptCount: number;
 };
 
 export const CONTACT_PROPERTIES = [
@@ -27,8 +16,6 @@ export const CONTACT_PROPERTIES = [
   "hs_object_source_label", "state", "city", "createdate",
 ];
 
-const EXCLUDED_CALL_STATUSES = new Set(["pas interesse", "hors cible", "numero invalide"]);
-const EXCLUDED_PROSPECTION_STATUSES = new Set(["non qualifie", "perdu", "a recycler"]);
 const CALLBACK_STATUSES = new Set(["occupe", "a rappeler", "a une date ulterieure", "interesse mais"]);
 
 function normalize(value?: string | null) {
@@ -43,146 +30,9 @@ export function parseHubSpotDate(value?: string | null) {
   return Number.isFinite(milliseconds) ? new Date(milliseconds) : null;
 }
 
-function startOfDay(date: Date) {
-  const value = new Date(date);
-  value.setHours(0, 0, 0, 0);
-  return value;
-}
-
-function endOfDay(date: Date) {
-  const value = new Date(date);
-  value.setHours(23, 59, 59, 999);
-  return value;
-}
-
 function attemptCount(properties: HubSpotRecord["properties"]) {
   const count = Number.parseInt(String(properties.minari_call_count || "0"), 10);
   return Number.isFinite(count) && count > 0 ? count : 0;
-}
-
-export function calculateContactPriority(contact: HubSpotRecord, now = new Date()) {
-  const p = contact.properties;
-  const callStatus = normalize(p.statut_de_lappel);
-  const prospectionStatus = normalize(p.statut_prospection);
-  const nextReminder = parseHubSpotDate(p.date_prochaine_relance);
-  const lastContact = parseHubSpotDate(p.notes_last_contacted || p.hs_last_sales_activity_timestamp);
-  const attempts = attemptCount(p);
-  const reason = (p.referly_reason_to_reach_out || "").trim();
-  const hasPhone = Boolean((p.phone || p.mobilephone || "").trim());
-  const terminal = EXCLUDED_CALL_STATUSES.has(callStatus) || EXCLUDED_PROSPECTION_STATUSES.has(prospectionStatus);
-  const deferred = Boolean(nextReminder && nextReminder.getTime() > now.getTime() + 30 * 60_000 && CALLBACK_STATUSES.has(callStatus));
-
-  if (!hasPhone || terminal || deferred) {
-    return {
-      eligible: false,
-      score: terminal || !hasPhone ? 0 : 10,
-      label: !hasPhone ? "Sans téléphone" : terminal ? "Hors file" : "Planifié",
-      tone: "healthy" as const,
-      reason: reason || (nextReminder ? "Rappel déjà planifié." : "Ce contact ne fait pas partie de la file active."),
-      attempts,
-      nextReminder,
-    };
-  }
-
-  if (nextReminder && nextReminder.getTime() < now.getTime()) {
-    return { eligible: true, score: 100, label: "Rappel en retard", tone: "urgent" as const, reason: reason || "La date de relance est dépassée.", attempts, nextReminder };
-  }
-  if (nextReminder && nextReminder.getTime() <= now.getTime() + 30 * 60_000) {
-    return { eligible: true, score: 90, label: "À rappeler maintenant", tone: "urgent" as const, reason: reason || "Le créneau de rappel est arrivé.", attempts, nextReminder };
-  }
-  if (reason && /rappel|rappeler|recontact|call back/.test(normalize(reason))) {
-    return { eligible: true, score: 80, label: "Rappel demandé", tone: "today" as const, reason, attempts, nextReminder };
-  }
-  if (["interesse", "interesse mais", "en attente decision"].includes(callStatus)) {
-    return { eligible: true, score: 70, label: "Contact intéressé", tone: "today" as const, reason: reason || "Le contact a montré de l’intérêt.", attempts, nextReminder };
-  }
-  if (!lastContact && attempts === 0) {
-    return { eligible: true, score: 60, label: "Nouveau prospect", tone: "normal" as const, reason: reason || "Ce prospect n’a encore jamais été appelé.", attempts, nextReminder };
-  }
-  if (callStatus === "nrp") {
-    const firstAttempt = attempts <= 1;
-    return { eligible: true, score: firstAttempt ? 50 : 40, label: firstAttempt ? "NRP · 1 tentative" : "NRP · plusieurs tentatives", tone: "normal" as const, reason: reason || "Nouvelle tentative après un appel sans réponse.", attempts, nextReminder };
-  }
-  if (lastContact && now.getTime() - lastContact.getTime() < 24 * 60 * 60_000) {
-    return { eligible: true, score: 20, label: "Appelé récemment", tone: "normal" as const, reason: reason || "Ce contact a été appelé dans les dernières 24 heures.", attempts, nextReminder };
-  }
-  return { eligible: true, score: 30, label: "À contacter", tone: "normal" as const, reason: reason || "Prospect actif dans la prospection.", attempts, nextReminder };
-}
-
-export async function loadAllContacts(owner?: string) {
-  const rows: HubSpotRecord[] = [];
-  let after: string | undefined;
-  do {
-    const query = new URLSearchParams({ limit: "100", properties: CONTACT_PROPERTIES.join(",") });
-    if (after) query.set("after", after);
-    const page = await hubspotJson(`/crm/objects/2026-03/contacts?${query}`);
-    rows.push(...(page.results || []));
-    after = page.paging?.next?.after;
-  } while (after);
-  return owner ? rows.filter(contact => contact.properties.hubspot_owner_id === owner) : rows;
-}
-
-export async function getTodayCockpit(owner?: string) {
-  const now = new Date();
-  const [contacts, tasksDue, meetingContext] = await Promise.all([
-    loadAllContacts(owner),
-    countOpenTasksThrough(endOfDay(now), owner),
-    getTodayMeetingContext(owner),
-  ]);
-  const scheduledContactIds = new Set(meetingContext.scheduledContactIds);
-  const scheduledCompanyNames = new Set(meetingContext.scheduledCompanyNames);
-
-  const enriched = contacts.map(contact => {
-    const priority = calculateContactPriority(contact, now);
-    return {
-      ...contact,
-      priorityScore: priority.score,
-      priorityLabel: priority.label,
-      priorityTone: priority.tone,
-      priorityReason: priority.reason,
-      nextReminderAt: priority.nextReminder?.toISOString() || null,
-      attemptCount: priority.attempts,
-      eligible: priority.eligible,
-    };
-  });
-
-  const queue = enriched
-    .filter(contact => contact.eligible
-      && !scheduledContactIds.has(contact.id)
-      && !scheduledCompanyNames.has(contact.properties.company?.trim().toLowerCase() || ""))
-    .sort((a, b) => b.priorityScore - a.priorityScore || (a.nextReminderAt ? Date.parse(a.nextReminderAt) : Number.MAX_SAFE_INTEGER) - (b.nextReminderAt ? Date.parse(b.nextReminderAt) : Number.MAX_SAFE_INTEGER))
-    .map(contact => ({
-      id: contact.id,
-      properties: contact.properties,
-      associations: contact.associations,
-      createdAt: contact.createdAt,
-      updatedAt: contact.updatedAt,
-      priorityScore: contact.priorityScore,
-      priorityLabel: contact.priorityLabel,
-      priorityTone: contact.priorityTone,
-      priorityReason: contact.priorityReason,
-      nextReminderAt: contact.nextReminderAt,
-      attemptCount: contact.attemptCount,
-    } satisfies PriorityContact));
-
-  const dayStart = startOfDay(now).getTime();
-  const dayEnd = endOfDay(now).getTime();
-  const overdueReminders = enriched.filter(c => c.nextReminderAt && Date.parse(c.nextReminderAt) < now.getTime() && c.priorityScore > 0).length;
-  const remindersToday = enriched.filter(c => c.nextReminderAt && Date.parse(c.nextReminderAt) >= dayStart && Date.parse(c.nextReminderAt) <= dayEnd && c.priorityScore > 0).length;
-  const newProspects = queue.filter(c => c.priorityScore === 60).length;
-
-  return {
-    generatedAt: now.toISOString(),
-    queue,
-    stats: {
-      overdueReminders,
-      remindersToday,
-      newProspects,
-      tasksDue,
-      meetingsToday: meetingContext.meetingsToday,
-      actionsToday: queue.length + tasksDue,
-    },
-  };
 }
 
 export function outcomeNeedsReminder(outcome: string) {
@@ -269,7 +119,6 @@ export async function saveCallOutcome(contactId: string, outcome: string, remind
     });
   }
 
-  // WF01-WF04 are the source of truth for task creation and recycling.
-  // The Cockpit only writes the properties that enroll the contact in those workflows.
+  // WF01-WF04 remain the source of truth for tasks and recycling.
   return { contact: updatedContact, company: updatedCompany, task: null };
 }
