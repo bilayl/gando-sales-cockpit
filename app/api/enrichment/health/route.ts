@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
-import { enrichmentAuthHeaders, enrichmentBackendUrl, hasEnrichmentAuth } from "@/lib/enrichment-auth";
+import { enrichmentAuthHeaders, enrichmentBackendUrl } from "@/lib/enrichment-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    if (!hasEnrichmentAuth()) {
+    const authHeaders = await enrichmentAuthHeaders();
+    if (!Object.keys(authHeaders).length) {
       return NextResponse.json({ ok: false, error: "ENRICHMENT_AUTH_MISSING" }, { status: 503 });
     }
 
     const response = await fetch(`${enrichmentBackendUrl()}/api/internal/health`, {
-      headers: enrichmentAuthHeaders(),
+      headers: authHeaders,
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
