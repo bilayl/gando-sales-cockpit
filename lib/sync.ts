@@ -3,9 +3,18 @@ import { hubspotJson } from "@/lib/hubspot";
 
 type HubSpotRecord = { id: string; properties: Record<string, string | null | undefined>; createdAt?: string; updatedAt?: string };
 
-const COMPANY_PROPERTIES = ["name","domain","phone","website","city","zip","state","country","industry","description","hubspot_owner_id","num_associated_contacts","hs_last_sales_activity_timestamp","hs_object_source_label","createdate"];
+const COMPANY_PROPERTIES = [
+  "name","domain","phone","website","city","zip","state","country","industry","description","hubspot_owner_id","num_associated_contacts","num_associated_deals",
+  "hs_last_sales_activity_timestamp","hs_object_source_label","createdate","hs_lead_status","lifecyclestage","statut_de_lappel","date_de_rappel","statut_prospection",
+  "ce_quil_apprecie_chez_gando","objections__retours","campagne_dacquisition","suite","taille_flotte","hs_country_code","solution_paiement_reservation",
+];
 
-const CONTACT_PROPERTIES = ["firstname","lastname","email","phone","mobilephone","company","jobtitle","hs_parent_company_id","hubspot_owner_id","statut_prospection","resultat_prospection","statut_de_lappel","date_prochaine_relance","minari_call_count","referly_call_outcome","referly_reason_to_reach_out","state","city","hs_last_sales_activity_timestamp","notes_last_contacted","hs_object_source_label","createdate"];
+const CONTACT_PROPERTIES = [
+  "firstname","lastname","email","phone","mobilephone","company","jobtitle","hs_parent_company_id","hubspot_owner_id","statut_prospection","resultat_prospection",
+  "statut_de_lappel","date_prochaine_relance","date_recyclage","minari_call_count","referly_call_outcome","referly_reason_to_reach_out","state","city",
+  "hs_last_sales_activity_timestamp","notes_last_contacted","hs_object_source_label","createdate","ce_quil_apprecie_chez_gando","objections__retours","campagne_dacquisition",
+  "suite","taille_de_flo","hs_country_region_code","solution_paiement_reservation",
+];
 
 const DEAL_PROPERTIES = ["dealname","amount","pipeline","dealstage","associatedcompanyid","hubspot_owner_id","closedate","createdate"];
 
@@ -75,20 +84,38 @@ async function upsertRows(table: string, rows: Record<string, unknown>[]) {
   if (error) throw error;
 }
 
+async function associationTargets(fromType: string, toType: "contacts" | "companies" | "deals", ids: string[]) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return new Map<string, string[]>();
+  try {
+    const data = await hubspotJson(`/crm/associations/2026-03/${fromType}/${toType}/batch/read`, {
+      method: "POST",
+      body: JSON.stringify({ inputs: unique.map(id => ({ id })) }),
+    });
+    return new Map<string, string[]>((data.results || []).map((row: any) => [
+      String(row.from?.id || row.fromObjectId || ""),
+      (row.to || []).map((target: any) => String(target.toObjectId || target.id || "")).filter(Boolean),
+    ]));
+  } catch (error) {
+    console.error(`HubSpot sync association ${fromType}->${toType}:`, error);
+    return new Map<string, string[]>();
+  }
+}
+
 async function fetchAssociations(type: string, ids: string[]) {
   const unique = [...new Set(ids)];
   if (!unique.length) return new Map<string, { contactId: string | null; companyId: string | null; dealId: string | null }>();
-  const data = await hubspotJson(`/crm/objects/2026-03/${type}/batch/read?associations=contacts,companies,deals`, {
-    method: "POST",
-    body: JSON.stringify({ properties: [], inputs: unique.map(id => ({ id })) }),
-  });
+  const [contacts, companies, deals] = await Promise.all([
+    associationTargets(type, "contacts", unique),
+    associationTargets(type, "companies", unique),
+    associationTargets(type, "deals", unique),
+  ]);
   const map = new Map<string, { contactId: string | null; companyId: string | null; dealId: string | null }>();
-  for (const record of data.results ?? []) {
-    const first = (list?: unknown) => (Array.isArray(list) ? (list[0] as { id: string })?.id : null);
-    map.set(String(record.id), {
-      contactId: first((record.associations as any)?.contacts?.results) ?? null,
-      companyId: first((record.associations as any)?.companies?.results) ?? null,
-      dealId: first((record.associations as any)?.deals?.results) ?? null,
+  for (const id of unique) {
+    map.set(id, {
+      contactId: contacts.get(id)?.[0] ?? null,
+      companyId: companies.get(id)?.[0] ?? null,
+      dealId: deals.get(id)?.[0] ?? null,
     });
   }
   return map;
@@ -137,32 +164,34 @@ export async function syncCompanies(): Promise<SyncResult> {
 
 export async function syncContacts(): Promise<SyncResult> {
   const companyIdMap = await loadIdMap("companies");
-  return runSync("contacts", "contacts", "contacts", CONTACT_PROPERTIES, async records =>
-    records.map(r => {
+  return runSync("contacts", "contacts", "contacts", CONTACT_PROPERTIES, async records => {
+    const assocMap = await fetchAssociations("contacts", records.map(r => String(r.id)));
+    return records.map(r => {
       const p = r.properties ?? {};
-      const parent = p.hs_parent_company_id;
+      const associatedCompany = assocMap.get(String(r.id))?.companyId || p.hs_parent_company_id || null;
       return {
         hubspot_id: String(r.id),
-        company_id: parent ? companyIdMap.get(String(parent)) ?? null : null,
+        company_id: associatedCompany ? companyIdMap.get(String(associatedCompany)) ?? null : null,
         first_name: p.firstname ?? null,
         last_name: p.lastname ?? null,
         email: p.email ?? null,
-        phone: p.phone ?? null,
+        phone: p.phone || p.mobilephone || null,
         job_title: p.jobtitle ?? null,
         owner_hubspot_id: p.hubspot_owner_id ?? null,
         raw_data: r,
         hubspot_updated_at: r.updatedAt ?? null,
       };
-    }),
-  );
+    });
+  });
 }
 
 export async function syncDeals(): Promise<SyncResult> {
   const companyIdMap = await loadIdMap("companies");
-  return runSync("deals", "deals", "deals", DEAL_PROPERTIES, async records =>
-    records.map(r => {
+  return runSync("deals", "deals", "deals", DEAL_PROPERTIES, async records => {
+    const assocMap = await fetchAssociations("deals", records.map(r => String(r.id)));
+    return records.map(r => {
       const p = r.properties ?? {};
-      const company = p.associatedcompanyid;
+      const company = assocMap.get(String(r.id))?.companyId || p.associatedcompanyid;
       return {
         hubspot_id: String(r.id),
         company_id: company ? companyIdMap.get(String(company)) ?? null : null,
@@ -175,8 +204,8 @@ export async function syncDeals(): Promise<SyncResult> {
         raw_data: r,
         hubspot_updated_at: r.updatedAt ?? null,
       };
-    }),
-  );
+    });
+  });
 }
 
 export async function syncTasks(): Promise<SyncResult> {
