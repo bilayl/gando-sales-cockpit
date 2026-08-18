@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 
 export type PostCallEmailButtonProps = {
   contactId: string;
+  callId?: string;
   email: string;
   firstName?: string;
   companyName?: string;
@@ -17,10 +18,12 @@ export type PostCallEmailButtonProps = {
   callTitle?: string;
   callBody?: string;
   transcription: string;
+  onSent?: () => void;
 };
 
 export function PostCallEmailButton({
   contactId,
+  callId,
   email,
   firstName,
   companyName,
@@ -28,6 +31,7 @@ export function PostCallEmailButton({
   callTitle,
   callBody,
   transcription,
+  onSent,
 }: PostCallEmailButtonProps) {
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(email);
@@ -76,7 +80,8 @@ export function PostCallEmailButton({
 
   async function logSentEmail() {
     try {
-      const note = `Email de récap après appel envoyé à ${to.trim()}\n\nObjet : ${subject.trim()}\n\n${body.trim()}`;
+      const marker = callId ? `[GANDO_POST_CALL_EMAIL:${callId}]\n` : "";
+      const note = `${marker}Email de récap après appel envoyé à ${to.trim()}\n\nObjet : ${subject.trim()}\n\n${body.trim()}`;
       await fetch(`/api/contacts/${contactId}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -108,6 +113,7 @@ export function PostCallEmailButton({
       await logSentEmail();
       toast.success("Email de récap envoyé et journalisé dans HubSpot.");
       setOpen(false);
+      onSent?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible d'envoyer l'email");
     } finally {
