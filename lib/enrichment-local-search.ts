@@ -1,0 +1,77 @@
+import { getVercelOidcToken } from "@vercel/oidc";
+import type { SourcingProspect } from "@/lib/enrichment-dedup";
+
+const AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/messages";
+
+function extractText(payload: any) {
+  return (payload?.content || [])
+    .filter((item: any) => item?.type === "text" && typeof item.text === "string")
+    .map((item: any) => item.text)
+    .join("\n")
+    .trim();
+}
+
+function parseJson(text: string) {
+  const clean = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const start = clean.indexOf("{");
+  const end = clean.lastIndexOf("}");
+  return JSON.parse(start >= 0 && end > start ? clean.slice(start, end + 1) : clean);
+}
+
+export async function searchRentalCompaniesLocally(input: {
+  query?: string;
+  territories?: string[];
+  sources?: string[];
+  limit?: number;
+}) {
+  const token = process.env.AI_GATEWAY_API_KEY || await getVercelOidcToken();
+  if (!token) throw new Error("Vercel AI Gateway identity missing");
+
+  const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 50);
+  const target = Math.min(Math.max(limit * 2, 20), 60);
+  const territories = input.territories?.length
+    ? input.territories
+    : ["France métropolitaine", "Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte"];
+  const sources = input.sources?.length
+    ? input.sources
+    : ["Leboncoin", "Facebook public", "Instagram public", "Google", "annuaires professionnels", "sites web de loueurs"];
+
+  const prompt = `Tu es le moteur de sourcing B2B de Gando.
+Trouve jusqu'à ${target} entreprises professionnelles de location de véhicules actives dans : ${territories.join(", ")}.
+Priorise les sources publiques suivantes : ${sources.join(", ")}.
+${input.query ? `Contrainte supplémentaire : ${input.query}.` : ""}
+Effectue de vraies recherches web.
+Règles : uniquement professionnels/entreprises ; jamais de particuliers pair-à-pair ; chaque prospect doit avoir au moins une URL publique vérifiable ; n'invente jamais nom, téléphone, domaine, email ou localisation ; confidence entre 0 et 1 ; gandoScore entre 0 et 100 ; sourceTypes parmi leboncoin, facebook, instagram, google, directory, official_website, other.
+Réponds UNIQUEMENT avec un JSON valide de forme {"prospects":[{"companyName":"...","city":"...","territory":"...","country":"France","website":"...","domain":"...","phone":"...","publicBusinessEmail":"...","sourceUrls":["https://..."],"sourceTypes":["google"],"evidence":"...","confidence":0.9,"gandoScore":85,"qualificationReason":"..."}]}.`;
+
+  const response = await fetch(AI_GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: process.env.ENRICHMENT_MODEL || "anthropic/claude-opus-5",
+      max_tokens: 7000,
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      messages: [{ role: "user", content: prompt }],
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(55_000),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(`AI Gateway ${response.status}: ${payload?.error?.message || payload?.error || response.statusText}`);
+  }
+
+  const parsed = parseJson(extractText(payload));
+  const prospects = (Array.isArray(parsed?.prospects) ? parsed.prospects : []) as SourcingProspect[];
+  return {
+    searchId: crypto.randomUUID(),
+    searchedAt: new Date().toISOString(),
+    candidatesFound: prospects.length,
+    prospects,
+    source: "cockpit-fallback" as const,
+  };
+}
