@@ -1,5 +1,5 @@
 import { hubspotJson } from "@/lib/hubspot";
-import { createReminderTask, countOpenTasksThrough } from "@/lib/hubspot/tasks";
+import { countOpenTasksThrough } from "@/lib/hubspot/tasks";
 import { getTodayMeetingContext } from "@/lib/hubspot/meetings";
 
 export type HubSpotRecord = {
@@ -22,13 +22,13 @@ export type PriorityContact = HubSpotRecord & {
 export const CONTACT_PROPERTIES = [
   "firstname", "lastname", "email", "phone", "mobilephone", "company", "jobtitle",
   "hubspot_owner_id", "statut_prospection", "resultat_prospection", "statut_de_lappel",
-  "date_prochaine_relance", "minari_call_count", "referly_call_outcome",
+  "date_prochaine_relance", "date_recyclage", "minari_call_count", "referly_call_outcome",
   "referly_reason_to_reach_out", "notes_last_contacted", "hs_last_sales_activity_timestamp",
   "hs_object_source_label", "state", "city", "createdate",
 ];
 
 const EXCLUDED_CALL_STATUSES = new Set(["pas interesse", "hors cible", "numero invalide"]);
-const EXCLUDED_PROSPECTION_STATUSES = new Set(["non qualifie", "perdu"]);
+const EXCLUDED_PROSPECTION_STATUSES = new Set(["non qualifie", "perdu", "a recycler"]);
 const CALLBACK_STATUSES = new Set(["occupe", "a rappeler", "a une date ulterieure", "interesse mais"]);
 
 function normalize(value?: string | null) {
@@ -189,32 +189,39 @@ export function outcomeNeedsReminder(outcome: string) {
   return CALLBACK_STATUSES.has(normalize(outcome));
 }
 
-const OUTCOME_MAP: Record<string, { callStatus: string; prospectionStatus?: string }> = {
-  "NRP": { callStatus: "NRP" },
-  "Occupé": { callStatus: "Occupé" },
-  "À rappeler": { callStatus: "A Rappeler" },
-  "A Rappeler": { callStatus: "A Rappeler" },
-  "Intéressé": { callStatus: "Intéressé", prospectionStatus: "Conversation" },
-  "RDV pris": { callStatus: "Intéressé", prospectionStatus: "RDV booké" },
-  "Pas intéressé": { callStatus: "pas intéressé", prospectionStatus: "Perdu" },
-  "Hors cible": { callStatus: "HORS CIBLE", prospectionStatus: "Non qualifié" },
-  "Numéro invalide": { callStatus: "Numéro invalide", prospectionStatus: "Non qualifié" },
-  "A une date ultérieure": { callStatus: "A une date ultérieure" },
-  "Intéressé mais": { callStatus: "Intéressé mais", prospectionStatus: "Conversation" },
+type OutcomeMapping = {
+  callStatus: string;
+  prospectionStatus?: string;
+  resultStatus?: string;
+  recycle?: boolean;
 };
 
-const COMPANY_OUTCOME_MAP: Record<string, { callStatus: string; leadStatus?: string }> = {
-  "NRP": { callStatus: "nrp", leadStatus: "ATTEMPTED_TO_CONTACT" },
-  "Occupé": { callStatus: "occupe", leadStatus: "ATTEMPTED_TO_CONTACT" },
-  "À rappeler": { callStatus: "a_rappeler", leadStatus: "BAD_TIMING" },
-  "A Rappeler": { callStatus: "a_rappeler", leadStatus: "BAD_TIMING" },
-  "Intéressé": { callStatus: "interesse", leadStatus: "CONNECTED" },
-  "RDV pris": { callStatus: "interesse", leadStatus: "OPEN_DEAL" },
-  "Pas intéressé": { callStatus: "pas_interesse", leadStatus: "UNQUALIFIED" },
-  "Hors cible": { callStatus: "hors_cible", leadStatus: "UNQUALIFIED" },
-  "Numéro invalide": { callStatus: "numero_invalide", leadStatus: "UNQUALIFIED" },
-  "A une date ultérieure": { callStatus: "a_une_date_ulterieure", leadStatus: "BAD_TIMING" },
-  "Intéressé mais": { callStatus: "interesse_mais", leadStatus: "CONNECTED" },
+const OUTCOME_MAP: Record<string, OutcomeMapping> = {
+  "NRP": { callStatus: "NRP", prospectionStatus: "En prospection", resultStatus: "Sans réponse" },
+  "Occupé": { callStatus: "Occupé", prospectionStatus: "En prospection", resultStatus: "À rappeler" },
+  "À rappeler": { callStatus: "A Rappeler", prospectionStatus: "En prospection", resultStatus: "À rappeler" },
+  "A Rappeler": { callStatus: "A Rappeler", prospectionStatus: "En prospection", resultStatus: "À rappeler" },
+  "Intéressé": { callStatus: "Intéressé", prospectionStatus: "Conversation", resultStatus: "Conversation" },
+  "RDV pris": { callStatus: "Intéressé", prospectionStatus: "RDV booké", resultStatus: "RDV obtenu" },
+  "Pas intéressé": { callStatus: "pas intéressé", prospectionStatus: "Perdu", resultStatus: "Pas intéressé" },
+  "Hors cible": { callStatus: "HORS CIBLE", prospectionStatus: "Non qualifié", resultStatus: "" },
+  "Numéro invalide": { callStatus: "Numéro invalide", prospectionStatus: "Non qualifié", resultStatus: "" },
+  "A une date ultérieure": { callStatus: "A une date ultérieure", prospectionStatus: "À recycler", resultStatus: "", recycle: true },
+  "Intéressé mais": { callStatus: "Intéressé mais", prospectionStatus: "Conversation", resultStatus: "À rappeler" },
+};
+
+const COMPANY_OUTCOME_MAP: Record<string, { callStatus: string; leadStatus?: string; prospectionStatus?: string }> = {
+  "NRP": { callStatus: "nrp", leadStatus: "ATTEMPTED_TO_CONTACT", prospectionStatus: "Tentative" },
+  "Occupé": { callStatus: "occupe", leadStatus: "BAD_TIMING", prospectionStatus: "À relancer" },
+  "À rappeler": { callStatus: "a_rappeler", leadStatus: "BAD_TIMING", prospectionStatus: "À relancer" },
+  "A Rappeler": { callStatus: "a_rappeler", leadStatus: "BAD_TIMING", prospectionStatus: "À relancer" },
+  "Intéressé": { callStatus: "interesse", leadStatus: "CONNECTED", prospectionStatus: "Contact établi" },
+  "RDV pris": { callStatus: "interesse", leadStatus: "OPEN_DEAL", prospectionStatus: "Opportunité" },
+  "Pas intéressé": { callStatus: "pas_interesse", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },
+  "Hors cible": { callStatus: "hors_cible", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },
+  "Numéro invalide": { callStatus: "numero_invalide", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },
+  "A une date ultérieure": { callStatus: "a_une_date_ulterieure", leadStatus: "BAD_TIMING", prospectionStatus: "Ultérieur" },
+  "Intéressé mais": { callStatus: "interesse_mais", leadStatus: "BAD_TIMING", prospectionStatus: "À relancer" },
 };
 
 export async function saveCallOutcome(contactId: string, outcome: string, reminderAt?: string) {
@@ -235,9 +242,11 @@ export async function saveCallOutcome(contactId: string, outcome: string, remind
   const properties: Record<string, string> = {
     statut_de_lappel: mapped.callStatus,
     minari_call_count: String(currentCount + 1),
-    date_prochaine_relance: parsedReminder ? parsedReminder.toISOString() : "",
+    statut_prospection: mapped.prospectionStatus || "En prospection",
+    resultat_prospection: mapped.resultStatus ?? "",
+    date_prochaine_relance: mapped.recycle ? "" : parsedReminder ? parsedReminder.toISOString() : "",
+    date_recyclage: mapped.recycle && parsedReminder ? parsedReminder.toISOString() : "",
   };
-  if (mapped.prospectionStatus) properties.statut_prospection = mapped.prospectionStatus;
 
   const updatedContact = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(contactId)}`, {
     method: "PATCH",
@@ -253,13 +262,14 @@ export async function saveCallOutcome(contactId: string, outcome: string, remind
       date_de_rappel: parsedReminder ? parsedReminder.toISOString() : "",
     };
     if (companyOutcome.leadStatus) companyProperties.hs_lead_status = companyOutcome.leadStatus;
+    if (companyOutcome.prospectionStatus) companyProperties.statut_prospection = companyOutcome.prospectionStatus;
     updatedCompany = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(companyId)}`, {
       method: "PATCH",
       body: JSON.stringify({ properties: companyProperties }),
     });
   }
 
-  let task = null;
-  if (parsedReminder) task = await createReminderTask(contact, parsedReminder);
-  return { contact: updatedContact, company: updatedCompany, task };
+  // WF01-WF04 are the source of truth for task creation and recycling.
+  // The Cockpit only writes the properties that enroll the contact in those workflows.
+  return { contact: updatedContact, company: updatedCompany, task: null };
 }
