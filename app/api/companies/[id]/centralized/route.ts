@@ -13,7 +13,7 @@ const MEETING_PROPERTIES = ["hs_meeting_title","hs_meeting_start_time","hs_meeti
 const TASK_PROPERTIES = ["hs_task_subject","hs_task_body","hs_task_status","hs_task_priority","hs_task_type","hs_timestamp","hubspot_owner_id"];
 const DEAL_PROPERTIES = ["dealname","amount","pipeline","dealstage","closedate","createdate","hubspot_owner_id"];
 
-function ids(record: any, key: string): string[] {
+function associationIds(record: any, key: string): string[] {
   return (record?.associations?.[key]?.results || []).map((item: any) => String(item.id));
 }
 
@@ -27,22 +27,24 @@ async function batchRead(path: string, recordIds: string[], properties: string[]
   for (let index = 0; index < distinct.length; index += 100) {
     const chunk = distinct.slice(index, index + 100);
     if (!chunk.length) continue;
-    try {
-      const result = await hubspotJson(`/crm/objects/2026-03/${path}/batch/read`, {
-        method: "POST",
-        body: JSON.stringify({ properties, inputs: chunk.map(id => ({ id })) }),
-      });
-      all.push(...(result.results || []));
-    } catch (error) {
-      console.error(`HubSpot centralized ${path}:`, error);
-    }
+    const result = await hubspotJson(`/crm/objects/2026-03/${path}/batch/read`, {
+      method: "POST",
+      body: JSON.stringify({ properties, inputs: chunk.map(id => ({ id })) }),
+    });
+    all.push(...(result.results || []));
   }
   return all;
 }
 
 function contactName(contact: any): string {
   const p = contact?.properties || {};
-  return [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Contact";
+  return [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || p.phone || "Contact";
+}
+
+async function loadContactWithAssociations(contactId: string) {
+  return hubspotJson(
+    `/crm/objects/2026-03/contacts/${encodeURIComponent(contactId)}?properties=${encodeURIComponent(CONTACT_PROPERTIES.join(","))}&associations=notes,calls,meetings,tasks`,
+  );
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -52,15 +54,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       `/crm/objects/2026-03/companies/${encodeURIComponent(companyId)}?properties=name,num_associated_contacts,num_associated_deals&associations=contacts,deals,notes,calls,meetings,tasks`,
     );
 
-    const contactIds = ids(company, "contacts");
-    let contacts: any[] = [];
-    if (contactIds.length) {
-      const result = await hubspotJson(`/crm/objects/2026-03/contacts/batch/read?associations=notes,calls,meetings,tasks`, {
-        method: "POST",
-        body: JSON.stringify({ properties: CONTACT_PROPERTIES, inputs: contactIds.map(id => ({ id })) }),
-      });
-      contacts = result.results || [];
-    }
+    const contactIds = associationIds(company, "contacts");
+    const contactResults = await Promise.allSettled(contactIds.slice(0, 100).map(loadContactWithAssociations));
+    const contacts = contactResults
+      .filter((result): result is PromiseFulfilledResult<any> => result.status === "fulfilled")
+      .map(result => result.value);
 
     const sourceMaps: Record<string, Map<string, string>> = {
       notes: new Map(),
@@ -74,17 +72,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       const contactId = String(contact.id);
       names.set(contactId, contactName(contact));
       for (const type of ["notes", "calls", "meetings", "tasks"]) {
-        for (const activityId of ids(contact, type)) {
+        for (const activityId of associationIds(contact, type)) {
           if (!sourceMaps[type].has(activityId)) sourceMaps[type].set(activityId, contactId);
         }
       }
     }
 
-    const noteIds = unique([...ids(company, "notes"), ...Array.from(sourceMaps.notes.keys())]);
-    const callIds = unique([...ids(company, "calls"), ...Array.from(sourceMaps.calls.keys())]);
-    const meetingIds = unique([...ids(company, "meetings"), ...Array.from(sourceMaps.meetings.keys())]);
-    const taskIds = unique([...ids(company, "tasks"), ...Array.from(sourceMaps.tasks.keys())]);
-    const dealIds = unique(ids(company, "deals"));
+    const noteIds = unique([...associationIds(company, "notes"), ...Array.from(sourceMaps.notes.keys())]);
+    const callIds = unique([...associationIds(company, "calls"), ...Array.from(sourceMaps.calls.keys())]);
+    const meetingIds = unique([...associationIds(company, "meetings"), ...Array.from(sourceMaps.meetings.keys())]);
+    const taskIds = unique([...associationIds(company, "tasks"), ...Array.from(sourceMaps.tasks.keys())]);
+    const dealIds = unique(associationIds(company, "deals"));
 
     const [notesRaw, callsRaw, meetingsRaw, tasksRaw, deals] = await Promise.all([
       batchRead("notes", noteIds, NOTE_PROPERTIES),
@@ -114,15 +112,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     });
     const tasks = tasksRaw.map(record => decorate("tasks", record));
 
-    meetings.sort((a, b) => new Date(b.derived?.startAt || 0).getTime() - new Date(a.derived?.startAt || 0).getTime());
+    notes.sort((a, b) => new Date(b.properties?.hs_timestamp || b.properties?.hs_createdate || 0).getTime() - new Date(a.properties?.hs_timestamp || a.properties?.hs_createdate || 0).getTime());
     calls.sort((a, b) => new Date(b.properties?.hs_timestamp || 0).getTime() - new Date(a.properties?.hs_timestamp || 0).getTime());
+    meetings.sort((a, b) => new Date(b.derived?.startAt || 0).getTime() - new Date(a.derived?.startAt || 0).getTime());
     tasks.sort((a, b) => new Date(b.properties?.hs_timestamp || 0).getTime() - new Date(a.properties?.hs_timestamp || 0).getTime());
 
     const nextMeeting = meetings
       .filter(meeting => meeting.derived?.status === "SCHEDULED" && new Date(meeting.derived?.startAt || 0).getTime() >= Date.now())
       .sort((a, b) => new Date(a.derived?.startAt || 0).getTime() - new Date(b.derived?.startAt || 0).getTime())[0] || null;
 
-    // Best-effort local synchronization. HubSpot remains the source of truth.
     const supabase = getSupabaseAdmin();
     const { data: localCompany } = await supabase.from("companies").select("id").eq("hubspot_id", companyId).maybeSingle();
     if (localCompany && contacts.length) {
@@ -146,13 +144,18 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }
 
     return NextResponse.json({
-      contacts: contacts.map(contact => ({ ...contact, id: String(contact.id), properties: { ...(contact.properties || {}), __hubspot_id: String(contact.id) } })),
+      contacts: contacts.map(contact => ({
+        ...contact,
+        id: String(contact.id),
+        properties: { ...(contact.properties || {}), __hubspot_id: String(contact.id) },
+      })),
       notes,
       calls,
       meetings,
       tasks,
       deals,
       nextMeeting,
+      associationWarnings: contactResults.filter(result => result.status === "rejected").length,
       activitySummary: {
         notes: notes.length,
         calls: calls.length,
@@ -163,6 +166,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     });
   } catch (error) {
     const e = error as Error & { status?: number };
+    console.error("Centralized HubSpot company:", e);
     return NextResponse.json({ error: e.message || "Impossible de centraliser l’activité HubSpot" }, { status: e.status || 500 });
   }
 }
