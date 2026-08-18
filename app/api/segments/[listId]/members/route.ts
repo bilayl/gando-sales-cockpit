@@ -6,7 +6,7 @@ const contactProps = ["firstname","lastname","email","phone","mobilephone","comp
 
 const companyProps = [
   "name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id",
-  "num_associated_contacts","num_associated_deals","hs_lead_status","statut_de_lappel","date_de_rappel",
+  "num_associated_contacts","num_associated_deals","hs_lead_status","lifecyclestage","statut_de_lappel","date_de_rappel",
   "notes_next_activity_date","notes_last_updated","hs_last_sales_activity_timestamp","hs_object_source_label","createdate",
 ];
 
@@ -30,8 +30,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (error) throw error;
     const byId = new Map((data ?? []).map(r => [String(r.hubspot_id), r.raw_data]));
 
-    // Company-first requires fresh account-level statuses. Read the current HubSpot properties
-    // for company segments so an existing hs_lead_status/callback is never hidden by an older cache.
     if (objectTypeId === "0-2") {
       const fresh = await hubspotJson(`/crm/objects/2026-03/${objectPath}/batch/read`, {
         method: "POST",
