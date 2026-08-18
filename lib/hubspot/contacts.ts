@@ -1,4 +1,5 @@
 import { hubspotJson } from "@/lib/hubspot";
+import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
 
 export type HubSpotRecord = {
   id: string;
@@ -108,12 +109,15 @@ export async function saveCallOutcome(contactId: string, outcome: string, remind
   const companyId = contact.associations?.companies?.results?.[0]?.id;
   const companyOutcome = COMPANY_OUTCOME_MAP[outcome];
   if (companyId && companyOutcome) {
+    const schema = await ensureCompanyQualificationProperties().catch(() => ({ available: [] as string[], created: [] as string[], unavailable: [] }));
     const companyProperties: Record<string, string> = {
       statut_de_lappel: companyOutcome.callStatus,
       date_de_rappel: parsedReminder ? parsedReminder.toISOString() : "",
     };
     if (companyOutcome.leadStatus) companyProperties.hs_lead_status = companyOutcome.leadStatus;
-    if (companyOutcome.prospectionStatus) companyProperties.statut_prospection = companyOutcome.prospectionStatus;
+    if (companyOutcome.prospectionStatus && schema.available.includes("statut_prospection")) {
+      companyProperties.statut_prospection = companyOutcome.prospectionStatus;
+    }
     updatedCompany = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(companyId)}`, {
       method: "PATCH",
       body: JSON.stringify({ properties: companyProperties }),
