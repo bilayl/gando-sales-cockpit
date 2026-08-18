@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { QualificationProperties } from "@/components/qualification-properties";
 
 type Props = { contactId: string | null; open: boolean; onOpenChange: (open: boolean)=>void; onUpdated?: ()=>void };
 
@@ -357,6 +358,8 @@ export function ContactDrawer({contactId, open, onOpenChange, onUpdated}: Props)
                   <InfoRow icon={FileText} label="Motif de relance" value={p.referly_reason_to_reach_out} />
                 </div>
               </section>
+
+              <QualificationProperties kind="contact" properties={p} />
 
               {company?.name ? <section>
                 <SectionTitle icon={Building2} title="Entreprise" />
