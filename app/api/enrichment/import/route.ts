@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { enrichmentAuthHeaders, enrichmentBackendUrl, hasEnrichmentAuth } from "@/lib/enrichment-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const DEFAULT_ENRICHMENT_BACKEND_URL = "https://gando-enrichment-backend-lenrigandoyt-9842s-projects.vercel.app";
-
-function config() {
-  const baseUrl = (process.env.ENRICHMENT_BACKEND_URL || process.env.GANDO_ENRICHMENT_BACKEND_URL || DEFAULT_ENRICHMENT_BACKEND_URL).replace(/\/$/, "");
-  const apiKey = process.env.ENRICHMENT_INTERNAL_API_KEY || process.env.GANDO_ENRICHMENT_API_KEY || process.env.INTERNAL_API_KEY || "";
-  return { baseUrl, apiKey };
-}
 
 function prospectByName(prospects: any[]) {
   return new Map(prospects.map(prospect => [String(prospect.companyName || "").trim().toLowerCase(), prospect]));
@@ -18,10 +11,9 @@ function prospectByName(prospects: any[]) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { baseUrl, apiKey } = config();
-    if (!apiKey) {
+    if (!hasEnrichmentAuth()) {
       return NextResponse.json({
-        error: "La clé interne du backend de sourcing n'est pas configurée sur le Sales Cockpit.",
+        error: "Aucune identité serveur n'est disponible pour joindre le backend de sourcing.",
         code: "ENRICHMENT_NOT_CONFIGURED",
       }, { status: 503 });
     }
@@ -30,11 +22,11 @@ export async function POST(request: NextRequest) {
     const prospects = Array.isArray(input.prospects) ? input.prospects.slice(0, 50) : [];
     if (!prospects.length) return NextResponse.json({ error: "Sélectionnez au moins une entreprise." }, { status: 400 });
 
-    const response = await fetch(`${baseUrl}/api/hubspot/companies/import`, {
+    const response = await fetch(`${enrichmentBackendUrl()}/api/hubspot/companies/import`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-gando-api-key": apiKey,
+        ...enrichmentAuthHeaders(),
       },
       body: JSON.stringify({ prospects }),
       cache: "no-store",
