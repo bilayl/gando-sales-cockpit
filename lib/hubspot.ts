@@ -58,6 +58,12 @@ function requireEnv(name: string) {
   return value;
 }
 
+function resolveHubSpotRedirectUri(override?: string) {
+  const value = override?.trim() || process.env.HUBSPOT_REDIRECT_URI?.trim();
+  if (!value) throw new Error("HUBSPOT_REDIRECT_URI manquant");
+  return value;
+}
+
 export function isProductionEnvironment() {
   // Vercel exposes VERCEL_ENV=production|preview|development. This is the source of truth
   // because NODE_ENV is "production" for both Production and Preview builds.
@@ -197,7 +203,6 @@ export function isHubSpotOAuthConfigured() {
   return Boolean(
     process.env.HUBSPOT_CLIENT_ID &&
     process.env.HUBSPOT_CLIENT_SECRET &&
-    process.env.HUBSPOT_REDIRECT_URI &&
     process.env.SESSION_SECRET,
   );
 }
@@ -251,23 +256,23 @@ export async function consumeHubSpotState(received: string | null) {
   return timingSafeEqual(Buffer.from(received), Buffer.from(expected));
 }
 
-export function buildHubSpotAuthUrl(state: string) {
+export function buildHubSpotAuthUrl(state: string, redirectUri?: string) {
   const params = new URLSearchParams({
     client_id: requireEnv("HUBSPOT_CLIENT_ID"),
-    redirect_uri: requireEnv("HUBSPOT_REDIRECT_URI"),
+    redirect_uri: resolveHubSpotRedirectUri(redirectUri),
     scope: HUBSPOT_SCOPES,
     state,
   });
-  const accountId = process.env.HUBSPOT_ACCOUNT_ID?.trim();
-  if (accountId) params.set("accountId", accountId);
+  // Do not force accountId here. HubSpot will let the authenticated user select an
+  // allowed portal, which avoids stale/wrong portal IDs breaking authorization.
   return `${HUBSPOT_AUTHORIZE}?${params.toString()}`;
 }
 
-export async function exchangeHubSpotCode(code: string) {
+export async function exchangeHubSpotCode(code: string, redirectUri?: string) {
   const data = await tokenRequest({
     grant_type: "authorization_code",
     code,
-    redirect_uri: requireEnv("HUBSPOT_REDIRECT_URI"),
+    redirect_uri: resolveHubSpotRedirectUri(redirectUri),
   });
   const metadata = await introspectAccessToken(data.access_token);
   await writeSession({
