@@ -20,7 +20,6 @@ type FieldSpec = {
   icon: React.ComponentType<{ size?: number; className?: string }>;
   type: FieldType;
   property: string;
-  source?: "self" | "fallback";
   options?: Array<{ value: string; label: string }>;
 };
 
@@ -125,6 +124,7 @@ function callStatusLabel(value?: string | null) {
 }
 
 function companyProspectionLabel(p: CRMProperties) {
+  if (p.statut_prospection) return String(p.statut_prospection);
   if ((p.lifecyclestage || "").toLowerCase() === "customer") return "Gagné";
   const labels: Record<string, string> = {
     NEW: "À travailler",
@@ -132,48 +132,55 @@ function companyProspectionLabel(p: CRMProperties) {
     ATTEMPTED_TO_CONTACT: "Tentative",
     CONNECTED: "Contact établi",
     BAD_TIMING: p.statut_de_lappel === "a_une_date_ulterieure" ? "Ultérieur" : "À relancer",
-    IN_PROGRESS: "En cours",
     OPEN_DEAL: "Opportunité",
     UNQUALIFIED: "Perdu",
   };
-  return labels[p.hs_lead_status || ""] || "—";
+  return labels[p.hs_lead_status || ""] || "À travailler";
 }
 
 function companyStatusProperties(value: string) {
   const map: Record<string, Record<string, string>> = {
-    "À travailler": { hs_lead_status: "NEW", lifecyclestage: "" },
-    "À contacter": { hs_lead_status: "OPEN", lifecyclestage: "" },
-    "Tentative": { hs_lead_status: "ATTEMPTED_TO_CONTACT", lifecyclestage: "" },
-    "Contact établi": { hs_lead_status: "CONNECTED", lifecyclestage: "" },
-    "À relancer": { hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_rappeler", lifecyclestage: "" },
-    "Ultérieur": { hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_une_date_ulterieure", lifecyclestage: "" },
-    "Opportunité": { hs_lead_status: "OPEN_DEAL", lifecyclestage: "opportunity" },
-    "Gagné": { hs_lead_status: "OPEN_DEAL", lifecyclestage: "customer" },
-    "Perdu": { hs_lead_status: "UNQUALIFIED", lifecyclestage: "" },
+    "À travailler": { statut_prospection: value, hs_lead_status: "NEW", lifecyclestage: "" },
+    "À contacter": { statut_prospection: value, hs_lead_status: "OPEN", lifecyclestage: "" },
+    "Tentative": { statut_prospection: value, hs_lead_status: "ATTEMPTED_TO_CONTACT", lifecyclestage: "" },
+    "Contact établi": { statut_prospection: value, hs_lead_status: "CONNECTED", lifecyclestage: "" },
+    "À relancer": { statut_prospection: value, hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_rappeler", lifecyclestage: "" },
+    "Ultérieur": { statut_prospection: value, hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_une_date_ulterieure", lifecyclestage: "" },
+    "Opportunité": { statut_prospection: value, hs_lead_status: "OPEN_DEAL", lifecyclestage: "opportunity" },
+    "Gagné": { statut_prospection: value, hs_lead_status: "OPEN_DEAL", lifecyclestage: "customer" },
+    "Perdu": { statut_prospection: value, hs_lead_status: "UNQUALIFIED", lifecyclestage: "" },
   };
-  return map[value] || {};
+  return map[value] || { statut_prospection: value };
 }
 
 function fieldSpecs(kind: Kind): FieldSpec[] {
   const isCompany = kind === "company";
   return [
-    { key: "appreciation", label: "Ce qu’il apprécie chez Gando", icon: FileText, type: "multi", property: "ce_quil_apprecie_chez_gando", source: isCompany ? "fallback" : "self", options: APPRECIATION_OPTIONS },
-    { key: "objections", label: "Objections / Retours", icon: FileText, type: "multi", property: "objections__retours", source: isCompany ? "fallback" : "self", options: OBJECTION_OPTIONS },
+    { key: "appreciation", label: "Ce qu’il apprécie chez Gando", icon: FileText, type: "multi", property: "ce_quil_apprecie_chez_gando", options: APPRECIATION_OPTIONS },
+    { key: "objections", label: "Objections / Retours", icon: FileText, type: "multi", property: "objections__retours", options: OBJECTION_OPTIONS },
     { key: "call", label: "Statut de l’appel", icon: PhoneCall, type: isCompany ? "select" : "multi", property: "statut_de_lappel", options: isCompany ? COMPANY_CALL_OPTIONS : CONTACT_CALL_OPTIONS },
     { key: "zip", label: "Code postal", icon: MapPin, type: "text", property: "zip" },
-    { key: "campaign", label: "Campagne d’acquisition", icon: Briefcase, type: "select", property: "campagne_dacquisition", source: isCompany ? "fallback" : "self", options: CAMPAIGN_OPTIONS },
+    { key: "campaign", label: "Campagne d’acquisition", icon: Briefcase, type: "select", property: "campagne_dacquisition", options: CAMPAIGN_OPTIONS },
     { key: "fleet", label: "Taille de flotte", icon: Briefcase, type: "number", property: isCompany ? "taille_flotte" : "taille_de_flo" },
     { key: "country", label: "Code pays/région", icon: Globe, type: "text", property: isCompany ? "hs_country_code" : "hs_country_region_code" },
-    { key: "suite", label: "Suite", icon: FileText, type: "select", property: "suite", source: isCompany ? "fallback" : "self", options: SUITE_OPTIONS },
+    { key: "suite", label: "Suite", icon: FileText, type: "select", property: "suite", options: SUITE_OPTIONS },
     { key: "payment", label: "Solution paiement réservation ?", icon: Briefcase, type: "select", property: "solution_paiement_reservation", options: isCompany ? COMPANY_PAYMENT_OPTIONS : CONTACT_PAYMENT_OPTIONS },
-    { key: "prospection", label: "Statut prospection", icon: SlidersHorizontal, type: isCompany ? "company-status" : "select", property: isCompany ? "hs_lead_status" : "statut_prospection", options: isCompany ? COMPANY_STATUS_OPTIONS : CONTACT_PROSPECTION_OPTIONS },
+    { key: "prospection", label: "Statut prospection", icon: SlidersHorizontal, type: isCompany ? "company-status" : "select", property: "statut_prospection", options: isCompany ? COMPANY_STATUS_OPTIONS : CONTACT_PROSPECTION_OPTIONS },
   ];
+}
+
+function fallbackPropertyFor(spec: FieldSpec, kind: Kind) {
+  if (kind !== "company") return spec.property;
+  if (spec.key === "fleet") return "taille_de_flo";
+  if (spec.key === "country") return "hs_country_region_code";
+  return spec.property;
 }
 
 function valueFor(spec: FieldSpec, kind: Kind, self: CRMProperties, fallback: CRMProperties) {
   if (spec.type === "company-status") return companyProspectionLabel(self);
-  const source = spec.source === "fallback" ? fallback : self;
-  return source[spec.property] || "";
+  const direct = self[spec.property];
+  if (direct !== undefined && direct !== null && String(direct).trim() !== "") return direct;
+  return fallback[fallbackPropertyFor(spec, kind)] || "";
 }
 
 function displayValue(spec: FieldSpec, value: string) {
@@ -239,7 +246,7 @@ function EditablePropertyCard({
             disabled={disabled}
             onClick={() => setEditing(true)}
             className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:bg-muted hover:text-primary disabled:cursor-not-allowed disabled:opacity-30"
-            title={disabled ? "Aucun contact associé pour modifier cette propriété" : `Modifier ${spec.label}`}
+            title={disabled ? "Identifiant HubSpot introuvable" : `Modifier ${spec.label}`}
           >
             <Pencil size={13} />
           </button>
@@ -311,22 +318,15 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
 
   const specs = useMemo(() => fieldSpecs(kind), [kind]);
   const selfId = self.__hubspot_id || self.hs_object_id || "";
-  const fallbackId = fallback.__hubspot_id || fallback.hs_object_id || "";
 
   async function saveField(spec: FieldSpec, value: string) {
-    const useFallback = spec.source === "fallback";
-    const targetKind: Kind = useFallback ? "contact" : kind;
-    const targetId = useFallback ? fallbackId : selfId;
-    if (!targetId) throw new Error(useFallback ? "Aucun contact associé disponible pour enregistrer cette propriété." : "Identifiant HubSpot introuvable.");
+    if (!selfId) throw new Error("Identifiant HubSpot introuvable.");
 
-    let patchProperties: Record<string, string>;
-    if (spec.type === "company-status" && kind === "company") {
-      patchProperties = companyStatusProperties(value);
-    } else {
-      patchProperties = { [spec.property]: value };
-    }
+    const patchProperties = spec.type === "company-status" && kind === "company"
+      ? companyStatusProperties(value)
+      : { [spec.property]: value };
 
-    const endpoint = targetKind === "company" ? `/api/companies/${targetId}` : `/api/contacts/${targetId}`;
+    const endpoint = kind === "company" ? `/api/companies/${selfId}` : `/api/contacts/${selfId}`;
     const response = await fetch(endpoint, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -335,11 +335,7 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "HubSpot a rejeté la modification");
 
-    if (useFallback) {
-      setFallback(current => ({ ...current, ...patchProperties }));
-    } else {
-      setSelf(current => ({ ...current, ...patchProperties }));
-    }
+    setSelf(current => ({ ...current, ...patchProperties, ...(data.properties ?? {}) }));
     toast.success(`${spec.label} mis à jour dans HubSpot.`);
   }
 
@@ -349,21 +345,18 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
         <SlidersHorizontal size={14} className="text-primary" /> Qualification commerciale
       </div>
       {kind === "company" ? (
-        <p className="mt-1.5 text-[11px] text-muted-foreground">Les propriétés Company sont enregistrées sur l’entreprise. Les propriétés uniquement disponibles sur Contact sont enregistrées sur le contact associé de référence.</p>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">Toutes les qualifications sont enregistrées directement sur l’entreprise HubSpot. Une ancienne valeur Contact peut seulement être affichée le temps de sa migration automatique vers l’entreprise.</p>
       ) : null}
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {specs.map(spec => {
-          const useFallback = spec.source === "fallback";
-          return (
-            <EditablePropertyCard
-              key={spec.key}
-              spec={spec}
-              value={String(valueFor(spec, kind, self, fallback) || "")}
-              disabled={useFallback && !fallbackId}
-              onSave={value => saveField(spec, value)}
-            />
-          );
-        })}
+        {specs.map(spec => (
+          <EditablePropertyCard
+            key={spec.key}
+            spec={spec}
+            value={String(valueFor(spec, kind, self, fallback) || "")}
+            disabled={!selfId}
+            onSave={value => saveField(spec, value)}
+          />
+        ))}
       </div>
     </section>
   );
