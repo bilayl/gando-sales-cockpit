@@ -150,21 +150,78 @@ export async function googleFetch(path: string) {
   return googleAuthorizedFetch(`${GOOGLE_CALENDAR}${path}`);
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function inlineMarkdownToHtml(value: string) {
+  return escapeHtml(value).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+function markdownEmailToHtml(body: string) {
+  const lines = body.replace(/\r\n/g, "\n").split("\n");
+  const parts: string[] = [];
+  let listItems: string[] = [];
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    parts.push(`<ul style="margin:0 0 16px;padding-left:22px;">${listItems.map(item => `<li style="margin:0 0 6px;">${item}</li>`).join("")}</ul>`);
+    listItems = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushList();
+      continue;
+    }
+
+    if (/^[-•]\s+/.test(line)) {
+      listItems.push(inlineMarkdownToHtml(line.replace(/^[-•]\s+/, "")));
+      continue;
+    }
+
+    flushList();
+    parts.push(`<p style="margin:0 0 16px;">${inlineMarkdownToHtml(line)}</p>`);
+  }
+
+  flushList();
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1f2937;">${parts.join("")}</div>`;
+}
+
 export async function sendGoogleEmail(input: { to: string; subject: string; body: string }) {
   const to = input.to.trim();
   const subject = input.subject.replace(/[\r\n]+/g, " ").trim();
-  const body = input.body.replace(/\r\n/g, "\n").trim();
-  if (!to || !subject || !body) throw new Error("EMAIL_INVALID");
+  const markdownBody = input.body.replace(/\r\n/g, "\n").trim();
+  if (!to || !subject || !markdownBody) throw new Error("EMAIL_INVALID");
 
+  const textBody = markdownBody.replace(/\*\*(.+?)\*\*/g, "$1");
+  const htmlBody = markdownEmailToHtml(markdownBody);
   const encodedSubject = Buffer.from(subject, "utf8").toString("base64");
+  const boundary = `gando_${randomBytes(12).toString("hex")}`;
   const message = [
     `To: ${to}`,
     `Subject: =?UTF-8?B?${encodedSubject}?=`,
     "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
     "Content-Type: text/plain; charset=UTF-8",
     "Content-Transfer-Encoding: 8bit",
     "",
-    body,
+    textBody,
+    `--${boundary}`,
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    htmlBody,
+    `--${boundary}--`,
+    "",
   ].join("\r\n");
 
   const response = await googleAuthorizedFetch(`${GOOGLE_GMAIL}/users/me/messages/send`, {
