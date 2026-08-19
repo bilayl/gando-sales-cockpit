@@ -23,7 +23,6 @@ type Props = {
 };
 
 export const COMPANY_PIPELINE: Array<{ value: CompanyStage; label: string; tone?: "later" | "won" | "lost" }> = [
-  { value: "NEW", label: "À travailler" },
   { value: "OPEN", label: "À contacter" },
   { value: "ATTEMPTED_TO_CONTACT", label: "Tentative" },
   { value: "CONNECTED", label: "Contact établi" },
@@ -35,7 +34,7 @@ export const COMPANY_PIPELINE: Array<{ value: CompanyStage; label: string; tone?
 ];
 
 const QUALIFICATION_STAGE: Record<string, CompanyStage> = {
-  "À travailler": "NEW",
+  "À travailler": "OPEN",
   "À contacter": "OPEN",
   "Tentative": "ATTEMPTED_TO_CONTACT",
   "Contact établi": "CONNECTED",
@@ -54,9 +53,11 @@ function dateMs(value?: string | null) {
 
 export function deriveCompanyStage(company: Company, now = Date.now()): CompanyStage {
   const p = company.properties;
-  const consolidated = p.qualification_status || p.prospecting_status;
+  const explicitStatuses = [p.statut_prospection, p.qualification_status, p.prospecting_status].filter(Boolean) as string[];
+  if (explicitStatuses.includes("Gagné") || (p.lifecyclestage || "").toLowerCase() === "customer") return "WON";
+
+  const consolidated = p.qualification_status || p.prospecting_status || p.statut_prospection;
   if (consolidated && QUALIFICATION_STAGE[consolidated]) return QUALIFICATION_STAGE[consolidated];
-  if ((p.lifecyclestage || "").toLowerCase() === "customer") return "WON";
   if (p.hs_lead_status === "UNQUALIFIED") return "LOST";
   if (p.hs_lead_status === "BAD_TIMING") {
     const reminder = dateMs(p.date_de_rappel || p.notes_next_activity_date);
@@ -66,8 +67,7 @@ export function deriveCompanyStage(company: Company, now = Date.now()): CompanyS
   if (p.hs_lead_status === "OPEN_DEAL") return "OPEN_DEAL";
   if (p.hs_lead_status === "CONNECTED") return "CONNECTED";
   if (p.hs_lead_status === "ATTEMPTED_TO_CONTACT") return "ATTEMPTED_TO_CONTACT";
-  if (p.hs_lead_status === "OPEN") return "OPEN";
-  return "NEW";
+  return "OPEN";
 }
 
 function callLabel(value?: string | null) {
