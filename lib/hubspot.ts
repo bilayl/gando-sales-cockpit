@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { CompactEncrypt, compactDecrypt } from "jose";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { getVercelOidcToken } from "@vercel/oidc";
 import { getSupabaseAdmin } from "./supabase-admin";
 
 const HUBSPOT_API = "https://api.hubapi.com";
@@ -9,6 +10,8 @@ const HUBSPOT_AUTHORIZE = "https://app.hubspot.com/oauth/authorize";
 const SESSION_COOKIE = "gando_hubspot_session";
 const STATE_COOKIE = "gando_hubspot_state";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
+const DEFAULT_SUPABASE_URL = "https://hboentjvcxpqlyzlrebx.supabase.co";
+const HUBSPOT_TOKEN_FUNCTION = "gando-hubspot-token";
 
 const HUBSPOT_SCOPES = [
   "oauth",
@@ -102,6 +105,31 @@ async function readSession() {
 let lastAutomationCredentialSyncAt = 0;
 let serviceTokenCache: { token: string; expiresAt: number } | null = null;
 
+async function hubSpotTokenFromOidc() {
+  if (!isProductionEnvironment()) return "";
+  try {
+    const oidc = await getVercelOidcToken();
+    if (!oidc) return "";
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL;
+    const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/${HUBSPOT_TOKEN_FUNCTION}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${oidc}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      console.error(`HubSpot OIDC token exchange failed: HTTP ${response.status}`);
+      return "";
+    }
+    const data = await response.json().catch(() => ({}));
+    return typeof data?.token === "string" ? data.token.trim() : "";
+  } catch (error) {
+    console.error("Unable to resolve HubSpot service token through Vercel OIDC", error);
+    return "";
+  }
+}
+
 async function hubSpotServiceToken() {
   const envToken = process.env.HUBSPOT_PRIVATE_APP_TOKEN?.trim();
   if (envToken) return envToken;
@@ -115,12 +143,20 @@ async function hubSpotServiceToken() {
     const { data, error } = await admin.rpc("get_server_secret", { p_name: "hubspot_access_token" });
     if (error) throw error;
     const token = typeof data === "string" ? data.trim() : "";
-    if (!token) return "";
-    serviceTokenCache = { token, expiresAt: Date.now() + 5 * 60_000 };
-    return token;
+    if (token) {
+      serviceTokenCache = { token, expiresAt: Date.now() + 5 * 60_000 };
+      return token;
+    }
   } catch {
-    return "";
+    // Vercel may not have Supabase service-role credentials. Fall through to OIDC federation.
   }
+
+  const oidcToken = await hubSpotTokenFromOidc();
+  if (oidcToken) {
+    serviceTokenCache = { token: oidcToken, expiresAt: Date.now() + 5 * 60_000 };
+    return oidcToken;
+  }
+  return "";
 }
 
 async function syncHubSpotAutomationCredentials(session: HubSpotSession) {
@@ -226,7 +262,7 @@ export function isHubSpotOAuthConfigured() {
 }
 
 export function isHubSpotConfigured() {
-  return Boolean(privateAppToken() || isHubSpotOAuthConfigured() || (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY));
+  return Boolean(privateAppToken() || isHubSpotOAuthConfigured() || isProductionEnvironment());
 }
 
 export async function isHubSpotAuthenticated() {
