@@ -5,7 +5,7 @@ import { searchRentalCompaniesLocally } from "@/lib/enrichment-local-search";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const SOURCING_ENGINE = "openrouter-direct-v3";
+const SOURCING_ENGINE = "openrouter-direct-v4-structured";
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       newProspects: deduped.prospects.length,
       prospects: deduped.prospects,
       excluded: deduped.excluded,
-      source: "openrouter-direct",
+      source: payload.source || "openrouter-direct-structured",
       sourcingEngine: SOURCING_ENGINE,
       backendError: null,
     }, {
