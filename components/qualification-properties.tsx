@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Briefcase, Building2, Check, FileText, Globe, Loader2, MapPin, Pencil, PhoneCall, SlidersHorizontal, X } from "lucide-react";
+import { Briefcase, Check, FileText, Globe, Loader2, MapPin, Pencil, PhoneCall, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
 
 type CRMProperties = Record<string, string | null | undefined>;
@@ -49,7 +49,7 @@ function fieldSpecs(kind: Kind): FieldSpec[] {
 
   if (company) {
     return [
-      { key: "company_name", property: "name", fallbackLabel: "Nom de l’entreprise", icon: Building2 },
+      { key: "company_name", property: "name", fallbackLabel: "Nom de l’entreprise", icon: Briefcase },
       { key: "prospection", property: "statut_prospection", fallbackLabel: "Statut prospection", icon: SlidersHorizontal },
       ...common,
     ];
@@ -85,6 +85,7 @@ function companyStatusProperties(value: string) {
     "Contact établi": { statut_prospection: value, hs_lead_status: "CONNECTED", lifecyclestage: "" },
     "À relancer": { statut_prospection: value, hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_rappeler", lifecyclestage: "" },
     "Ultérieur": { statut_prospection: value, hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_une_date_ulterieure", lifecyclestage: "" },
+    "Démo prévue": { statut_prospection: value, hs_lead_status: "CONNECTED", statut_de_lappel: "interesse", lifecyclestage: "" },
     "Opportunité": { statut_prospection: value, hs_lead_status: "OPEN_DEAL", lifecyclestage: "opportunity" },
     "Gagné": { statut_prospection: value, hs_lead_status: "OPEN_DEAL", lifecyclestage: "customer" },
     "Perdu": { statut_prospection: value, hs_lead_status: "UNQUALIFIED", lifecyclestage: "" },
@@ -132,7 +133,10 @@ function EditablePropertyCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
-  const options = (definition?.options || []).filter(option => type !== "company-status" || option.value !== "À travailler");
+  const baseOptions = (definition?.options || []).filter(option => type !== "company-status" || option.value !== "À travailler");
+  const options = type === "company-status" && !baseOptions.some(option => option.value === "Démo prévue")
+    ? [...baseOptions.slice(0, 5), { value: "Démo prévue", label: "Démo prévue" }, ...baseOptions.slice(5)]
+    : baseOptions;
   const multiValues = useMemo(() => new Set(splitMulti(draft)), [draft]);
   const Icon = spec.icon;
   const label = definition?.label || spec.fallbackLabel;
@@ -203,7 +207,7 @@ function EditablePropertyCard({
               {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           ) : (
-            <input autoFocus type={type === "number" ? "number" : "text"} value={draft} onChange={event => setDraft(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/55 focus:ring-2 focus:ring-ring/15" />
+            <input autoFocus type={type === "number" ? "number" : "text"} value={draft} onChange={event => setDraft(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary/55 focus:ring-2 focus:ring-ring/15" />
           )}
 
           <div className="flex justify-end gap-1.5">
