@@ -59,7 +59,7 @@ const qualificationOptions = {
     ["Rodeeo", "Rodeeo"],
   ] as Array<[string, string]>,
   suite: ["INSCRIT", "Mail envoyer", "Whatsapp", "Linkedin", "Visio", "Caution créée", "Propal envoyée"],
-  prospection: ["À travailler", "À contacter", "Tentative", "Contact établi", "À relancer", "Ultérieur", "Opportunité", "Gagné", "Perdu"],
+  prospection: ["À contacter", "Tentative", "Contact établi", "À relancer", "Ultérieur", "Opportunité", "Gagné", "Perdu"],
 };
 
 function options(values: string[]) {
