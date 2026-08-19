@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncActivities, syncCompanies, syncContacts, syncDeals, syncTasks } from "@/lib/sync";
 import { refreshCompanyQualifications, syncCompanyContactLinks } from "@/lib/company-qualification-sync";
+import { refreshCallRecommendations } from "@/lib/call-recommendations";
 import { apiError, isHubSpotAuthenticated } from "@/lib/hubspot";
 
 export const maxDuration = 300;
@@ -58,6 +59,8 @@ export async function GET(request: NextRequest) {
       default:
         return NextResponse.json({ error: `Ressource inconnue: ${resource}` }, { status: 400 });
     }
-    return NextResponse.json({ ok: true, results });
+
+    const recommendations = await refreshCallRecommendations();
+    return NextResponse.json({ ok: true, results: { ...results, recommendations } });
   } catch (error) { return apiError(error); }
 }
