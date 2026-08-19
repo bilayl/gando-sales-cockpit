@@ -32,6 +32,18 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+function providerLabel(provider: string) {
+  if (provider === "smtp2go") return "Envoyé via SMTP2GO";
+  if (provider === "gmail") return "Envoyé via Gmail API";
+  return provider;
+}
+
+function providerIdLabel(provider: string) {
+  if (provider === "smtp2go") return "ID SMTP2GO";
+  if (provider === "gmail") return "ID Gmail";
+  return "ID fournisseur";
+}
+
 export function SentEmailsView() {
   const [emails, setEmails] = useState<SentEmail[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,7 +130,7 @@ export function SentEmailsView() {
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span>À : {email.recipient}</span>
                     <span>{formatDate(email.sent_at)}</span>
-                    <span>{email.provider === "gmail" ? "Envoyé via Gmail API" : email.provider}</span>
+                    <span>{providerLabel(email.provider)}</span>
                   </div>
                 </div>
                 <div className="shrink-0 text-muted-foreground">{isOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}</div>
@@ -128,7 +140,7 @@ export function SentEmailsView() {
                 <div className="border-t border-border bg-background/60 px-4 py-4 sm:px-6">
                   <div className="whitespace-pre-wrap text-sm leading-6 text-foreground">{email.body}</div>
                   <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                    {email.provider_message_id ? <span>ID Gmail : {email.provider_message_id}</span> : null}
+                    {email.provider_message_id ? <span>{providerIdLabel(email.provider)} : {email.provider_message_id}</span> : null}
                     {email.contact_id ? <span>Contact HubSpot : {email.contact_id}</span> : null}
                     {email.call_id ? <span>Appel : {email.call_id}</span> : null}
                   </div>
