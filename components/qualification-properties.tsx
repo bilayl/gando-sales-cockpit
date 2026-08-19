@@ -35,7 +35,7 @@ type FieldSpec = {
 
 function fieldSpecs(kind: Kind): FieldSpec[] {
   const company = kind === "company";
-  return [
+  const common: FieldSpec[] = [
     { key: "appreciation", property: "ce_quil_apprecie_chez_gando", fallbackLabel: "Ce qu’il apprécie chez Gando", icon: FileText },
     { key: "objections", property: "objections__retours", fallbackLabel: "Objections / Retours", icon: FileText },
     { key: "call", property: "statut_de_lappel", fallbackLabel: "Statut de l’appel", icon: PhoneCall },
@@ -45,6 +45,18 @@ function fieldSpecs(kind: Kind): FieldSpec[] {
     { key: "country", property: company ? "hs_country_code" : "hs_country_region_code", fallbackProperty: "hs_country_region_code", fallbackLabel: "Code pays/région", icon: Globe },
     { key: "suite", property: "suite", fallbackLabel: "Suite", icon: FileText },
     { key: "payment", property: "solution_paiement_reservation", fallbackLabel: "Solution paiement réservation ?", icon: Briefcase },
+  ];
+
+  if (company) {
+    return [
+      { key: "company_name", property: "name", fallbackLabel: "Nom de l’entreprise", icon: Briefcase },
+      { key: "prospection", property: "statut_prospection", fallbackLabel: "Statut prospection", icon: SlidersHorizontal },
+      ...common,
+    ];
+  }
+
+  return [
+    ...common,
     { key: "prospection", property: "statut_prospection", fallbackLabel: "Statut prospection", icon: SlidersHorizontal },
   ];
 }
@@ -261,7 +273,7 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
         </div>
         {metadataLoading ? <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Loader2 size={11} className="animate-spin" /> HubSpot</span> : null}
       </div>
-      {kind === "company" ? <p className="mt-1.5 text-[11px] text-muted-foreground">HubSpot est la source de vérité. Les propriétés manquantes sont créées côté Entreprise, puis les anciennes valeurs Contact sont migrées automatiquement.</p> : null}
+      {kind === "company" ? <p className="mt-1.5 text-[11px] text-muted-foreground">HubSpot est la source de vérité. Le nom et le statut sont modifiables directement ici et synchronisés avec la fiche Entreprise.</p> : null}
       {metadataError ? <p className="mt-2 rounded-md border border-amber-400/25 bg-amber-400/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">{metadataError}</p> : null}
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {specs.map(spec => {
