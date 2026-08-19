@@ -1,6 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { refreshCallRecommendations } from "@/lib/call-recommendations";
 
 const CONTACT_DETAIL_PROPERTIES = [
   "firstname","lastname","email","phone","mobilephone","jobtitle","city","state","country","company","hubspot_owner_id",
@@ -25,6 +26,14 @@ const ACTIVITY_TYPES: Record<string, { path: string; associationTypeId: number; 
 
 function hubspotRecord(row: any) {
   return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
+}
+
+async function refreshRecommendationScores() {
+  try {
+    await refreshCallRecommendations();
+  } catch (error) {
+    console.error("Call recommendation refresh:", error);
+  }
 }
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -74,20 +83,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!Object.keys(properties).length) return NextResponse.json({ error: "Aucune propriété modifiable fournie" }, { status: 400 });
     const data = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ properties }) });
 
-    const { data: existing } = await getSupabaseAdmin().from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
+    const supabase = getSupabaseAdmin();
+    const { data: existing } = await supabase.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
     if (existing) {
       const props = { ...(existing.raw_data?.properties ?? {}), ...properties };
-      const { error } = await getSupabaseAdmin().from("contacts").update({
+      const { error } = await supabase.from("contacts").update({
         raw_data: { ...existing.raw_data, properties: props, updatedAt: new Date().toISOString() },
         hubspot_updated_at: new Date().toISOString(),
         first_name: props.firstname ?? null,
         last_name: props.lastname ?? null,
         email: props.email ?? null,
-        phone: props.phone ?? null,
+        phone: props.phone || props.mobilephone || null,
         job_title: props.jobtitle ?? null,
         owner_hubspot_id: props.hubspot_owner_id ?? null,
       }).eq("hubspot_id", id);
       if (error) console.error("Supabase update contact:", error.message);
+      else await refreshRecommendationScores();
     }
     return NextResponse.json(data);
   } catch (error) {
@@ -118,24 +129,43 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }),
     });
 
-    const { data: contact } = await getSupabaseAdmin().from("contacts").select("id").eq("hubspot_id", id).maybeSingle();
+    const supabase = getSupabaseAdmin();
+    const { data: contact } = await supabase.from("contacts").select("id").eq("hubspot_id", id).maybeSingle();
     if (contact) {
-      const row = {
-        hubspot_id: String(data.id),
-        activity_type: def.type,
-        contact_id: contact.id,
-        occurred_at: def.type === "meeting"
-          ? (properties.hs_meeting_start_time || properties.hs_timestamp || new Date().toISOString())
-          : (properties.hs_timestamp || new Date().toISOString()),
-        subject: def.type === "call" ? properties.hs_call_title ?? null : def.type === "meeting" ? properties.hs_meeting_title ?? null : def.type === "task" ? properties.hs_task_subject ?? null : null,
-        body: def.type === "note" ? properties.hs_note_body ?? null : def.type === "call" ? properties.hs_call_body ?? null : def.type === "task" ? properties.hs_task_body ?? null : properties.hs_meeting_location ?? null,
-        outcome: def.type === "call" ? properties.hs_call_disposition ?? null : def.type === "meeting" ? properties.hs_meeting_outcome ?? null : null,
-        owner_hubspot_id: properties.hubspot_owner_id ?? null,
-        raw_data: data,
-      };
-      const target = def.type === "task" ? "tasks" : "activities";
-      const { error } = await getSupabaseAdmin().from(target).upsert(row, { onConflict: "hubspot_id" });
-      if (error) console.error("Supabase upsert activity:", error.message);
+      if (def.type === "task") {
+        const taskRow = {
+          hubspot_id: String(data.id),
+          contact_id: contact.id,
+          title: properties.hs_task_subject ?? null,
+          body: properties.hs_task_body ?? null,
+          status: properties.hs_task_status ?? "NOT_STARTED",
+          priority: properties.hs_task_priority ?? null,
+          due_at: properties.hs_timestamp || new Date().toISOString(),
+          owner_hubspot_id: properties.hubspot_owner_id ?? null,
+          raw_data: data,
+          hubspot_updated_at: new Date().toISOString(),
+        };
+        const { error } = await supabase.from("tasks").upsert(taskRow, { onConflict: "hubspot_id" });
+        if (error) console.error("Supabase upsert task:", error.message);
+        else await refreshRecommendationScores();
+      } else {
+        const activityRow = {
+          hubspot_id: String(data.id),
+          activity_type: def.type,
+          contact_id: contact.id,
+          occurred_at: def.type === "meeting"
+            ? (properties.hs_meeting_start_time || properties.hs_timestamp || new Date().toISOString())
+            : (properties.hs_timestamp || new Date().toISOString()),
+          subject: def.type === "call" ? properties.hs_call_title ?? null : def.type === "meeting" ? properties.hs_meeting_title ?? null : null,
+          body: def.type === "note" ? properties.hs_note_body ?? null : def.type === "call" ? properties.hs_call_body ?? null : properties.hs_meeting_location ?? null,
+          outcome: def.type === "call" ? properties.hs_call_disposition ?? null : def.type === "meeting" ? properties.hs_meeting_outcome ?? null : null,
+          owner_hubspot_id: properties.hubspot_owner_id ?? null,
+          raw_data: data,
+        };
+        const { error } = await supabase.from("activities").upsert(activityRow, { onConflict: "hubspot_id" });
+        if (error) console.error("Supabase upsert activity:", error.message);
+        else await refreshRecommendationScores();
+      }
     }
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
