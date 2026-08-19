@@ -56,6 +56,8 @@ type Smtp2goResponse = {
     email_id?: string;
     succeeded?: number;
     failed?: number;
+    error?: string;
+    error_code?: string;
     failures?: Array<{ error?: string; recipient?: string }>;
   };
 };
@@ -78,6 +80,7 @@ export async function sendSmtp2goEmail(input: SendSmtp2goEmailInput): Promise<Se
   const response = await fetch(`${apiBaseUrl()}/email/send`, {
     method: "POST",
     headers: {
+      "accept": "application/json",
       "content-type": "application/json",
       "X-Smtp2go-Api-Key": apiKey,
     },
@@ -87,7 +90,7 @@ export async function sendSmtp2goEmail(input: SendSmtp2goEmailInput): Promise<Se
   });
 
   const data = (await response.json().catch(() => ({}))) as Smtp2goResponse;
-  const failure = data.data?.failures?.[0]?.error;
+  const failure = data.data?.failures?.[0]?.error || data.data?.error;
   const failed = Number(data.data?.failed || 0);
 
   if (!response.ok || failed > 0) {
