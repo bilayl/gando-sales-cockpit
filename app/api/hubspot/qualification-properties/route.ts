@@ -16,6 +16,7 @@ const CONTACT_PROPERTIES = [
 ];
 
 const COMPANY_PROPERTIES = [
+  "name",
   "ce_quil_apprecie_chez_gando",
   "objections__retours",
   "statut_de_lappel",
