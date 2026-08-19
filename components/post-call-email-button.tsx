@@ -26,6 +26,13 @@ export type PostCallEmailButtonProps = {
   onSent?: () => void;
 };
 
+function modelLabel(value: string) {
+  if (!value) return "";
+  if (value === "fallback-local") return "Mode de secours local";
+  if (value.includes("claude-sonnet")) return "Claude Sonnet via OpenRouter";
+  return `${value} via OpenRouter`;
+}
+
 export function PostCallEmailButton({
   contactId,
   callId,
@@ -46,6 +53,7 @@ export function PostCallEmailButton({
   const [kind, setKind] = useState<PostCallEmailKind>(emailKind);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [modelUsed, setModelUsed] = useState("");
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
   const [needsGoogleAuth, setNeedsGoogleAuth] = useState(false);
@@ -55,6 +63,7 @@ export function PostCallEmailButton({
     setKind(selectedKind);
     setGenerating(true);
     setNeedsGoogleAuth(false);
+    setModelUsed("");
     try {
       const response = await fetch("/api/post-call-email/generate", {
         method: "POST",
@@ -65,6 +74,7 @@ export function PostCallEmailButton({
       if (!response.ok) throw new Error(payload.error || "Impossible de générer l'email");
       setSubject(payload.subject || "Suite à notre échange — Gando");
       setBody(payload.body || "");
+      setModelUsed(typeof payload.model === "string" ? payload.model : "");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible de générer l'email");
     } finally {
@@ -78,6 +88,7 @@ export function PostCallEmailButton({
     setKind(selectedKind);
     setSubject("");
     setBody("");
+    setModelUsed("");
     setOpen(true);
     await generateDraft(selectedKind);
   }
@@ -87,6 +98,7 @@ export function PostCallEmailButton({
     setKind(value);
     setSubject("");
     setBody("");
+    setModelUsed("");
     void generateDraft(value);
   }
 
@@ -158,6 +170,7 @@ export function PostCallEmailButton({
           <div className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles size={16} /> Automatisation après appel</div>
           <h3 className="mt-1 text-xl font-bold tracking-tight">{POST_CALL_EMAIL_LABELS[kind]}</h3>
           <p className="mt-1 text-sm text-muted-foreground">L'email est généré à partir du contexte HubSpot. Quand vous cliquez sur Envoyer, il part directement depuis le backend du Sales Cockpit via Gmail API puis est enregistré dans l'historique.</p>
+          {modelUsed ? <p className="mt-2 text-xs font-medium text-muted-foreground">IA utilisée : <span className="text-foreground">{modelLabel(modelUsed)}</span></p> : null}
         </div>
 
         <div className="mt-5 grid gap-4">
