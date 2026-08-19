@@ -59,7 +59,7 @@ const qualificationOptions = {
     ["Rodeeo", "Rodeeo"],
   ] as Array<[string, string]>,
   suite: ["INSCRIT", "Mail envoyer", "Whatsapp", "Linkedin", "Visio", "Caution créée", "Propal envoyée"],
-  prospection: ["À contacter", "Tentative", "Contact établi", "À relancer", "Ultérieur", "Opportunité", "Gagné", "Perdu"],
+  prospection: ["À contacter", "Tentative", "Contact établi", "À relancer", "Ultérieur", "Démo prévue", "Opportunité", "Gagné", "Perdu"],
 };
 
 function options(values: string[]) {
@@ -110,6 +110,37 @@ export type QualificationSchemaResult = {
   unavailable: Array<{ name: string; error: string }>;
 };
 
+function mergedEnumerationOptions(schema: PropertySchema, current: any) {
+  const desired = schema.options.map((option, index) => ({
+    value: option.value,
+    label: option.label,
+    displayOrder: index + 1,
+    hidden: false,
+  }));
+  const desiredValues = new Set(desired.map(option => option.value));
+  const legacy = (current?.options || [])
+    .filter((option: any) => !desiredValues.has(String(option.value)))
+    .map((option: any, index: number) => ({
+      value: String(option.value),
+      label: String(option.label || option.value),
+      displayOrder: desired.length + index + 1,
+      hidden: schema.name === "statut_prospection" && String(option.value) === "À travailler" ? true : Boolean(option.hidden),
+    }));
+  return [...desired, ...legacy];
+}
+
+async function ensureExistingPropertyOptions(schema: PropertySchema, current: any) {
+  const nextOptions = mergedEnumerationOptions(schema, current);
+  const currentSignature = (current?.options || []).map((option: any) => `${option.value}:${Boolean(option.hidden)}`).join("|");
+  const nextSignature = nextOptions.map(option => `${option.value}:${Boolean(option.hidden)}`).join("|");
+  if (currentSignature === nextSignature) return;
+
+  await hubspotJson(`/crm/properties/2026-03/companies/${encodeURIComponent(schema.name)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ options: nextOptions }),
+  });
+}
+
 export async function ensureCompanyQualificationProperties(): Promise<QualificationSchemaResult> {
   const available: string[] = [];
   const created: string[] = [];
@@ -117,13 +148,14 @@ export async function ensureCompanyQualificationProperties(): Promise<Qualificat
 
   for (const schema of COMPANY_QUALIFICATION_SCHEMAS) {
     try {
-      await hubspotJson(`/crm/properties/2026-03/companies/${encodeURIComponent(schema.name)}`);
+      const current = await hubspotJson(`/crm/properties/2026-03/companies/${encodeURIComponent(schema.name)}`);
+      await ensureExistingPropertyOptions(schema, current);
       available.push(schema.name);
       continue;
     } catch (error) {
       const e = error as Error & { status?: number };
       if (e.status !== 404) {
-        unavailable.push({ name: schema.name, error: e.message || "Impossible de vérifier la propriété" });
+        unavailable.push({ name: schema.name, error: e.message || "Impossible de vérifier ou mettre à jour la propriété" });
         continue;
       }
     }
@@ -152,7 +184,6 @@ export async function ensureCompanyQualificationProperties(): Promise<Qualificat
       created.push(schema.name);
     } catch (error) {
       const e = error as Error & { status?: number };
-      // Another request may have created the property concurrently.
       if (e.status === 409) {
         available.push(schema.name);
       } else {
