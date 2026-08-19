@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendGoogleEmail } from "@/lib/google";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { isPostCallEmailKind } from "@/lib/post-call-email-types";
+import { sendSmtp2goEmail } from "@/lib/smtp2go";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +9,22 @@ function looksLikeEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function isSameOriginRequest(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === request.nextUrl.host;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
+    if (!isSameOriginRequest(request)) {
+      return NextResponse.json({ error: "Origine de requête non autorisée" }, { status: 403 });
+    }
+
     const input = await request.json().catch(() => ({}));
     const to = typeof input.to === "string" ? input.to.trim() : "";
     const subject = typeof input.subject === "string" ? input.subject.trim() : "";
@@ -22,14 +36,14 @@ export async function POST(request: NextRequest) {
     if (!looksLikeEmail(to)) return NextResponse.json({ error: "Adresse email invalide" }, { status: 400 });
     if (!subject || !body) return NextResponse.json({ error: "Objet et contenu requis" }, { status: 400 });
 
-    const sent = await sendGoogleEmail({ to, subject, body });
-    const providerMessageId = typeof sent?.id === "string" ? sent.id : null;
+    const sent = await sendSmtp2goEmail({ to, subject, body });
+    const providerMessageId = sent.emailId;
     let historyLogged = false;
 
     try {
       const supabase = getSupabaseAdmin();
       const { error } = await supabase.from("sent_emails").insert({
-        provider: "gmail",
+        provider: "smtp2go",
         provider_message_id: providerMessageId,
         contact_id: contactId || null,
         call_id: callId || null,
@@ -46,15 +60,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      provider: "smtp2go",
       messageId: providerMessageId,
+      requestId: sent.requestId,
       historyLogged,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Impossible d'envoyer l'email";
-    const reauthRequired = message === "GOOGLE_UNAUTHORIZED" || /insufficient authentication scopes|permission|scope/i.test(message);
-    return NextResponse.json({
-      error: reauthRequired ? "Reconnectez Google pour autoriser l'envoi d'emails depuis le Sales Cockpit." : message,
-      reauthRequired,
-    }, { status: reauthRequired ? 401 : 502 });
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }

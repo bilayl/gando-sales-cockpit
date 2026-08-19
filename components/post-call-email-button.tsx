@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Loader2, Mail, RefreshCw, Send, Sparkles, X } from "lucide-react";
+import { Loader2, Mail, RefreshCw, Send, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -56,13 +56,11 @@ export function PostCallEmailButton({
   const [modelUsed, setModelUsed] = useState("");
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
-  const [needsGoogleAuth, setNeedsGoogleAuth] = useState(false);
 
   async function generateDraft(kindOverride?: PostCallEmailKind) {
     const selectedKind = kindOverride || kind;
     setKind(selectedKind);
     setGenerating(true);
-    setNeedsGoogleAuth(false);
     setModelUsed("");
     try {
       const response = await fetch("/api/post-call-email/generate", {
@@ -123,7 +121,6 @@ export function PostCallEmailButton({
       return;
     }
     setSending(true);
-    setNeedsGoogleAuth(false);
     try {
       const response = await fetch("/api/post-call-email/send", {
         method: "POST",
@@ -138,16 +135,13 @@ export function PostCallEmailButton({
         }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (payload.reauthRequired) setNeedsGoogleAuth(true);
-        throw new Error(payload.error || "Impossible d'envoyer l'email");
-      }
+      if (!response.ok) throw new Error(payload.error || "Impossible d'envoyer l'email");
 
       await logSentEmail();
       if (payload.historyLogged === false) {
-        toast.warning("Email envoyé, mais l'historique du Cockpit n'a pas pu être enregistré.");
+        toast.warning("Email envoyé via SMTP2GO, mais l'historique du Cockpit n'a pas pu être enregistré.");
       } else {
-        toast.success(`${POST_CALL_EMAIL_LABELS[kind]} envoyé depuis le serveur et enregistré dans l'historique.`);
+        toast.success(`${POST_CALL_EMAIL_LABELS[kind]} envoyé via SMTP2GO et enregistré dans l'historique.`);
       }
       setOpen(false);
       onSent?.();
@@ -169,7 +163,7 @@ export function PostCallEmailButton({
         <div className="pr-10">
           <div className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles size={16} /> Automatisation après appel</div>
           <h3 className="mt-1 text-xl font-bold tracking-tight">{POST_CALL_EMAIL_LABELS[kind]}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">L'email est généré à partir du contexte HubSpot. Quand vous cliquez sur Envoyer, il part directement depuis le backend du Sales Cockpit via Gmail API puis est enregistré dans l'historique.</p>
+          <p className="mt-1 text-sm text-muted-foreground">L'email est généré à partir du contexte HubSpot. Quand vous cliquez sur Envoyer, il part directement depuis le backend du Sales Cockpit via SMTP2GO puis est enregistré dans l'historique.</p>
           {modelUsed ? <p className="mt-2 text-xs font-medium text-muted-foreground">IA utilisée : <span className="text-foreground">{modelLabel(modelUsed)}</span></p> : null}
         </div>
 
@@ -209,13 +203,6 @@ export function PostCallEmailButton({
             />
           </div>
         </div>
-
-        {needsGoogleAuth ? (
-          <div className="mt-4 rounded-lg border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-900 dark:text-amber-200">
-            Google doit être reconnecté pour que le backend puisse envoyer l'email depuis le compte Gando autorisé.
-            <div className="mt-2"><Button asChild size="sm" variant="outline"><a href="/api/auth/google"><ExternalLink size={14} /> Reconnecter Google</a></Button></div>
-          </div>
-        ) : null}
 
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Annuler</Button>
