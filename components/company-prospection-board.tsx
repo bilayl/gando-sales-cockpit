@@ -28,6 +28,7 @@ export const COMPANY_PIPELINE: Array<{ value: CompanyStage; label: string; tone?
   { value: "CONNECTED", label: "Contact établi" },
   { value: "FOLLOW_UP", label: "À relancer" },
   { value: "LATER", label: "Ultérieur", tone: "later" },
+  { value: "DEMO_SCHEDULED", label: "Démo prévue" },
   { value: "OPEN_DEAL", label: "Opportunité" },
   { value: "WON", label: "Gagné", tone: "won" },
   { value: "LOST", label: "Perdu", tone: "lost" },
@@ -40,6 +41,7 @@ const QUALIFICATION_STAGE: Record<string, CompanyStage> = {
   "Contact établi": "CONNECTED",
   "À relancer": "FOLLOW_UP",
   "Ultérieur": "LATER",
+  "Démo prévue": "DEMO_SCHEDULED",
   "Opportunité": "OPEN_DEAL",
   "Gagné": "WON",
   "Perdu": "LOST",
@@ -169,11 +171,12 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                 className={`flex h-full max-h-[calc(100vh-285px)] w-72 shrink-0 flex-col rounded-xl border ${isOver ? "border-primary bg-accent/50" : terminal ? "border-border bg-muted/15" : "border-border bg-muted/30"}`}
               >
                 <header className="flex items-center gap-2 px-3 py-3">
-                  {column.value === "WON" ? <Trophy size={14} className="text-emerald-500" /> : column.value === "LOST" ? <XCircle size={14} className="text-rose-500" /> : column.value === "LATER" ? <Clock3 size={14} className="text-amber-500" /> : <span className="h-2 w-2 rounded-full bg-primary" />}
+                  {column.value === "WON" ? <Trophy size={14} className="text-emerald-500" /> : column.value === "LOST" ? <XCircle size={14} className="text-rose-500" /> : column.value === "LATER" ? <Clock3 size={14} className="text-amber-500" /> : column.value === "DEMO_SCHEDULED" ? <CalendarClock size={14} className="text-primary" /> : <span className="h-2 w-2 rounded-full bg-primary" />}
                   <h3 className="text-sm font-semibold">{column.label}</h3>
                   <Badge variant="secondary" className="ml-auto text-[10px]">{cards.length}</Badge>
                 </header>
                 {column.value === "LATER" ? <div className="mx-3 mb-2 rounded-lg bg-amber-500/10 px-2.5 py-2 text-[10px] leading-4 text-amber-700 dark:text-amber-300">Comptes mis en sommeil. Ils remontent en À relancer à la date prévue.</div> : null}
+                {column.value === "DEMO_SCHEDULED" ? <div className="mx-3 mb-2 rounded-lg bg-primary/[0.06] px-2.5 py-2 text-[10px] leading-4 text-primary">Démo bookée : le compte est retiré de la session de prospection jusqu’au rendez-vous.</div> : null}
                 <div className="min-h-[120px] flex-1 space-y-2 overflow-y-auto px-3 pb-3 minari-scrollbar">
                   {cards.map(company => {
                     const p = company.properties;
