@@ -64,8 +64,12 @@ export function getCompanyProspectionDecision(
     p.hs_lead_status,
   ].map(normalize).filter(Boolean).join(" | ");
 
-  if (stage === "WON" || normalize(p.lifecyclestage) === "customer") {
-    return { bucket: "EXCLUDED", priority: 99, priorityLabel: "Exclu", reason: "Client gagné / compte clôturé" };
+  if (
+    stage === "WON"
+    || normalize(p.lifecyclestage) === "customer"
+    || containsAny(statusText, ["gagne", "won"])
+  ) {
+    return { bucket: "EXCLUDED", priority: 99, priorityLabel: "Exclu", reason: "Compte déjà gagné / client" };
   }
 
   if (stage === "LOST" || containsAny(statusText, HARD_EXCLUSION_TERMS)) {
@@ -105,11 +109,11 @@ export function getCompanyProspectionDecision(
     return { bucket: "ACTIONABLE", priority: 4, priorityLabel: "P4 · Contacté", reason: "Contact établi, prochaine action à qualifier" };
   }
 
-  if (stage === "OPEN") {
+  if (stage === "OPEN" || stage === "NEW") {
     return { bucket: "ACTIONABLE", priority: 5, priorityLabel: "P5 · À contacter", reason: "Compte à contacter" };
   }
 
-  return { bucket: "ACTIONABLE", priority: 6, priorityLabel: "P6 · Nouveau", reason: "Nouveau compte jamais traité" };
+  return { bucket: "ACTIONABLE", priority: 5, priorityLabel: "P5 · À contacter", reason: "Compte à contacter" };
 }
 
 export function compareCompanyProspectionPriority(
