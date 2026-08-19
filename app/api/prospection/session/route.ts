@@ -14,12 +14,27 @@ const TASK_PROPERTIES = [
   "hubspot_owner_id",
 ];
 
-const CONTACT_PROPERTIES = ["firstname", "lastname", "email", "phone", "mobilephone", "jobtitle"];
+const COMPANY_PROPERTIES = ["lifecyclestage", "hs_lead_status", "statut_prospection"];
+const CONTACT_PROPERTIES = ["firstname", "lastname", "email", "phone", "mobilephone", "jobtitle", "statut_prospection", "lifecyclestage"];
 
 type AssociationMap = Map<string, string[]>;
 
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))];
+}
+
+function normalize(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function isWonRecord(record: any) {
+  const p = record?.properties || {};
+  const status = normalize(p.statut_prospection);
+  return normalize(p.lifecyclestage) === "customer" || status === "gagne" || status === "won";
 }
 
 async function batchAssociations(fromType: string, toType: string, ids: string[]): Promise<AssociationMap> {
@@ -70,7 +85,12 @@ function dueAt(task: any) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const companyIds = unique((Array.isArray(body.companyIds) ? body.companyIds : []).map(String)).slice(0, 100);
+    const requestedCompanyIds = unique((Array.isArray(body.companyIds) ? body.companyIds : []).map(String)).slice(0, 100);
+    if (!requestedCompanyIds.length) return NextResponse.json({ summaries: {} });
+
+    const companyRecords = await batchRead("companies", requestedCompanyIds, COMPANY_PROPERTIES);
+    const wonCompanyIds = new Set(companyRecords.filter(isWonRecord).map(company => String(company.id)));
+    const companyIds = requestedCompanyIds.filter(id => !wonCompanyIds.has(id));
     if (!companyIds.length) return NextResponse.json({ summaries: {} });
 
     const [companyContacts, companyTasks] = await Promise.all([
@@ -106,6 +126,8 @@ export async function POST(request: NextRequest) {
 
       for (const taskId of directTaskIds) taskSources.set(taskId, null);
       for (const contactId of associatedContactIds) {
+        const contact = contactById.get(contactId);
+        if (isWonRecord(contact)) continue;
         for (const taskId of contactTasks.get(contactId) || []) {
           if (!taskSources.has(taskId)) taskSources.set(taskId, contactId);
         }
@@ -117,6 +139,7 @@ export async function POST(request: NextRequest) {
           if (!task || String(task.properties?.hs_task_status || "") === "COMPLETED") return null;
           const due = dueAt(task);
           const contact = sourceContactId ? contactById.get(sourceContactId) : null;
+          if (sourceContactId && isWonRecord(contact)) return null;
           const p = contact?.properties || {};
           return {
             id: String(task.id),
