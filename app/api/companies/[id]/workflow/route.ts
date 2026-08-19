@@ -10,40 +10,44 @@ type WorkflowAction =
   | "CONNECTED"
   | "FOLLOW_UP"
   | "LATER"
+  | "DEMO_SCHEDULED"
   | "OPEN_DEAL"
   | "WON"
   | "LOST";
 
 const HUBSPOT_LEAD_STATUS: Partial<Record<WorkflowAction, string>> = {
-  NEW: "NEW",
+  NEW: "OPEN",
   OPEN: "OPEN",
   ATTEMPTED_TO_CONTACT: "ATTEMPTED_TO_CONTACT",
   CONNECTED: "CONNECTED",
   FOLLOW_UP: "BAD_TIMING",
   LATER: "BAD_TIMING",
+  DEMO_SCHEDULED: "CONNECTED",
   OPEN_DEAL: "OPEN_DEAL",
   LOST: "UNQUALIFIED",
 };
 
 const PROSPECTION_LABEL: Record<WorkflowAction, string> = {
-  NEW: "À travailler",
+  NEW: "À contacter",
   OPEN: "À contacter",
   ATTEMPTED_TO_CONTACT: "Tentative",
   CONNECTED: "Contact établi",
   FOLLOW_UP: "À relancer",
   LATER: "Ultérieur",
+  DEMO_SCHEDULED: "Démo prévue",
   OPEN_DEAL: "Opportunité",
   WON: "Gagné",
   LOST: "Perdu",
 };
 
 const QUALIFICATION_SCORE: Record<WorkflowAction, number> = {
-  NEW: 20,
+  NEW: 30,
   OPEN: 30,
   ATTEMPTED_TO_CONTACT: 45,
   CONNECTED: 70,
   FOLLOW_UP: 80,
   LATER: 60,
+  DEMO_SCHEDULED: 85,
   OPEN_DEAL: 90,
   WON: 100,
   LOST: 5,
@@ -107,6 +111,13 @@ function contactWorkflowProperties(action: WorkflowAction, reminderAt: Date | nu
         statut_de_lappel: "A une date ultérieure",
         date_prochaine_relance: "",
         date_recyclage: reminderAt ? reminderAt.toISOString() : "",
+      };
+    case "DEMO_SCHEDULED":
+      return {
+        statut_prospection: "RDV booké",
+        resultat_prospection: "RDV obtenu",
+        statut_de_lappel: "Intéressé",
+        ...clearDates,
       };
     case "OPEN_DEAL":
       return {
@@ -175,7 +186,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     const body = await request.json();
     const action = String(body.action || "").trim() as WorkflowAction;
-    const allowed: WorkflowAction[] = ["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "FOLLOW_UP", "LATER", "OPEN_DEAL", "WON", "LOST"];
+    const allowed: WorkflowAction[] = ["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "FOLLOW_UP", "LATER", "DEMO_SCHEDULED", "OPEN_DEAL", "WON", "LOST"];
     if (!allowed.includes(action)) return NextResponse.json({ error: "Action de workflow invalide" }, { status: 400 });
 
     const reminderAt = parseReminder(body.reminderAt);
@@ -206,9 +217,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         properties.date_de_rappel = "";
         break;
       case "CONNECTED":
-        properties.statut_de_lappel = "interesse";
-        properties.date_de_rappel = "";
-        break;
+      case "DEMO_SCHEDULED":
       case "OPEN_DEAL":
         properties.statut_de_lappel = "interesse";
         properties.date_de_rappel = "";
