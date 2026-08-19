@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { buildHubSpotAuthUrl, createHubSpotState, isHubSpotOAuthConfigured } from "@/lib/hubspot";
+import {
+  buildHubSpotAuthUrl,
+  createHubSpotState,
+  isHubSpotOAuthConfigured,
+} from "@/lib/hubspot";
 
 export const dynamic = "force-dynamic";
 
