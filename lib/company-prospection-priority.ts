@@ -1,4 +1,4 @@
-export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "OPEN_DEAL" | "WON" | "LOST";
+export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "DEMO_SCHEDULED" | "OPEN_DEAL" | "WON" | "LOST";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
 
@@ -42,6 +42,8 @@ const HARD_EXCLUSION_TERMS = [
 ];
 
 const OPPORTUNITY_TERMS = [
+  "demo prevue",
+  "demo planifiee",
   "rdv booke",
   "rdv pris",
   "rendez vous planifie",
@@ -83,8 +85,12 @@ export function getCompanyProspectionDecision(
     return { bucket: "EXCLUDED", priority: 99, priorityLabel: "Exclu", reason };
   }
 
+  if (stage === "DEMO_SCHEDULED") {
+    return { bucket: "OPPORTUNITY", priority: 88, priorityLabel: "Démo prévue", reason: "Démo déjà planifiée : sortir de la prospection active" };
+  }
+
   if (stage === "OPEN_DEAL" || containsAny(statusText, OPPORTUNITY_TERMS)) {
-    return { bucket: "OPPORTUNITY", priority: 90, priorityLabel: "RDV / deal", reason: "Déjà qualifié : RDV ou opportunité en cours" };
+    return { bucket: "OPPORTUNITY", priority: 90, priorityLabel: "Opportunité", reason: "Besoin qualifié et opportunité commerciale en cours" };
   }
 
   const reminder = dateMs(p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date);
