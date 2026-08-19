@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { CompactEncrypt, compactDecrypt } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { getSupabaseAdmin } from "./supabase-admin";
@@ -105,11 +105,33 @@ async function readSession() {
 let lastAutomationCredentialSyncAt = 0;
 let serviceTokenCache: { token: string; expiresAt: number } | null = null;
 
+async function resolveVercelOidcToken() {
+  try {
+    const requestHeaders = await headers();
+    const headerToken = requestHeaders.get("x-vercel-oidc-token")?.trim() || "";
+    if (headerToken) return headerToken;
+  } catch {
+    // No active Next.js request context: fall through to helper/env fallback.
+  }
+
+  try {
+    const helperToken = (await getVercelOidcToken())?.trim() || "";
+    if (helperToken) return helperToken;
+  } catch {
+    // Ignore and try the build/runtime environment token below.
+  }
+
+  return process.env.VERCEL_OIDC_TOKEN?.trim() || "";
+}
+
 async function hubSpotTokenFromOidc() {
   if (!isProductionEnvironment()) return "";
   try {
-    const oidc = await getVercelOidcToken();
-    if (!oidc) return "";
+    const oidc = await resolveVercelOidcToken();
+    if (!oidc) {
+      console.error("HubSpot OIDC fallback unavailable: Vercel OIDC token missing from request context");
+      return "";
+    }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || DEFAULT_SUPABASE_URL;
     const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/${HUBSPOT_TOKEN_FUNCTION}`, {
