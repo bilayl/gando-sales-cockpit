@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Briefcase, Check, FileText, Globe, Loader2, MapPin, Pencil, PhoneCall, SlidersHorizontal, X } from "lucide-react";
+import { Briefcase, Building2, Check, FileText, Globe, Loader2, MapPin, Pencil, PhoneCall, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
 
 type CRMProperties = Record<string, string | null | undefined>;
@@ -49,7 +49,7 @@ function fieldSpecs(kind: Kind): FieldSpec[] {
 
   if (company) {
     return [
-      { key: "company_name", property: "name", fallbackLabel: "Nom de l’entreprise", icon: Briefcase },
+      { key: "company_name", property: "name", fallbackLabel: "Nom de l’entreprise", icon: Building2 },
       { key: "prospection", property: "statut_prospection", fallbackLabel: "Statut prospection", icon: SlidersHorizontal },
       ...common,
     ];
@@ -66,6 +66,7 @@ function splitMulti(value?: string | null) {
 }
 
 function companyProspectionLabel(p: CRMProperties) {
+  if (p.statut_prospection === "À travailler") return "À contacter";
   if (p.statut_prospection) return String(p.statut_prospection);
   if ((p.lifecyclestage || "").toLowerCase() === "customer") return "Gagné";
   if (p.hs_lead_status === "UNQUALIFIED") return "Perdu";
@@ -73,13 +74,12 @@ function companyProspectionLabel(p: CRMProperties) {
   if (p.hs_lead_status === "BAD_TIMING") return p.statut_de_lappel === "a_une_date_ulterieure" ? "Ultérieur" : "À relancer";
   if (p.hs_lead_status === "CONNECTED") return "Contact établi";
   if (p.hs_lead_status === "ATTEMPTED_TO_CONTACT") return "Tentative";
-  if (p.hs_lead_status === "OPEN") return "À contacter";
-  return "À travailler";
+  return "À contacter";
 }
 
 function companyStatusProperties(value: string) {
   const map: Record<string, Record<string, string>> = {
-    "À travailler": { statut_prospection: value, hs_lead_status: "NEW", lifecyclestage: "" },
+    "À travailler": { statut_prospection: "À contacter", hs_lead_status: "OPEN", lifecyclestage: "" },
     "À contacter": { statut_prospection: value, hs_lead_status: "OPEN", lifecyclestage: "" },
     "Tentative": { statut_prospection: value, hs_lead_status: "ATTEMPTED_TO_CONTACT", lifecyclestage: "" },
     "Contact établi": { statut_prospection: value, hs_lead_status: "CONNECTED", lifecyclestage: "" },
@@ -132,7 +132,7 @@ function EditablePropertyCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
-  const options = definition?.options || [];
+  const options = (definition?.options || []).filter(option => type !== "company-status" || option.value !== "À travailler");
   const multiValues = useMemo(() => new Set(splitMulti(draft)), [draft]);
   const Icon = spec.icon;
   const label = definition?.label || spec.fallbackLabel;
@@ -203,7 +203,7 @@ function EditablePropertyCard({
               {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           ) : (
-            <input autoFocus type={type === "number" ? "number" : "text"} value={draft} onChange={event => setDraft(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground outline-none focus:border-primary/55 focus:ring-2 focus:ring-ring/15" />
+            <input autoFocus type={type === "number" ? "number" : "text"} value={draft} onChange={event => setDraft(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary/55 focus:ring-2 focus:ring-ring/15" />
           )}
 
           <div className="flex justify-end gap-1.5">
