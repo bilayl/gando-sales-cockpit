@@ -1,6 +1,6 @@
 import { CompanyFirstProspectionView } from "@/components/company-first-prospection-view";
+import { ContactFirstProspectionView } from "@/components/contact-first-prospection-view";
 import { PostCallFollowupQueue } from "@/components/post-call-followup-queue";
-import { ProspectionView } from "@/components/prospection-view";
 import { getHubSpotIdentity, isAuthBypassEnabled } from "@/lib/hubspot";
 import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
 
@@ -13,7 +13,7 @@ export default async function ProspectionPage({ searchParams }: { searchParams: 
   const followup = <PostCallFollowupQueue senderName={identity?.email || undefined} />;
 
   if (params.mode === "contacts") {
-    return <><ProspectionView />{followup}</>;
+    return <><ContactFirstProspectionView />{followup}</>;
   }
 
   // Keep the account qualification model self-healing: opening the Company-first
