@@ -10,6 +10,7 @@ Application Next.js 16 / TypeScript destinée au setter Gando. HubSpot reste la 
 - **Tâches** : périodes, types, recherche, création et synchronisation du statut terminé.
 - **Agenda** : rendez-vous, tâches et rappels HubSpot dans une vue semaine ; Google Calendar reste optionnel.
 - **Rendez-vous** : tous les rendez-vous rattachés à l’owner configuré, avec vues de suivi et actions commerciales.
+- **Deal Room SD** : espace client versionné SD01 → SD05, avec SD01 manuel ou généré depuis les transcriptions Onoff, publication contrôlée, remarques du board et mesure des consultations.
 - **Sourcing** : recherche de nouvelles entreprises, contrôle anti-doublon HubSpot puis import Company-first.
 - **Stats** : appels, contacts travaillés, rendez-vous et conversion par période.
 
@@ -41,6 +42,10 @@ OPENROUTER_MODEL=openrouter/auto
 ```
 
 `OPENROUTER_API_KEY` doit être configurée uniquement côté serveur (Vercel Production/Preview selon l’environnement) et ne doit jamais être préfixée par `NEXT_PUBLIC_`.
+
+L’agent SD01 utilise `OPENROUTER_SD01_MODEL` lorsqu’elle est définie, puis `OPENROUTER_MODEL`. Les rooms, versions, transcriptions sources, remarques et événements de consultation sont stockés dans Supabase. Le navigateur n’accède jamais directement à ces tables : `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` restent consommées par les routes serveur.
+
+Depuis une War Room interne, ouvrir **Room SD client**. La création initialise les cinq étapes. Le SD01 peut être saisi manuellement ou généré depuis les appels Onoff liés au deal/à l’entreprise et une transcription collée. Une génération passe toujours au statut **À relire** ; seul le bouton **Publier** remplace la version visible par le client.
 
 Google Calendar est facultatif :
 

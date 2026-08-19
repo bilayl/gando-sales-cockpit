@@ -289,6 +289,7 @@ export function DealWarRoom({ dealId }: { dealId: string }) {
           {detail.hubspotUrl ? (
             <Button variant="outline" size="sm" asChild><a href={detail.hubspotUrl} target="_blank" rel="noreferrer">Ouvrir dans HubSpot <ExternalLink className="ml-1 h-3.5 w-3.5" /></a></Button>
           ) : null}
+          <Button size="sm" asChild><Link href={`/deal-room/${dealId}/sd`}><Sparkles className="mr-1.5 h-4 w-4" /> Room SD client</Link></Button>
           <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Actualiser" onClick={() => void load(true)}><RefreshCw className="h-4 w-4" /></Button>
         </div>
 
