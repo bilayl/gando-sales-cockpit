@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GandoBannerArt } from "@/components/gando-banner-art";
+import { GandoMark } from "@/components/gando-mark";
 import type { SDRoomBrandTheme, SDRoomRecord } from "@/lib/sd-room-types";
 import { cn } from "@/lib/utils";
 
@@ -35,16 +37,15 @@ function Preview({ companyName, logoUrl, bannerUrl, theme, title, subtitle }: { 
   const light = theme === "light";
   return (
     <div
-      className={cn("relative isolate overflow-hidden rounded-[26px] bg-gradient-to-br px-6 py-8 shadow-[0_22px_60px_rgba(73,54,160,0.16)]", selected.preview)}
+      className={cn("relative isolate overflow-hidden bg-gradient-to-br px-6 py-8 shadow-[0_18px_50px_rgba(73,54,160,0.14)]", selected.preview)}
       style={bannerUrl ? { backgroundImage: `linear-gradient(110deg, rgba(87,64,211,.84), rgba(157,139,245,.74)), url(${bannerUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
     >
-      <div className="pointer-events-none absolute -left-20 -top-24 h-52 w-[75%] rotate-[8deg] rounded-full bg-white/10" />
-      <div className="pointer-events-none absolute -bottom-20 right-[-10%] h-40 w-[70%] -rotate-[8deg] rounded-full bg-[#5a41dc]/20" />
+      {!bannerUrl ? <GandoBannerArt /> : null}
       <div className="relative z-10 flex flex-col items-center text-center">
         <div className="flex items-center gap-7">
           <ClientLogo name={companyName || "Client"} url={logoUrl} />
           <span className={cn("text-4xl font-black", light ? "text-[#172a32]" : "text-white")}>×</span>
-          <div className="grid h-20 w-20 place-items-center rounded-full border-[3px] border-white bg-white/10 shadow-xl"><img src="/icon.svg" alt="Gando" className="h-14 w-14 rounded-full" /></div>
+          <GandoMark className="h-20 w-20" />
         </div>
         <div className={cn("mt-6 text-[9px] font-black uppercase tracking-[0.18em]", light ? "text-[#4d39b8]" : "text-white/70")}>Gando Deal Room</div>
         <div className={cn("mt-2 text-xl font-black tracking-[-0.035em]", light ? "text-[#172a32]" : "text-white")}>{title || `${companyName || "Client"} × Gando`}</div>
@@ -139,14 +140,16 @@ export function SDRoomBrandingEditor({ dealId }: { dealId: string }) {
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)]">
-          <Card className="p-5 lg:p-6">
-            <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><h2 className="font-bold">Aperçu de la bannière client</h2></div>
-            <div className="mt-4"><Preview companyName={companyName} logoUrl={logoUrl} bannerUrl={bannerUrl} theme={theme} title={title} subtitle={subtitle} /></div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div><Label>Nom de l’entreprise</Label><Input className="mt-2" value={companyName} onChange={event => setCompanyName(event.target.value)} placeholder="ACME" /></div>
-              <div><Label>Logo entreprise · URL</Label><Input className="mt-2" value={logoUrl} onChange={event => setLogoUrl(event.target.value)} placeholder="https://…/logo.svg" /></div>
+          <Card className="overflow-hidden p-0">
+            <div className="px-5 pb-4 pt-5 lg:px-6 lg:pt-6"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><h2 className="font-bold">Aperçu de la bannière client</h2></div></div>
+            <Preview companyName={companyName} logoUrl={logoUrl} bannerUrl={bannerUrl} theme={theme} title={title} subtitle={subtitle} />
+            <div className="p-5 lg:p-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><Label>Nom de l’entreprise</Label><Input className="mt-2" value={companyName} onChange={event => setCompanyName(event.target.value)} placeholder="ACME" /></div>
+                <div><Label>Logo entreprise · URL</Label><Input className="mt-2" value={logoUrl} onChange={event => setLogoUrl(event.target.value)} placeholder="https://…/logo.svg" /></div>
+              </div>
+              <div className="mt-4"><Label>Image de bannière · URL <span className="font-normal text-muted-foreground">(optionnelle)</span></Label><div className="mt-2 flex items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-dashed border-border bg-muted/30">{bannerUrl ? <img src={bannerUrl} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="h-4 w-4 text-muted-foreground" />}</div><Input value={bannerUrl} onChange={event => setBannerUrl(event.target.value)} placeholder="Laisser vide pour la bannière Gando" /></div></div>
             </div>
-            <div className="mt-4"><Label>Image de bannière · URL <span className="font-normal text-muted-foreground">(optionnelle)</span></Label><div className="mt-2 flex items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-dashed border-border bg-muted/30">{bannerUrl ? <img src={bannerUrl} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="h-4 w-4 text-muted-foreground" />}</div><Input value={bannerUrl} onChange={event => setBannerUrl(event.target.value)} placeholder="Laisser vide pour la bannière Gando" /></div></div>
           </Card>
 
           <div className="space-y-5">
