@@ -3,7 +3,7 @@ import { hubspotJson } from "@/lib/hubspot";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const COMPANY_PROSPECTION_PROPERTIES = [
-  "name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id",
+  "name","domain","phone","website","zip","city","state","country","industry","description","hubspot_owner_id",
   "num_associated_contacts","num_associated_deals","hs_lead_status","lifecyclestage","statut_de_lappel","date_de_rappel","statut_prospection",
   "notes_next_activity_date","notes_last_updated","hs_last_sales_activity_timestamp","hs_object_source_label","createdate",
 ];
