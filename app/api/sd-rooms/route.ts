@@ -1,5 +1,8 @@
+import { randomBytes, randomUUID } from "node:crypto";
+import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
 import { requireSDInternalAccess } from "@/lib/sd-room";
+import { SD_CODES, SD_STAGE_META, createEmptySD01 } from "@/lib/sd-room-types";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +70,7 @@ export async function GET() {
       const analytics = analyticsByRoom.get(room.id);
       return {
         ...room,
+        crmConnected: !room.hubspot_deal_id.startsWith("standalone:"),
         documents: documentsByRoom.get(room.id) || [],
         opens: analytics?.opens || 0,
         uniqueVisitors: analytics?.visitors.size || 0,
@@ -76,6 +80,54 @@ export async function GET() {
     });
 
     return Response.json({ results, total: results.length });
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const createdByEmail = await requireSDInternalAccess();
+    const body = await request.json();
+    const companyName = String(body?.companyName || "").trim().slice(0, 240);
+    const title = String(body?.title || "").trim().slice(0, 240);
+    const crmLink = String(body?.crmLink || "").trim().slice(0, 2000) || null;
+    const prospectLogoUrl = String(body?.prospectLogoUrl || "").trim().slice(0, 2000) || null;
+
+    if (!companyName) throw Object.assign(new Error("Le nom de l’organisation est obligatoire."), { status: 400 });
+    if (!title) throw Object.assign(new Error("Le nom de la dealroom est obligatoire."), { status: 400 });
+
+    const admin = getSupabaseAdmin();
+    const editorKey = `standalone:${randomUUID()}`;
+    const shareToken = randomBytes(32).toString("base64url");
+    const { data: room, error } = await admin
+      .from("deal_rooms")
+      .insert({
+        hubspot_deal_id: editorKey,
+        company_hubspot_id: null,
+        title,
+        company_name: companyName,
+        crm_link: crmLink,
+        prospect_logo_url: prospectLogoUrl,
+        share_token: shareToken,
+        created_by_email: createdByEmail,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+
+    const { error: documentsError } = await admin.from("sd_documents").insert(
+      SD_CODES.map(code => ({
+        room_id: room.id,
+        code,
+        title: SD_STAGE_META[code].title,
+        content: code === "SD01" ? createEmptySD01(companyName) : {},
+        updated_by_email: createdByEmail,
+      })),
+    );
+    if (documentsError) throw documentsError;
+
+    return Response.json({ room, editorKey, crmConnected: false }, { status: 201 });
   } catch (error) {
     return apiError(error);
   }
