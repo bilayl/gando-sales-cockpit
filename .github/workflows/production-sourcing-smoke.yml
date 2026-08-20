@@ -1,6 +1,6 @@
 name: Production sourcing smoke test
 
-# Live production smoke test for the current sourcing route.
+# Live production smoke test for the Responses API sourcing fallback.
 on:
   workflow_dispatch:
   push:
