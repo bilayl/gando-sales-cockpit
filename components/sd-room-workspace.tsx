@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FileText, Palette } from "lucide-react";
-import { SDRoomBrandingEditor } from "@/components/sd-room-branding-editor";
+import { SDRoomBrandingEditorV2 } from "@/components/sd-room-branding-editor-v2";
 import { SDRoomEditor } from "@/components/sd-room-editor";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +18,7 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
           <span className="ml-auto hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:block">Room SD · Gando</span>
         </div>
       </div>
-      {tab === "content" ? <SDRoomEditor dealId={dealId} /> : <SDRoomBrandingEditor dealId={dealId} />}
+      {tab === "content" ? <SDRoomEditor dealId={dealId} /> : <SDRoomBrandingEditorV2 dealId={dealId} />}
     </div>
   );
 }
