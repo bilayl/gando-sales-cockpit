@@ -5,7 +5,7 @@ import { enrichmentAuthHeaders, enrichmentBackendUrl } from "@/lib/enrichment-au
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const SOURCING_ENGINE = "enrichment-backend-inpi-v1";
+const SOURCING_ENGINE = "enrichment-backend-inpi-v2-errors";
 
 type EnrichmentPayload = {
   searchId?: string;
@@ -20,8 +20,37 @@ type EnrichmentPayload = {
     errors?: number;
     excludedCommercialOptOutOrNonDiffusible?: number;
   };
-  error?: string;
+  error?: unknown;
+  message?: unknown;
+  details?: unknown;
+  code?: unknown;
 };
+
+function readableError(value: unknown, fallback = "Erreur inconnue") {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (value instanceof Error && value.message) return value.message;
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["message", "error_description", "detail", "details", "code"]) {
+      const nested = record[key];
+      if (typeof nested === "string" && nested.trim()) return nested.trim();
+      if (nested && typeof nested === "object") {
+        const nestedMessage = readableError(nested, "");
+        if (nestedMessage) return nestedMessage;
+      }
+    }
+
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      // Ignore circular/unsupported objects and use the fallback below.
+    }
+  }
+
+  return fallback;
+}
 
 async function searchThroughEnrichmentBackend(body: Record<string, unknown>) {
   const authHeaders = await enrichmentAuthHeaders();
@@ -46,11 +75,18 @@ async function searchThroughEnrichmentBackend(body: Record<string, unknown>) {
   try {
     payload = raw ? JSON.parse(raw) as EnrichmentPayload : {};
   } catch {
-    throw new Error(`Le backend d'enrichissement a renvoyé une réponse JSON invalide (HTTP ${response.status})`);
+    const preview = raw.trim().slice(0, 300);
+    throw new Error(
+      `Le backend d'enrichissement a renvoyé une réponse JSON invalide (HTTP ${response.status})${preview ? ` : ${preview}` : ""}`,
+    );
   }
 
   if (!response.ok) {
-    throw new Error(payload.error || `Backend d'enrichissement HTTP ${response.status}`);
+    const backendMessage = readableError(
+      payload.error ?? payload.message ?? payload.details,
+      `Backend d'enrichissement HTTP ${response.status}`,
+    );
+    throw new Error(`Backend d'enrichissement HTTP ${response.status} : ${backendMessage}`);
   }
 
   return payload;
@@ -99,11 +135,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error
-      ? error.name === "TimeoutError"
-        ? "La recherche a dépassé le délai maximum du backend d'enrichissement."
-        : error.message
-      : "Erreur de sourcing";
+    const message = error instanceof Error && error.name === "TimeoutError"
+      ? "La recherche a dépassé le délai maximum du backend d'enrichissement."
+      : readableError(error, "Erreur de sourcing");
 
     return NextResponse.json({ error: message, sourcingEngine: SOURCING_ENGINE }, {
       status: 502,
