@@ -64,14 +64,15 @@ jobs:
               DESCRIPTION="HTTP $HTTP_CODE but no companies returned"
             fi
           else
-            ERROR_TEXT=$(jq -r '.error // .message // empty' response.json 2>/dev/null | head -c 90 || true)
+            ERROR_TEXT=$(jq -r '.error // .message // empty' response.json 2>/dev/null | head -c 70 || true)
             DESCRIPTION="HTTP $HTTP_CODE${ERROR_TEXT:+: $ERROR_TEXT}"
           fi
 
-          DESCRIPTION=$(printf '%s' "$DESCRIPTION" | head -c 130)
+          DESCRIPTION=$(printf '%s' "$DESCRIPTION" | tr '\n' ' ' | head -c 80)
+          CONTEXT=$(printf 'Production Sourcing | %s' "$DESCRIPTION" | head -c 100)
           STATUS_BODY=$(jq -n \
             --arg state "$STATE" \
-            --arg context "Production Sourcing" \
+            --arg context "$CONTEXT" \
             --arg description "$DESCRIPTION" \
             '{state:$state,context:$context,description:$description}')
 
