@@ -1,13 +1,25 @@
 import { getVercelOidcToken } from "@vercel/oidc";
 
-// Use the production alias, not the long auto-generated deployment URL.
-// Vercel Standard Deployment Protection protects the generated deployment URL
-// while leaving the production domain reachable. The backend still enforces
-// its own x-gando-api-key / OIDC authentication at the application layer.
 const DEFAULT_ENRICHMENT_BACKEND_URL = "https://gando-enrichment-backend.vercel.app";
+const PROTECTED_DEPLOYMENT_ALIASES = new Set([
+  "https://gando-enrichment-backend-lenrigandoyt-9842s-projects.vercel.app",
+]);
 
 export function enrichmentBackendUrl() {
-  return (process.env.ENRICHMENT_BACKEND_URL || process.env.GANDO_ENRICHMENT_BACKEND_URL || DEFAULT_ENRICHMENT_BACKEND_URL).replace(/\/$/, "");
+  const configured = (
+    process.env.ENRICHMENT_BACKEND_URL ||
+    process.env.GANDO_ENRICHMENT_BACKEND_URL ||
+    DEFAULT_ENRICHMENT_BACKEND_URL
+  ).replace(/\/$/, "");
+
+  // Vercel Standard Deployment Protection can protect long generated deployment
+  // URLs while the production alias remains reachable. Do not let a stale env
+  // variable route server-to-server traffic back to the protected alias.
+  if (PROTECTED_DEPLOYMENT_ALIASES.has(configured)) {
+    return DEFAULT_ENRICHMENT_BACKEND_URL;
+  }
+
+  return configured;
 }
 
 export async function enrichmentAuthHeaders(): Promise<Record<string, string>> {
