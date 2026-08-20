@@ -10,7 +10,7 @@ export async function GET() {
     const admin = getSupabaseAdmin();
     const { data: rooms, error: roomsError } = await admin
       .from("deal_rooms")
-      .select("id,hubspot_deal_id,title,company_name,share_token,status,current_stage,published_at,last_shared_at,created_at,updated_at")
+      .select("id,hubspot_deal_id,title,company_name,crm_link,prospect_logo_url,share_token,status,current_stage,published_at,last_shared_at,created_at,updated_at")
       .order("updated_at", { ascending: false })
       .limit(250);
 
