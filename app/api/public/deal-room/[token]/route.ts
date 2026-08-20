@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getPublicSDRoom } from "@/lib/sd-room";
+import { getPublicSDRoomWithIdentity } from "@/lib/sd-room-public-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { token } = await params;
   try {
     const body = await request.json();
-    const data = await getPublicSDRoom(token, body?.email);
+    const data = await getPublicSDRoomWithIdentity({
+      token,
+      email: body?.email,
+      firstName: body?.firstName,
+      lastName: body?.lastName,
+    });
     return Response.json({
       ...data,
       room: {
