@@ -209,7 +209,7 @@ function parseJsonObject(text: string) {
 }
 
 function formatInstruction(name: string, schema: object) {
-  return `\n\nFORMAT DE SORTIE OBLIGATOIRE : réponds avec UN SEUL objet JSON valide, sans markdown, sans balise \\`\\`\\`, sans préambule ni commentaire. Le JSON doit respecter exactement ce schéma :\n${JSON.stringify(schema)}\nNom logique du schéma : ${name}.`;
+  return `\n\nFORMAT DE SORTIE OBLIGATOIRE : réponds avec UN SEUL objet JSON valide, sans markdown, sans bloc de code, sans préambule ni commentaire. Le JSON doit respecter exactement ce schéma :\n${JSON.stringify(schema)}\nNom logique du schéma : ${name}.`;
 }
 
 async function requestStructuredJson(input: {
