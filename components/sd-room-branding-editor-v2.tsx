@@ -7,51 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GandoMark } from "@/components/gando-mark";
+import { SDRoomBrandBanner, SD_ROOM_BANNER_THEMES } from "@/components/sd-room-brand-banner";
 import type { SDRoomBrandTheme, SDRoomRecord } from "@/lib/sd-room-types";
 import { cn } from "@/lib/utils";
 
 type BrandingResponse = { room: SDRoomRecord | null };
-
-const themes: Array<{ value: SDRoomBrandTheme; label: string; preview: string }> = [
-  { value: "gando", label: "Gando violet", preview: "from-[#7664ef] via-[#907ff4] to-[#a99bf6]" },
-  { value: "gradient", label: "Gradient fort", preview: "from-[#5238d4] via-[#7c65ef] to-[#ad9cf7]" },
-  { value: "dark", label: "Dark", preview: "from-[#14272e] via-[#273b49] to-[#10191d]" },
-  { value: "light", label: "Light", preview: "from-[#f4f0ff] via-[#e8e2ff] to-[#d8d0ff]" },
-];
-
-function initials(value: string) {
-  return value.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "CL";
-}
-
-function ClientLogo({ name, url }: { name: string; url: string }) {
-  if (url) return <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-full border-2 border-white bg-white shadow-xl"><img src={url} alt={`Logo ${name}`} className="h-full w-full object-contain p-2" /></div>;
-  return <div className="grid h-20 w-20 place-items-center rounded-full border-2 border-white bg-white text-lg font-black text-[#4d39b8] shadow-xl">{initials(name)}</div>;
-}
-
-function Preview({ companyName, logoUrl, bannerUrl, theme, title, subtitle }: { companyName: string; logoUrl: string; bannerUrl: string; theme: SDRoomBrandTheme; title: string; subtitle: string }) {
-  const selected = themes.find(item => item.value === theme) || themes[0];
-  const light = theme === "light";
-  return (
-    <div
-      className={cn("relative isolate w-full overflow-hidden bg-gradient-to-br px-6 pb-10 pt-10 shadow-[0_22px_60px_rgba(73,54,160,0.16)]", selected.preview)}
-      style={bannerUrl ? { backgroundImage: `linear-gradient(110deg, rgba(87,64,211,.84), rgba(157,139,245,.74)), url(${bannerUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
-    >
-      <div className="pointer-events-none absolute -left-20 -top-24 h-52 w-[75%] rotate-[8deg] rounded-full bg-white/10" />
-      <div className="pointer-events-none absolute -bottom-20 right-[-10%] h-40 w-[70%] -rotate-[8deg] rounded-full bg-[#5a41dc]/20" />
-      <div className="relative z-10 flex flex-col items-center text-center">
-        <div className="flex items-center gap-7">
-          <ClientLogo name={companyName || "Client"} url={logoUrl} />
-          <span className={cn("text-4xl font-black", light ? "text-[#172a32]" : "text-white")}>×</span>
-          <GandoMark className="h-20 w-20" />
-        </div>
-        <div className={cn("mt-6 text-[9px] font-black uppercase tracking-[0.18em]", light ? "text-[#4d39b8]" : "text-white/70")}>Gando Deal Room</div>
-        <div className={cn("mt-2 text-xl font-black tracking-[-0.035em]", light ? "text-[#172a32]" : "text-white")}>{title || `${companyName || "Client"} × Gando`}</div>
-        <div className={cn("mt-2 max-w-xl text-xs leading-5", light ? "text-[#637278]" : "text-white/75")}>{subtitle || "Espace de collaboration stratégique"}</div>
-      </div>
-    </div>
-  );
-}
 
 export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
   const [room, setRoom] = useState<SDRoomRecord | null>(null);
@@ -133,14 +93,14 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
     <div className="page-shell min-h-screen p-5 lg:p-7">
       <div className="mx-auto max-w-[1280px] space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Site client</div><h1 className="mt-1 text-2xl font-black tracking-[-0.035em]">Branding de la Deal Room</h1><p className="mt-1 text-sm text-muted-foreground">Construisez la bannière et l’identité visuelle que verra le client sur son lien public.</p></div>
+          <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Site client</div><h1 className="mt-1 text-2xl font-black tracking-[-0.035em]">Branding de la Deal Room</h1><p className="mt-1 text-sm text-muted-foreground">Cette bannière est exactement celle affichée sur le lien public de la Deal Room.</p></div>
           <div className="flex gap-2"><Button variant="outline" disabled={room.status !== "published" || !shareUrl} onClick={async () => { await navigator.clipboard.writeText(shareUrl); toast.success("Lien client copié"); }}><Copy className="mr-2 h-4 w-4" /> Lien client</Button><Button onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Enregistrer</Button></div>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)]">
           <Card className="overflow-hidden p-0">
             <div className="flex items-center gap-2 border-b border-border px-5 py-4 lg:px-6"><Sparkles className="h-4 w-4 text-primary" /><h2 className="font-bold">Aperçu de la bannière client</h2></div>
-            <Preview companyName={companyName} logoUrl={logoUrl} bannerUrl={bannerUrl} theme={theme} title={title} subtitle={subtitle} />
+            <SDRoomBrandBanner companyName={companyName} logoUrl={logoUrl} bannerUrl={bannerUrl} theme={theme} title={title} subtitle={subtitle} />
             <div className="space-y-4 p-5 lg:p-6">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div><Label>Nom de l’entreprise</Label><Input className="mt-2" value={companyName} onChange={event => setCompanyName(event.target.value)} placeholder="ACME" /></div>
@@ -159,9 +119,9 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
             <Card className="p-5">
               <h2 className="font-bold">Style de bannière</h2>
               <div className="mt-4 grid grid-cols-2 gap-3">
-                {themes.map(item => <button key={item.value} type="button" onClick={() => setTheme(item.value)} className={cn("rounded-xl border p-2 text-left transition", theme === item.value ? "border-primary bg-primary/[0.05] ring-2 ring-primary/10" : "border-border hover:border-primary/40")}><div className={cn("h-14 rounded-lg bg-gradient-to-br", item.preview)} /><div className="mt-2 flex items-center justify-between text-xs font-semibold"><span>{item.label}</span>{theme === item.value ? <Check className="h-3.5 w-3.5 text-primary" /> : null}</div></button>)}
+                {SD_ROOM_BANNER_THEMES.map(item => <button key={item.value} type="button" onClick={() => setTheme(item.value)} className={cn("rounded-xl border p-2 text-left transition", theme === item.value ? "border-primary bg-primary/[0.05] ring-2 ring-primary/10" : "border-border hover:border-primary/40")}><div className={cn("h-14 rounded-lg bg-gradient-to-br", item.preview)} /><div className="mt-2 flex items-center justify-between text-xs font-semibold"><span>{item.label}</span>{theme === item.value ? <Check className="h-3.5 w-3.5 text-primary" /> : null}</div></button>)}
               </div>
-              <p className="mt-3 text-[11px] leading-5 text-muted-foreground">La bannière du site public est full-bleed : aucun espace blanc à gauche, à droite ou au-dessus. Si une image est renseignée, elle garde un voile violet Gando pour la lisibilité.</p>
+              <p className="mt-3 text-[11px] leading-5 text-muted-foreground">Le site public réutilise maintenant ce composant à l’identique : même thème, même image, même voile, mêmes logos, même titre et même sous-titre.</p>
             </Card>
           </div>
         </div>
