@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
+import type { DealRoomDetail } from "@/lib/deal-room-types";
 import { getDealRoomDetail } from "@/lib/hubspot/deals";
 import { apiError } from "@/lib/hubspot";
 import { normalizeManualSD01 } from "@/lib/sd01-agent";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import {
   createSDRoom,
   getSDRoomBundle,
@@ -12,49 +12,112 @@ import {
   saveSDDocument,
   updateSDRoomSettings,
 } from "@/lib/sd-room";
+import type { SDRoomRecord } from "@/lib/sd-room-types";
 
 export const dynamic = "force-dynamic";
 
+function standaloneDeal(room: SDRoomRecord): DealRoomDetail {
+  return {
+    id: room.hubspot_deal_id,
+    name: room.title,
+    amount: null,
+    currency: null,
+    closeDate: null,
+    createdDate: room.created_at,
+    stageId: null,
+    stageLabel: "Dealroom autonome",
+    stageProbability: null,
+    pipelineId: null,
+    pipelineLabel: null,
+    ownerId: null,
+    ownerName: null,
+    hsNextStep: null,
+    nextActivityDate: null,
+    lastActivityAt: room.updated_at,
+    daysSinceLastActivity: null,
+    closed: false,
+    closedWon: false,
+    company: {
+      id: room.company_hubspot_id || room.id,
+      name: room.company_name,
+      domain: null,
+      industry: null,
+      city: null,
+    },
+    contacts: [],
+    championId: null,
+    decisionMakerId: null,
+    championIdentified: false,
+    championName: null,
+    decisionMakerIdentified: false,
+    decisionMakerName: null,
+    strategic: true,
+    strategicReason: "Dealroom créée sans association CRM.",
+    potentialArr: null,
+    potentialVolume: null,
+    blockers: [],
+    detectedBlockers: [],
+    meetingPlanned: false,
+    nextMeetingAt: null,
+    nextTaskDueAt: null,
+    nextTaskSubject: null,
+    openTasksCount: 0,
+    recentNoShowOrCancelled: false,
+    score: 0,
+    priorityScore: 0,
+    priorityExplanation: "Dealroom autonome",
+    health: "on_track",
+    healthReason: "Suivi manuel dans la Room SD",
+    breakdown: { economic: 0, strategic: 0, momentum: 0, health: 0 },
+    scoreReasons: [],
+    hubspotUrl: null,
+    overviewMissing: [],
+    stakeholders: [],
+    nextSteps: [],
+    meetings: { upcoming: [], completed: [], noShow: [], cancelled: [] },
+    timeline: [],
+    intelligence: { fields: [], mustKnow: [], recommendedAction: "Compléter le SD01", recommendedActionReason: "La room n’est pas reliée à un deal CRM." },
+    closingPlan: { steps: [], doneCount: 0, inProgressCount: 0, total: 0, progressLabel: "0/0" },
+    documents: [],
+    stageOptions: [],
+    contactsForAssociation: [],
+  };
+}
+
 async function loadContext(id: string) {
   const userEmail = await requireSDInternalAccess();
-  const deal = await getDealRoomDetail(id);
   const bundle = await getSDRoomBundle(id);
-  return { userEmail, deal, bundle };
+  if (id.startsWith("standalone:")) {
+    if (!bundle.room) throw Object.assign(new Error("Dealroom autonome introuvable."), { status: 404 });
+    return { userEmail, deal: standaloneDeal(bundle.room), bundle, standalone: true };
+  }
+  const deal = await getDealRoomDetail(id);
+  return { userEmail, deal, bundle, standalone: false };
 }
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
-    const { deal, bundle } = await loadContext(id);
-    const linkedConversations = await listLinkedConversations(id, deal.company?.id || null, bundle.room?.id);
-    return Response.json({ deal, ...bundle, linkedConversations });
+    const { deal, bundle, standalone } = await loadContext(id);
+    const linkedConversations = standalone ? [] : await listLinkedConversations(id, deal.company?.id || null, bundle.room?.id);
+    return Response.json({ deal, ...bundle, linkedConversations, crmConnected: !standalone });
   } catch (error) {
     return apiError(error);
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
-    const { userEmail, deal } = await loadContext(id);
-    const body = await request.json().catch(() => ({}));
-    const room = await createSDRoom(deal, userEmail);
-
-    const defaultCompanyName = deal.company?.name || "Client";
-    const companyName = String(body?.companyName || defaultCompanyName).trim().slice(0, 200) || defaultCompanyName;
-    const title = String(body?.title || `${companyName} × Gando`).trim().slice(0, 240) || `${companyName} × Gando`;
-    const crmLink = String(body?.crmLink || deal.hubspotUrl || "").trim().slice(0, 1000) || null;
-    const prospectLogoUrl = String(body?.prospectLogoUrl || "").trim().slice(0, 2000) || null;
-
-    const { error: updateError } = await getSupabaseAdmin()
-      .from("deal_rooms")
-      .update({ title, company_name: companyName, crm_link: crmLink, prospect_logo_url: prospectLogoUrl })
-      .eq("id", room.id);
-    if (updateError) throw updateError;
-
-    const bundle = await getSDRoomBundle(id);
-    const linkedConversations = await listLinkedConversations(id, deal.company?.id || null, bundle.room?.id);
-    return Response.json({ deal, ...bundle, linkedConversations }, { status: 201 });
+    const { userEmail, deal, bundle, standalone } = await loadContext(id);
+    if (standalone) {
+      const linkedConversations: never[] = [];
+      return Response.json({ deal, ...bundle, linkedConversations, crmConnected: false }, { status: 200 });
+    }
+    await createSDRoom(deal, userEmail);
+    const nextBundle = await getSDRoomBundle(id);
+    const linkedConversations = await listLinkedConversations(id, deal.company?.id || null, nextBundle.room?.id);
+    return Response.json({ deal, ...nextBundle, linkedConversations, crmConnected: true }, { status: 201 });
   } catch (error) {
     return apiError(error);
   }
