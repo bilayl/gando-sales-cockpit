@@ -1,7 +1,7 @@
 import type { SourcingProspect } from "@/lib/enrichment-dedup";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/responses";
 
 const PROSPECT_SCHEMA = {
   type: "object",
@@ -88,11 +88,20 @@ async function getOpenRouterApiKey() {
 }
 
 function extractText(payload: any) {
+  const responseText = (payload?.output || [])
+    .flatMap((item: any) => item?.content || [])
+    .filter((item: any) => item?.type === "output_text" && typeof item.text === "string")
+    .map((item: any) => item.text)
+    .join("\n")
+    .trim();
+  if (responseText) return responseText;
+
+  // Compatibility fallback if a provider normalizes the response as chat completions.
   const content = payload?.choices?.[0]?.message?.content;
   if (typeof content === "string") return content.trim();
   if (Array.isArray(content)) {
     return content
-      .filter((item: any) => item?.type === "text" && typeof item.text === "string")
+      .filter((item: any) => ["text", "output_text"].includes(item?.type) && typeof item.text === "string")
       .map((item: any) => item.text)
       .join("\n")
       .trim();
@@ -112,6 +121,28 @@ function cleanJsonText(text: string) {
 
 function parseJson(text: string) {
   return JSON.parse(cleanJsonText(text));
+}
+
+function readableApiError(value: unknown, fallback = "Erreur OpenRouter inconnue"): string {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["message", "error_description", "detail", "details", "code"]) {
+      const nested = record[key];
+      if (typeof nested === "string" && nested.trim()) return nested.trim();
+      if (nested && typeof nested === "object") {
+        const nestedMessage = readableApiError(nested, "");
+        if (nestedMessage) return nestedMessage;
+      }
+    }
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {
+      // Use fallback below.
+    }
+  }
+  return fallback;
 }
 
 function structuredOutputConfig() {
@@ -143,9 +174,18 @@ async function callOpenRouter(token: string, body: Record<string, unknown>) {
     signal: AbortSignal.timeout(55_000),
   });
 
-  const payload = await response.json().catch(() => ({}));
+  const raw = await response.text();
+  let payload: any = {};
+  if (raw) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      throw new Error(`OpenRouter ${response.status}: réponse JSON invalide - ${raw.trim().slice(0, 250)}`);
+    }
+  }
+
   if (!response.ok || payload?.error) {
-    throw new Error(`OpenRouter ${response.status}: ${payload?.error?.message || payload?.error || response.statusText}`);
+    throw new Error(`OpenRouter ${response.status}: ${readableApiError(payload?.error || payload, response.statusText)}`);
   }
 
   return payload;
@@ -154,14 +194,9 @@ async function callOpenRouter(token: string, body: Record<string, unknown>) {
 async function repairMalformedJson(token: string, model: string, text: string) {
   const payload = await callOpenRouter(token, {
     model,
-    max_tokens: 12000,
+    input: `Répare le JSON ci-dessous sans inventer de nouvelles entreprises. Conserve uniquement les prospects complets et factuels. Si le dernier objet est tronqué ou incomplet, supprime uniquement cet objet. Réponds exclusivement avec le JSON conforme au schéma demandé.\n\n${text}`,
+    max_output_tokens: 12000,
     ...structuredOutputConfig(),
-    messages: [
-      {
-        role: "user",
-        content: `Répare le JSON ci-dessous sans inventer de nouvelles entreprises. Conserve uniquement les prospects complets et factuels. Si le dernier objet est tronqué ou incomplet, supprime uniquement cet objet. Réponds exclusivement avec le JSON conforme au schéma demandé.\n\n${text}`,
-      },
-    ],
   });
 
   const repairedText = extractText(payload);
@@ -178,7 +213,6 @@ export async function searchRentalCompaniesLocally(input: {
   const token = await getOpenRouterApiKey();
 
   const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 50);
-  // Garde une marge pour la déduplication sans demander un JSON inutilement énorme.
   const target = Math.min(Math.max(limit + 10, 20), 45);
   const territories = input.territories?.length
     ? input.territories
@@ -198,7 +232,8 @@ Privilégie les loueurs indépendants et PME réellement actifs. Ne remplis pas 
   const model = process.env.OPENROUTER_MODEL || process.env.ENRICHMENT_MODEL || "openrouter/auto";
   const payload = await callOpenRouter(token, {
     model,
-    max_tokens: 12000,
+    input: prompt,
+    max_output_tokens: 12000,
     ...structuredOutputConfig(),
     tools: [
       {
@@ -209,11 +244,10 @@ Privilégie les loueurs indépendants et PME réellement actifs. Ne remplis pas 
         },
       },
     ],
-    messages: [{ role: "user", content: prompt }],
   });
 
   const text = extractText(payload);
-  if (!text) throw new Error("OpenRouter n'a retourné aucun contenu exploitable");
+  if (!text) throw new Error("OpenRouter n'a retourné aucun contenu exploitable via Responses API");
 
   let parsed: any;
   try {
@@ -234,6 +268,6 @@ Privilégie les loueurs indépendants et PME réellement actifs. Ne remplis pas 
     searchedAt: new Date().toISOString(),
     candidatesFound: prospects.length,
     prospects,
-    source: "openrouter-direct-structured" as const,
+    source: "openrouter-responses-direct-structured" as const,
   };
 }
