@@ -13,7 +13,7 @@ type WorkspaceTab = "content" | "stages" | "branding" | "preview";
 export function SDRoomWorkspace({ dealId }: { dealId: string }) {
   const [tab, setTab] = useState<WorkspaceTab>("content");
   const tabs: Array<{ value: WorkspaceTab; label: string; icon: typeof FileText }> = [
-    { value: "content", label: "SD01 · Cadrage", icon: FileText },
+    { value: "content", label: "SD01 · Synthèse", icon: FileText },
     { value: "stages", label: "SD02 → SD05", icon: ListChecks },
     { value: "branding", label: "Branding client", icon: Palette },
     { value: "preview", label: "Prévisualisation", icon: Eye },
