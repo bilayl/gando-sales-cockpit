@@ -12,7 +12,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { token } = await params;
   try {
     const body = await request.json();
-    return Response.json(await getPublicSDRoom(token, body?.email));
+    const data = await getPublicSDRoom(token, body?.email);
+    return Response.json({
+      ...data,
+      room: {
+        ...data.room,
+        displayTitle: `Room ${data.room.companyName}`,
+        displaySubtitle: "Espace de collaboration stratégique",
+      },
+    });
   } catch (error) {
     return publicError(error);
   }
