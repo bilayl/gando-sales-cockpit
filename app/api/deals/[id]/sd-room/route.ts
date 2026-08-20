@@ -12,10 +12,14 @@ import {
   saveSDDocument,
   updateSDRoomSettings,
 } from "@/lib/sd-room";
-import type { SDRoomRecord } from "@/lib/sd-room-types";
+import type { SDRoomBrandTheme, SDRoomRecord } from "@/lib/sd-room-types";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
+
+function brandTheme(value: unknown): SDRoomBrandTheme {
+  return value === "gradient" || value === "dark" || value === "light" ? value : "gando";
+}
 
 function standaloneDeal(room: SDRoomRecord): DealRoomDetail {
   return {
@@ -117,16 +121,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const companyName = String(body.companyName || "").trim().slice(0, 240);
     const crmLink = String(body.crmLink || "").trim().slice(0, 2000) || null;
     const prospectLogoUrl = String(body.prospectLogoUrl || "").trim().slice(0, 2000) || null;
+    const brandBannerImageUrl = String(body.brandBannerImageUrl || "").trim().slice(0, 2000) || null;
+    const roomBrandTheme = brandTheme(body.brandTheme);
+    const brandTitle = String(body.brandTitle || title || created.title).trim().slice(0, 240) || null;
+    const brandSubtitle = String(body.brandSubtitle || "Espace de collaboration stratégique").trim().slice(0, 500) || null;
 
-    if (title || companyName || crmLink || prospectLogoUrl) {
-      const updates: Record<string, unknown> = {};
-      if (title) updates.title = title;
-      if (companyName) updates.company_name = companyName;
-      if (crmLink) updates.crm_link = crmLink;
-      if (prospectLogoUrl) updates.prospect_logo_url = prospectLogoUrl;
-      const { error: updateError } = await getSupabaseAdmin().from("deal_rooms").update(updates).eq("id", created.id);
-      if (updateError) throw updateError;
-    }
+    const updates: Record<string, unknown> = {
+      brand_theme: roomBrandTheme,
+      brand_title: brandTitle,
+      brand_subtitle: brandSubtitle,
+    };
+    if (title) updates.title = title;
+    if (companyName) updates.company_name = companyName;
+    if (crmLink) updates.crm_link = crmLink;
+    if (prospectLogoUrl) updates.prospect_logo_url = prospectLogoUrl;
+    if (brandBannerImageUrl) updates.brand_banner_image_url = brandBannerImageUrl;
+    const { error: updateError } = await getSupabaseAdmin().from("deal_rooms").update(updates).eq("id", created.id);
+    if (updateError) throw updateError;
 
     const nextBundle = await getSDRoomBundle(id);
     const linkedConversations = await listLinkedConversations(id, deal.company?.id || null, nextBundle.room?.id);
@@ -146,7 +157,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (body?.action === "settings") {
       const accessMode = body.accessMode === "allowlist" ? "allowlist" : "email";
       const allowedEmails = Array.isArray(body.allowedEmails) ? body.allowedEmails.map(String) : [];
-      const room = await updateSDRoomSettings({ roomId: bundle.room.id, accessMode, allowedEmails });
+      const room = await updateSDRoomSettings({
+        roomId: bundle.room.id,
+        accessMode,
+        allowedEmails,
+        companyName: body.companyName === undefined ? undefined : String(body.companyName || ""),
+        prospectLogoUrl: body.prospectLogoUrl === undefined ? undefined : String(body.prospectLogoUrl || ""),
+        brandBannerImageUrl: body.brandBannerImageUrl === undefined ? undefined : String(body.brandBannerImageUrl || ""),
+        brandTheme: body.brandTheme === undefined ? undefined : brandTheme(body.brandTheme),
+        brandTitle: body.brandTitle === undefined ? undefined : String(body.brandTitle || ""),
+        brandSubtitle: body.brandSubtitle === undefined ? undefined : String(body.brandSubtitle || ""),
+      });
       return Response.json({ room });
     }
 
