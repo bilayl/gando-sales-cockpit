@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Check, CheckCircle2, ChevronRight, Loader2, LockKeyhole, MessageSquare, ShieldCheck } from "lucide-react";
 import { GandoMark } from "@/components/gando-mark";
+import { SDRoomBrandBanner } from "@/components/sd-room-brand-banner";
 import { SD_CODES, SD_STAGE_META, type SD01Content, type SDCode, type SDDocumentRecord, type SDRoomBrandTheme } from "@/lib/sd-room-types";
 import type { SD02Content, SD03Content, SD04Content, SD05Content } from "@/lib/sd-stage-content";
 
@@ -35,9 +36,6 @@ type PublicRoomData = {
 const OPTIONAL_CODES: SDCode[] = ["SD03", "SD04"];
 const REQUIRED_CODES: SDCode[] = ["SD01", "SD02", "SD05"];
 
-function initials(value: string) {
-  return value.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "CL";
-}
 function formatDate(value?: string | null) {
   if (!value) return "";
   try {
@@ -45,10 +43,6 @@ function formatDate(value?: string | null) {
   } catch {
     return "";
   }
-}
-function Logo({ name, url }: { name: string; url: string | null }) {
-  if (url) return <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full border border-[#e1e4e7] bg-white"><img src={url} alt={`Logo ${name}`} className="h-full w-full object-contain p-1.5" /></div>;
-  return <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full border border-[#e1e4e7] bg-white text-xs font-bold text-[#5146aa]">{initials(name)}</div>;
 }
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#727a80]">{children}</div>;
@@ -214,9 +208,17 @@ export function PublicSDRoomV4({ token }: { token: string }) {
   return <main className="min-h-screen bg-[#f5f6f7] text-[#1c2529]">
     <header className="sticky top-0 z-50 border-b border-[#e4e7e9] bg-white/95 backdrop-blur-md"><div className="mx-auto flex h-16 max-w-[1180px] items-center gap-4 px-5 sm:px-7"><div className="flex min-w-0 items-center gap-2.5"><GandoMark className="h-8 w-8 shrink-0" /><span className="hidden text-sm font-semibold sm:inline">Gando</span><span className="text-[#b5bbc0]">/</span><span className="truncate text-sm font-medium text-[#4c565b]">{data.room.companyName}</span></div><div className="ml-auto hidden items-center gap-2 text-[12px] text-[#737c81] sm:flex"><LockKeyhole className="h-3.5 w-3.5" /> Room privée</div><div className="h-7 w-px bg-[#e2e5e7]" /><div className="text-right text-[11px] leading-4 text-[#737c81]"><div className="font-semibold text-[#384247]">{firstName} {lastName}</div><div className="hidden sm:block">{data.visitorEmail}</div></div></div></header>
 
-    {data.room.bannerImageUrl ? <section className="relative h-[190px] overflow-hidden border-b border-[#e1e4e6] bg-[#eceff1] sm:h-[250px]"><img src={data.room.bannerImageUrl} alt={`Bannière ${data.room.companyName} × Gando`} className="h-full w-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" /></section> : <section className="h-14 border-b border-[#e1e4e6] bg-[#eef0f2]" />}
+    <SDRoomBrandBanner
+      companyName={data.room.companyName}
+      logoUrl={data.room.companyLogoUrl}
+      bannerUrl={data.room.bannerImageUrl}
+      theme={data.room.theme}
+      title={data.room.displayTitle || `${data.room.companyName} × Gando`}
+      subtitle={data.room.displaySubtitle || "Espace de collaboration stratégique"}
+      className="min-h-[330px] border-b border-[#e1e4e6] sm:min-h-[390px] sm:pb-14 sm:pt-14"
+    />
 
-    <section className="border-b border-[#e4e7e9] bg-white"><div className="mx-auto grid max-w-[1180px] gap-8 px-5 py-9 sm:px-7 sm:py-11 lg:grid-cols-[1fr_320px] lg:items-center"><div className="max-w-[740px]"><Eyebrow>Deal Room</Eyebrow><h1 className="mt-3 text-[38px] font-medium leading-[1.1] tracking-[-0.04em] text-[#172126] sm:text-[50px]">{data.room.companyName} × Gando</h1><p className="mt-4 max-w-[650px] text-[16px] leading-[1.7] text-[#626d72]">{data.room.displaySubtitle || "Espace de collaboration"}</p><div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-[#7c858a]"><span>Mis à jour le {formatDate(data.room.updatedAt)}</span><span className="h-1 w-1 rounded-full bg-[#bcc2c5]" /><span>{requiredValidated}/3 étapes obligatoires validées</span></div></div><div className="rounded-[18px] border border-[#e1e4e6] bg-[#f6f7f8] p-5"><div className="flex items-center gap-4"><Logo name={data.room.companyName} url={data.room.companyLogoUrl} /><div className="text-[#9aa1a5]">×</div><div className="flex items-center gap-2.5"><GandoMark className="h-11 w-11" /><span className="font-semibold text-[#202a2f]">Gando</span></div></div><p className="mt-4 text-[13px] leading-6 text-[#737d82]">Synthèse → Plan d’action → Contrat. Les étapes Solution et Offre peuvent être ajoutées uniquement lorsqu’elles sont utiles au deal.</p></div></div></section>
+    <section className="border-b border-[#e4e7e9] bg-white"><div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-3 px-5 py-4 text-[12px] text-[#7c858a] sm:px-7"><div className="flex flex-wrap items-center gap-x-5 gap-y-2"><span>Mis à jour le {formatDate(data.room.updatedAt)}</span><span className="h-1 w-1 rounded-full bg-[#bcc2c5]" /><span>{requiredValidated}/3 étapes obligatoires validées</span></div><span className="text-[#737d82]">Synthèse → Plan d’action → Contrat</span></div></section>
 
     <div className="mx-auto grid max-w-[1180px] gap-8 px-5 py-9 sm:px-7 lg:grid-cols-[245px_minmax(0,790px)] lg:justify-between lg:py-12"><aside className="lg:sticky lg:top-24 lg:self-start"><div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#777f84]">Parcours</div><nav className="mt-4 space-y-1.5">{stages.map(({ code, document }) => { const active = code === currentDocument.code; const enabled = Boolean(document); const optional = OPTIONAL_CODES.includes(code); return <button key={code} type="button" disabled={!enabled} onClick={() => enabled && setActiveStage(code)} className={`group flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition ${active ? "bg-white shadow-sm ring-1 ring-[#e0e4e6]" : enabled ? "hover:bg-white" : "cursor-default opacity-50"}`}><span className={`mt-0.5 font-mono text-[11px] font-semibold ${active ? "text-[#584ead]" : "text-[#8b9296]"}`}>{code.slice(2)}</span><span className="min-w-0 flex-1"><span className={`block text-[13px] font-semibold leading-5 ${active ? "text-[#202a2f]" : "text-[#576166]"}`}>{SD_STAGE_META[code].title}</span><span className="mt-0.5 block text-[11px] text-[#8a9296]">{optional ? "Facultatif · " : "Obligatoire · "}{document?.status === "validated" ? "Validé" : document?.status === "published" ? "À valider" : "À venir"}</span></span>{document?.status === "validated" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#4f835e]" /> : active ? <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[#6558c8]" /> : null}</button>; })}</nav></aside>
 
