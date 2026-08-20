@@ -1,6 +1,6 @@
 name: Production sourcing smoke test
 
-# Live production smoke test for the Responses API sourcing fallback.
+# Live production smoke test for the public registry sourcing fallback.
 on:
   workflow_dispatch:
   push:
