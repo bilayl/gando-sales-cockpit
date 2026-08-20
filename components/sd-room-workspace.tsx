@@ -18,7 +18,25 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
           <span className="ml-auto hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:block">Room SD · Gando</span>
         </div>
       </div>
-      {tab === "content" ? <SDRoomEditor dealId={dealId} /> : <SDRoomBrandingEditorV2 dealId={dealId} />}
+      {tab === "content" ? (
+        <SDRoomEditor dealId={dealId} />
+      ) : (
+        <div className="branding-room-company-title">
+          <style>{`
+            .branding-room-company-title .relative.z-10.flex.flex-col.items-center.text-center > div:nth-child(2) {
+              font-size: 0;
+            }
+            .branding-room-company-title .relative.z-10.flex.flex-col.items-center.text-center > div:nth-child(2)::after {
+              content: "Room";
+              font-size: 9px;
+              font-weight: 900;
+              letter-spacing: 0.18em;
+              text-transform: uppercase;
+            }
+          `}</style>
+          <SDRoomBrandingEditorV2 dealId={dealId} />
+        </div>
+      )}
     </div>
   );
 }
