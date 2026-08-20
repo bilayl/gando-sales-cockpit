@@ -1,42 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, Palette } from "lucide-react";
+import { Eye, FileText, ListChecks, Palette } from "lucide-react";
 import { SDRoomBrandingEditorV2 } from "@/components/sd-room-branding-editor-v2";
 import { SDRoomEditor } from "@/components/sd-room-editor";
+import { SDRoomPreview } from "@/components/sd-room-preview";
+import { SDRoomStageEditor } from "@/components/sd-room-stage-editor";
 import { cn } from "@/lib/utils";
 
+type WorkspaceTab = "content" | "stages" | "branding" | "preview";
+
 export function SDRoomWorkspace({ dealId }: { dealId: string }) {
-  const [tab, setTab] = useState<"content" | "branding">("content");
+  const [tab, setTab] = useState<WorkspaceTab>("content");
+  const tabs: Array<{ value: WorkspaceTab; label: string; icon: typeof FileText }> = [
+    { value: "content", label: "SD01 · Cadrage", icon: FileText },
+    { value: "stages", label: "SD02 → SD05", icon: ListChecks },
+    { value: "branding", label: "Branding client", icon: Palette },
+    { value: "preview", label: "Prévisualisation", icon: Eye },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-[60] border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1500px] items-center gap-2 px-5 py-2 lg:px-7">
-          <button type="button" onClick={() => setTab("content")} className={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-colors", tab === "content" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><FileText className="h-3.5 w-3.5" /> Contenu SD</button>
-          <button type="button" onClick={() => setTab("branding")} className={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-colors", tab === "branding" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Palette className="h-3.5 w-3.5" /> Branding client</button>
-          <span className="ml-auto hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:block">Room SD · Gando</span>
+        <div className="mx-auto flex max-w-[1500px] items-center gap-2 overflow-x-auto px-5 py-2 lg:px-7">
+          {tabs.map(item => {
+            const Icon = item.icon;
+            return <button key={item.value} type="button" onClick={() => setTab(item.value)} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-colors", tab === item.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Icon className="h-3.5 w-3.5" /> {item.label}</button>;
+          })}
+          <span className="ml-auto hidden shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:block">Room SD · Gando</span>
         </div>
       </div>
-      {tab === "content" ? (
-        <SDRoomEditor dealId={dealId} />
-      ) : (
-        <div className="branding-room-company-title">
-          <style>{`
-            .branding-room-company-title .relative.z-10.flex.flex-col.items-center.text-center > div:nth-child(2) {
-              font-size: 0;
-            }
-            .branding-room-company-title .relative.z-10.flex.flex-col.items-center.text-center > div:nth-child(2)::after {
-              content: "Room";
-              font-size: 9px;
-              font-weight: 900;
-              letter-spacing: 0.18em;
-              text-transform: uppercase;
-            }
-          `}</style>
-          <SDRoomBrandingEditorV2 dealId={dealId} />
-        </div>
-      )}
+      {tab === "content" ? <SDRoomEditor dealId={dealId} /> : tab === "stages" ? <SDRoomStageEditor dealId={dealId} /> : tab === "branding" ? <SDRoomBrandingEditorV2 dealId={dealId} /> : <SDRoomPreview dealId={dealId} />}
     </div>
   );
 }
