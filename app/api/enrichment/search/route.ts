@@ -26,7 +26,7 @@ type EnrichmentPayload = {
   code?: unknown;
 };
 
-function readableError(value: unknown, fallback = "Erreur inconnue") {
+function readableError(value: unknown, fallback = "Erreur inconnue"): string {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (value instanceof Error && value.message) return value.message;
 
