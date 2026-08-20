@@ -1,11 +1,5 @@
-import { SDDealRoomHub } from "@/components/sd-deal-room-hub";
-import { SDRoomCreateLauncher } from "@/components/sd-room-create-launcher";
+import { SDDealRoomHubV2 } from "@/components/sd-deal-room-hub-v2";
 
 export default function Page() {
-  return (
-    <>
-      <SDRoomCreateLauncher />
-      <SDDealRoomHub />
-    </>
-  );
+  return <SDDealRoomHubV2 />;
 }
