@@ -1,5 +1,5 @@
-import { DealRoomView } from "@/components/deal-room-view";
+import { SDDealRoomHub } from "@/components/sd-deal-room-hub";
 
 export default function Page() {
-  return <DealRoomView />;
+  return <SDDealRoomHub />;
 }
