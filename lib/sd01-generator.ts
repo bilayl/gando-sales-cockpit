@@ -5,9 +5,10 @@ import { normalizeManualSD01 } from "@/lib/sd01-agent";
 import type { SD01Content } from "@/lib/sd-room-types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-export const SD01_PROMPT_VERSION = "sd01-v1.3-free-single-pass";
+export const SD01_PROMPT_VERSION = "sd01-v1.4-free-fallback";
 const FAST_DEFAULT_MODEL = "google/gemma-4-31b-it:free";
-const REQUEST_BUDGET_MS = 88_000;
+const FREE_FALLBACK_MODEL = "openrouter/free";
+const REQUEST_BUDGET_MS = 92_000;
 const MAX_SOURCE_CHARS = 42_000;
 
 type AgentSource = { id: string; title: string; transcript: string };
@@ -130,7 +131,7 @@ function isTimeoutLike(error: unknown) {
 
 function timeoutError() {
   return Object.assign(
-    new Error("Le modèle gratuit OpenRouter n’a pas terminé dans le délai disponible. Relancez la génération ; si le trafic gratuit est saturé, réessayez quelques secondes plus tard."),
+    new Error("Les modèles gratuits OpenRouter n’ont pas terminé dans le délai disponible. Relancez la génération ; la capacité gratuite peut être temporairement saturée."),
     { status: 504 },
   );
 }
@@ -225,70 +226,69 @@ function compactSources(sources: AgentSource[]) {
   return usable.map(source => `=== [SOURCE:${source.id}] ${source.title} ===\n${compactTranscript(source.transcript, perSource)}`).join("\n\n");
 }
 
+function fallbackModels(primary: string) {
+  return Array.from(new Set([primary, FREE_FALLBACK_MODEL])).filter(Boolean);
+}
+
 async function callOpenRouter(input: { token: string; model: string; companyName: string; dealName: string; sourceText: string }) {
   const system = `Tu es l'agent Deal Room de Gando. Transforme la conversation en brouillon SD01 de vente complexe, lisible par un COMEX. Sois synthétique : vise environ 1200 à 1800 mots maximum.
-Règles absolues : n'invente aucun fait, chiffre, engagement, date, nom ou fonction. Toute information manquante devient une question ouverte. Conserve les contradictions. Reformule clairement. Les preuves doivent utiliser les sourceId exacts et des citations courtes. Maximum 24 preuves. Français professionnel et direct. Réponds uniquement avec le JSON demandé.`;
-  const user = `DEAL : ${input.dealName}\nCLIENT : ${input.companyName}\n\nCONVERSATIONS :\n${input.sourceText}`;
-  const startedAt = Date.now();
+Règles absolues : n'invente aucun fait, chiffre, engagement, date, nom ou fonction. Toute information manquante devient une question ouverte. Conserve les contradictions. Reformule clairement. Les preuves doivent utiliser les sourceId exacts et des citations courtes. Maximum 24 preuves. Français professionnel et direct. Réponds uniquement avec un objet JSON valide conforme au schéma fourni, sans markdown ni commentaire.`;
+  const user = `DEAL : ${input.dealName}\nCLIENT : ${input.companyName}\n\nSCHÉMA JSON OBLIGATOIRE :\n${JSON.stringify(SD01_SCHEMA)}\n\nCONVERSATIONS :\n${input.sourceText}`;
 
-  const execute = async (useSchema: boolean) => {
-    const remaining = REQUEST_BUDGET_MS - (Date.now() - startedAt);
-    if (remaining < 8_000) throw timeoutError();
-    try {
-      const response = await fetch(OPENROUTER_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${input.token}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://gando.app",
-          "X-Title": "Gando Sales Cockpit - Agent SD01",
+  let response: Response;
+  try {
+    response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${input.token}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://gando.app",
+        "X-Title": "Gando Sales Cockpit - Agent SD01",
+      },
+      body: JSON.stringify({
+        models: fallbackModels(input.model),
+        temperature: 0.1,
+        max_tokens: 2_600,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        response_format: { type: "json_object" },
+        provider: {
+          allow_fallbacks: true,
+          sort: "throughput",
         },
-        body: JSON.stringify({
-          model: input.model,
-          temperature: 0.1,
-          max_tokens: 2_600,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-          response_format: useSchema
-            ? { type: "json_schema", json_schema: { name: "sd01", strict: true, schema: SD01_SCHEMA } }
-            : { type: "json_object" },
-          provider: {
-            require_parameters: true,
-            allow_fallbacks: true,
-            sort: "throughput",
-          },
-        }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(Math.min(remaining - 2_000, useSchema ? 78_000 : 14_000)),
-      });
-      const raw = await response.text();
-      let payload: unknown = {};
-      try { payload = raw ? JSON.parse(raw) : {}; } catch {
-        throw Object.assign(new Error(`OpenRouter a renvoyé une réponse HTTP non JSON (${response.status}).`), { status: 502 });
-      }
-      return { response, payload, raw };
-    } catch (error) {
-      if (isTimeoutLike(error)) throw timeoutError();
-      throw error;
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_BUDGET_MS),
+    });
+  } catch (error) {
+    if (isTimeoutLike(error)) throw timeoutError();
+    throw error;
+  }
+
+  const raw = await response.text();
+  let payload: unknown = {};
+  try { payload = raw ? JSON.parse(raw) : {}; } catch {
+    throw Object.assign(new Error(`OpenRouter a renvoyé une réponse HTTP non JSON (${response.status}).`), { status: 502 });
+  }
+
+  if (!response.ok) {
+    const message = (payload as { error?: { message?: string } })?.error?.message || response.statusText || raw.slice(0, 300);
+    if (response.status === 429) {
+      throw Object.assign(
+        new Error("OpenRouter 429 : tous les modèles gratuits disponibles sont momentanément limités, ou le quota gratuit du compte est atteint. Réessayez un peu plus tard."),
+        { status: 429 },
+      );
     }
-  };
-
-  let result = await execute(true);
-  if (!result.response.ok && [400, 404, 422].includes(result.response.status) && Date.now() - startedAt < 68_000) {
-    result = await execute(false);
-  }
-  if (!result.response.ok) {
-    const message = (result.payload as { error?: { message?: string } })?.error?.message || result.response.statusText || result.raw.slice(0, 300);
-    throw Object.assign(new Error(`OpenRouter ${result.response.status}: ${message}`), { status: 502 });
+    throw Object.assign(new Error(`OpenRouter ${response.status}: ${message}`), { status: 502 });
   }
 
-  const structured = directJson(result.payload);
-  if (structured) return { data: structured, returnedModel: (result.payload as { model?: string }).model || input.model };
-  const content = extractText(result.payload);
+  const structured = directJson(payload);
+  if (structured) return { data: structured, returnedModel: (payload as { model?: string }).model || input.model };
+  const content = extractText(payload);
   if (!content) throw Object.assign(new Error("OpenRouter a répondu sans contenu exploitable pour le SD01."), { status: 502 });
-  return { data: parseJsonObject(content), returnedModel: (result.payload as { model?: string }).model || input.model };
+  return { data: parseJsonObject(content), returnedModel: (payload as { model?: string }).model || input.model };
 }
 
 function sanitizeGeneratedSD01(value: JsonRecord, companyName: string, sourceIds: Set<string>): SD01Content {
@@ -302,8 +302,6 @@ export async function generateSD01(input: { companyName: string; dealName: strin
   if (!sources.length) throw Object.assign(new Error("Ajoutez ou sélectionnez au moins une conversation exploitable."), { status: 400 });
 
   const token = await getOpenRouterApiKey();
-  // Only a dedicated SD01 override may replace the free model. The generic OpenRouter
-  // model is intentionally ignored so another feature cannot accidentally select a slow model.
   const model = process.env.OPENROUTER_SD01_MODEL?.trim() || FAST_DEFAULT_MODEL;
   const result = await callOpenRouter({
     token,
