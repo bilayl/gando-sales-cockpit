@@ -2,7 +2,7 @@ export function GandoBannerArt({ className = "" }: { className?: string }) {
   return (
     <div className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`} aria-hidden="true">
       <svg
-        className="absolute -left-[9%] -top-[125%] h-[340%] w-[122%] max-w-none"
+        className="absolute -left-[4%] -top-[92%] h-[270%] w-[100%] max-w-none"
         viewBox="0 0 926 1080"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
@@ -16,7 +16,7 @@ export function GandoBannerArt({ className = "" }: { className?: string }) {
       </svg>
 
       <svg
-        className="absolute -bottom-[205%] -right-[28%] h-[350%] w-[118%] max-w-none rotate-180 opacity-45"
+        className="absolute -bottom-[150%] -right-[18%] h-[275%] w-[96%] max-w-none rotate-180 opacity-40"
         viewBox="0 0 926 1080"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
