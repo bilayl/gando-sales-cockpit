@@ -2,6 +2,8 @@ import type { SourcingProspect } from "@/lib/enrichment-dedup";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/responses";
+const PUBLIC_COMPANY_SEARCH_URL = "https://recherche-entreprises.api.gouv.fr/search";
+const RENTAL_NAF_CODES = "77.11A,77.11B,77.12Z";
 
 const PROSPECT_SCHEMA = {
   type: "object",
@@ -19,25 +21,13 @@ const PROSPECT_SCHEMA = {
           domain: { type: ["string", "null"] },
           phone: { type: ["string", "null"] },
           publicBusinessEmail: { type: ["string", "null"] },
-          sourceUrls: {
-            type: "array",
-            minItems: 1,
-            items: { type: "string" },
-          },
+          sourceUrls: { type: "array", minItems: 1, items: { type: "string" } },
           sourceTypes: {
             type: "array",
             minItems: 1,
             items: {
               type: "string",
-              enum: [
-                "leboncoin",
-                "facebook",
-                "instagram",
-                "google",
-                "directory",
-                "official_website",
-                "other",
-              ],
+              enum: ["leboncoin", "facebook", "instagram", "google", "directory", "official_website", "other"],
             },
           },
           evidence: { type: ["string", "null"] },
@@ -46,20 +36,9 @@ const PROSPECT_SCHEMA = {
           qualificationReason: { type: ["string", "null"] },
         },
         required: [
-          "companyName",
-          "city",
-          "territory",
-          "country",
-          "website",
-          "domain",
-          "phone",
-          "publicBusinessEmail",
-          "sourceUrls",
-          "sourceTypes",
-          "evidence",
-          "confidence",
-          "gandoScore",
-          "qualificationReason",
+          "companyName", "city", "territory", "country", "website", "domain", "phone",
+          "publicBusinessEmail", "sourceUrls", "sourceTypes", "evidence", "confidence",
+          "gandoScore", "qualificationReason",
         ],
         additionalProperties: false,
       },
@@ -96,7 +75,6 @@ function extractText(payload: any) {
     .trim();
   if (responseText) return responseText;
 
-  // Compatibility fallback if a provider normalizes the response as chat completions.
   const content = payload?.choices?.[0]?.message?.content;
   if (typeof content === "string") return content.trim();
   if (Array.isArray(content)) {
@@ -110,10 +88,7 @@ function extractText(payload: any) {
 }
 
 function cleanJsonText(text: string) {
-  const clean = String(text || "")
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
+  const clean = String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   const start = clean.indexOf("{");
   const end = clean.lastIndexOf("}");
   return start >= 0 && end > start ? clean.slice(start, end + 1) : clean;
@@ -149,11 +124,7 @@ function structuredOutputConfig() {
   return {
     response_format: {
       type: "json_schema",
-      json_schema: {
-        name: "gando_sourcing_prospects",
-        strict: true,
-        schema: PROSPECT_SCHEMA,
-      },
+      json_schema: { name: "gando_sourcing_prospects", strict: true, schema: PROSPECT_SCHEMA },
     },
     plugins: [{ id: "response-healing" }],
     provider: { require_parameters: true },
@@ -187,7 +158,6 @@ async function callOpenRouter(token: string, body: Record<string, unknown>) {
   if (!response.ok || payload?.error) {
     throw new Error(`OpenRouter ${response.status}: ${readableApiError(payload?.error || payload, response.statusText)}`);
   }
-
   return payload;
 }
 
@@ -204,14 +174,164 @@ async function repairMalformedJson(token: string, model: string, text: string) {
   return parseJson(repairedText);
 }
 
-export async function searchRentalCompaniesLocally(input: {
+const DEPARTMENT_BY_QUERY: Array<[RegExp, string]> = [
+  [/\blyon\b|\brh[oô]ne\b/i, "69"],
+  [/\bparis\b/i, "75"],
+  [/\bmarseille\b|\bbouches[- ]du[- ]rh[oô]ne\b/i, "13"],
+  [/\bbordeaux\b|\bgironde\b/i, "33"],
+  [/\btoulouse\b|\bhaute[- ]garonne\b/i, "31"],
+  [/\blille\b|\bnord\b/i, "59"],
+  [/\bnantes\b|\bloire[- ]atlantique\b/i, "44"],
+  [/\bnice\b|\balpes[- ]maritimes\b/i, "06"],
+  [/\bmontpellier\b|\bh[eé]rault\b/i, "34"],
+  [/\bstrasbourg\b|\bbas[- ]rhin\b/i, "67"],
+  [/\brennes\b|\bille[- ]et[- ]vilaine\b/i, "35"],
+];
+
+const TERRITORY_DEPARTMENTS: Record<string, string> = {
+  Guadeloupe: "971",
+  Martinique: "972",
+  Guyane: "973",
+  "La Réunion": "974",
+  Mayotte: "976",
+};
+
+const TERRITORY_LABELS: Record<string, string> = {
+  "971": "Guadeloupe",
+  "972": "Martinique",
+  "973": "Guyane",
+  "974": "La Réunion",
+  "976": "Mayotte",
+};
+
+function detectDepartment(input: { query?: string; territories?: string[] }) {
+  const query = String(input.query || "");
+  for (const [pattern, department] of DEPARTMENT_BY_QUERY) {
+    if (pattern.test(query)) return department;
+  }
+
+  const specific = (input.territories || [])
+    .map(territory => TERRITORY_DEPARTMENTS[territory])
+    .filter(Boolean);
+  if (specific.length && !(input.territories || []).includes("France métropolitaine")) {
+    return [...new Set(specific)].join(",");
+  }
+  return "";
+}
+
+function cityFromRegistry(row: any) {
+  const siege = row?.siege || {};
+  const explicit = siege.libelle_commune || siege.nom_commune || siege.commune_nom;
+  if (typeof explicit === "string" && explicit.trim()) return explicit.trim();
+  const address = typeof siege.adresse === "string" ? siege.adresse.trim() : "";
+  const match = address.match(/\b\d{5}\s+(.+)$/);
+  return match?.[1]?.trim();
+}
+
+function registryScore(ape?: string) {
+  if (ape === "77.11A") return 82;
+  if (ape === "77.12Z") return 76;
+  if (ape === "77.11B") return 70;
+  return 65;
+}
+
+function registryQualification(ape?: string) {
+  if (ape === "77.11A") return "Loueur automobile actif — location courte durée (APE 77.11A).";
+  if (ape === "77.11B") return "Loueur automobile actif — location longue durée (APE 77.11B).";
+  if (ape === "77.12Z") return "Loueur de camions/utilitaires actif (APE 77.12Z).";
+  return "Entreprise active avec activité de location de véhicules.";
+}
+
+async function searchRentalCompaniesFromPublicRegistry(input: {
+  query?: string;
+  territories?: string[];
+  limit?: number;
+}, fallbackReason?: string) {
+  const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 50);
+  const target = Math.min(Math.max(limit * 4, 25), 50);
+  const department = detectDepartment(input);
+  const pages = Math.ceil(target / 25);
+  const rows: any[] = [];
+
+  for (let page = 1; page <= pages; page += 1) {
+    const params = new URLSearchParams({
+      activite_principale: RENTAL_NAF_CODES,
+      etat_administratif: "A",
+      page: String(page),
+      per_page: "25",
+      minimal: "true",
+      include: "siege",
+    });
+    if (department) params.set("departement", department);
+
+    const response = await fetch(`${PUBLIC_COMPANY_SEARCH_URL}?${params.toString()}`, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "GandoSalesCockpit/1.0 (https://gando.app)",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`API Recherche d'entreprises ${response.status}: ${payload?.detail || payload?.message || response.statusText}`);
+    }
+    rows.push(...(Array.isArray(payload?.results) ? payload.results : []));
+    if (!payload?.total_pages || page >= Number(payload.total_pages) || rows.length >= target) break;
+  }
+
+  const seen = new Set<string>();
+  const prospects: SourcingProspect[] = [];
+  for (const row of rows) {
+    const siren = String(row?.siren || "").replace(/\D/g, "");
+    const companyName = String(row?.nom_raison_sociale || row?.nom_complet || "").trim();
+    if (!companyName || siren.length !== 9 || seen.has(siren)) continue;
+    seen.add(siren);
+
+    const siege = row?.siege || {};
+    const ape = String(siege.activite_principale || row?.activite_principale || "").trim();
+    const departmentCode = String(siege.departement || "").trim();
+    const city = cityFromRegistry(row);
+    const address = typeof siege.adresse === "string" ? siege.adresse.trim() : "";
+    const sourceUrl = `${PUBLIC_COMPANY_SEARCH_URL}?q=${encodeURIComponent(siren)}&page=1&per_page=1`;
+
+    prospects.push({
+      companyName,
+      city,
+      territory: TERRITORY_LABELS[departmentCode] || (departmentCode ? "France métropolitaine" : undefined),
+      country: "France",
+      sourceUrls: [sourceUrl],
+      sourceTypes: ["directory"],
+      evidence: [
+        `Entreprise active dans le répertoire public de l'État, SIREN ${siren}`,
+        ape ? `APE ${ape}` : "",
+        address ? `siège ${address}` : "",
+        fallbackReason ? "moteur IA indisponible, sourcing registre public utilisé" : "",
+      ].filter(Boolean).join(" · "),
+      confidence: 0.98,
+      gandoScore: registryScore(ape),
+      qualificationReason: registryQualification(ape),
+    });
+    if (prospects.length >= target) break;
+  }
+
+  return {
+    searchId: crypto.randomUUID(),
+    searchedAt: new Date().toISOString(),
+    candidatesFound: prospects.length,
+    prospects,
+    source: "api-gouv-recherche-entreprises" as const,
+  };
+}
+
+async function searchWithOpenRouter(input: {
   query?: string;
   territories?: string[];
   sources?: string[];
   limit?: number;
 }) {
   const token = await getOpenRouterApiKey();
-
   const limit = Math.min(Math.max(Number(input.limit) || 20, 1), 50);
   const target = Math.min(Math.max(limit + 10, 20), 45);
   const territories = input.territories?.length
@@ -235,15 +355,7 @@ Privilégie les loueurs indépendants et PME réellement actifs. Ne remplis pas 
     input: prompt,
     max_output_tokens: 12000,
     ...structuredOutputConfig(),
-    tools: [
-      {
-        type: "openrouter:web_search",
-        parameters: {
-          max_results: 7,
-          max_total_results: 25,
-        },
-      },
-    ],
+    tools: [{ type: "openrouter:web_search", parameters: { max_results: 7, max_total_results: 25 } }],
   });
 
   const text = extractText(payload);
@@ -270,4 +382,19 @@ Privilégie les loueurs indépendants et PME réellement actifs. Ne remplis pas 
     prospects,
     source: "openrouter-responses-direct-structured" as const,
   };
+}
+
+export async function searchRentalCompaniesLocally(input: {
+  query?: string;
+  territories?: string[];
+  sources?: string[];
+  limit?: number;
+}) {
+  try {
+    return await searchWithOpenRouter(input);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn("OpenRouter sourcing unavailable; using public French company registry:", reason);
+    return searchRentalCompaniesFromPublicRegistry(input, reason);
+  }
 }
