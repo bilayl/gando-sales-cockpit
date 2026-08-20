@@ -7,11 +7,11 @@ export type SDRoomAccessMode = "email" | "allowlist";
 export type SDRoomBrandTheme = "gando" | "gradient" | "dark" | "light";
 
 export const SD_STAGE_META: Record<SDCode, { title: string; subtitle: string }> = {
-  SD01: { title: "Alignement stratégique", subtitle: "Contexte, enjeux, processus, valeur et prochaines étapes" },
-  SD02: { title: "Plan d’action mutuel", subtitle: "Roadmap partagée, responsables, jalons et dépendances" },
-  SD03: { title: "Solution & intégration", subtitle: "Périmètre, pilote, données et déploiement" },
-  SD04: { title: "Offre commerciale", subtitle: "One-pager, prix, hypothèses et conditions" },
-  SD05: { title: "Contrat & signature", subtitle: "Convention finale, validation et signature" },
+  SD01: { title: "Synthèse", subtitle: "Contexte, enjeux, processus, décisions et prochaines étapes" },
+  SD02: { title: "Plan d’action", subtitle: "Objectifs, actions, responsables, échéances et dépendances" },
+  SD03: { title: "Solution & intégration", subtitle: "Étape facultative · périmètre, pilote, données et déploiement" },
+  SD04: { title: "Offre commerciale", subtitle: "Étape facultative · prix, hypothèses, business case et conditions" },
+  SD05: { title: "Contrat & signature", subtitle: "Étape obligatoire · convention finale, validation et signature" },
 };
 
 export type SD01Stakeholder = {
