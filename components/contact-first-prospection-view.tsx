@@ -7,6 +7,7 @@ import {
   Database,
   ListFilter,
   Loader2,
+  MapPin,
   Phone,
   Play,
   Plus,
@@ -34,6 +35,7 @@ import {
   type ContactProspectionDecision,
 } from "@/lib/contact-prospection-priority";
 import type { ProspectionBucket } from "@/lib/company-prospection-priority";
+import { fetchAllPagedResults } from "@/lib/fetch-all-paged-results";
 import { formatDate, initials } from "@/lib/utils";
 
 type Contact = { id: string; properties: Record<string, string | null | undefined> };
@@ -78,6 +80,10 @@ function reminderValue(properties: Record<string, string | null | undefined>) {
     || properties.notes_next_activity_date;
 }
 
+function contactLocation(properties: Record<string, string | null | undefined>) {
+  return [properties.zip, properties.city, properties.state, properties.country].filter(Boolean).join(" · ") || "—";
+}
+
 function databaseDecision(contact: Contact): ContactProspectionDecision {
   const p = contact.properties;
   const score = Number(p.db_call_score || 0);
@@ -101,6 +107,7 @@ export function ContactFirstProspectionView() {
   const [sessionCreating, setSessionCreating] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [locationQuery, setLocationQuery] = useState("");
   const [owner, setOwner] = useState("");
   const [prospectionStatus, setProspectionStatus] = useState("");
   const [workFilter, setWorkFilter] = useState<WorkFilter>("ACTIONABLE");
@@ -165,11 +172,10 @@ export function ContactFirstProspectionView() {
       if (!segmentId && query) params.set("q", query);
       if (!segmentId && owner) params.set("owner", owner);
       if (!segmentId && prospectionStatus) params.set("prospection", prospectionStatus);
-      const response = await fetch(`/api/contacts?${params.toString()}`, { cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Impossible de charger les contacts HubSpot");
-      setContacts(payload.results || []);
-      setTotal(payload.total || payload.results?.length || 0);
+      const payload = await fetchAllPagedResults<Contact>(`/api/contacts?${params.toString()}`);
+      setContacts(payload.results);
+      setTotal(payload.total);
+      if (payload.truncated) setError("Le volume est très important : seuls les 10 000 premiers contacts ont été chargés.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Erreur de chargement");
     } finally {
@@ -187,17 +193,20 @@ export function ContactFirstProspectionView() {
 
   const baseFiltered = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    const locationNeedle = locationQuery.trim().toLowerCase();
     return contacts.filter(contact => {
       const p = contact.properties;
       const haystack = [p.firstname, p.lastname, p.email, p.phone, p.mobilephone, p.company, p.jobtitle]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
+      const locationHaystack = [p.zip, p.city, p.state, p.country].filter(Boolean).join(" ").toLowerCase();
       return (!needle || haystack.includes(needle))
+        && (!locationNeedle || locationHaystack.includes(locationNeedle))
         && (!owner || p.hubspot_owner_id === owner)
         && (!prospectionStatus || p.statut_prospection === prospectionStatus);
     });
-  }, [contacts, query, owner, prospectionStatus]);
+  }, [contacts, query, locationQuery, owner, prospectionStatus]);
 
   const classified = useMemo(() => {
     if (isRecommendationSegment) {
@@ -390,6 +399,7 @@ export function ContactFirstProspectionView() {
               <SelectTrigger className="h-9 w-[170px]"><SelectValue placeholder="Statut prospection" /></SelectTrigger>
               <SelectContent><SelectItem value="all">Tous les statuts</SelectItem>{PROSPECTION_OPTIONS.map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
             </Select>
+            <div className="relative"><MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={locationQuery} onChange={event => setLocationQuery(event.target.value)} placeholder="Ville, région, pays, CP…" className="h-9 w-52 pl-9" /></div>
             <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Contact, société…" className="h-9 w-52 pl-9" /></div>
             {isRecommendationSegment && !activeSessionId ? (
               <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void load(false, true)} disabled={loading}><Database size={14} /> Recalculer les scores</Button>
@@ -413,12 +423,13 @@ export function ContactFirstProspectionView() {
 
           {view === "table" ? (
             <div className="min-h-0 flex-1 overflow-auto border-t border-border minari-scrollbar">
-              <Table className={isRecommendationSegment ? "min-w-[1580px]" : "min-w-[1320px]"}>
+              <Table className={isRecommendationSegment ? "min-w-[1720px]" : "min-w-[1460px]"}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>{isRecommendationSegment ? "Score / priorité" : "Priorité"}</TableHead>
                     <TableHead>Contact</TableHead>
                     <TableHead>Entreprise</TableHead>
+                    <TableHead>Localisation</TableHead>
                     <TableHead>Statut prospection</TableHead>
                     <TableHead>Dernier appel</TableHead>
                     <TableHead>Téléphone</TableHead>
@@ -429,7 +440,7 @@ export function ContactFirstProspectionView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell colSpan={isRecommendationSegment ? 10 : 9} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filteredContacts.map(contact => {
+                  {loading ? <TableRow><TableCell colSpan={isRecommendationSegment ? 11 : 10} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filteredContacts.map(contact => {
                     const p = contact.properties;
                     const decision = isRecommendationSegment ? databaseDecision(contact) : getContactProspectionDecision(contact);
                     const fullName = [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Sans nom";
@@ -454,6 +465,7 @@ export function ContactFirstProspectionView() {
                           </div>
                         </TableCell>
                         <TableCell>{p.company || "—"}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground"><span className="inline-flex items-center gap-1.5"><MapPin size={12} />{contactLocation(p)}</span></TableCell>
                         <TableCell><Badge variant="outline">{p.statut_prospection || "À prospecter"}</Badge></TableCell>
                         <TableCell>{callLabel(p.statut_de_lappel)}</TableCell>
                         <TableCell>{p.phone || p.mobilephone ? <a href={`tel:${p.phone || p.mobilephone}`} onClick={event => event.stopPropagation()} className="phone-chip font-mono text-xs"><Phone size={12} />{p.phone || p.mobilephone}</a> : "—"}</TableCell>
@@ -479,7 +491,7 @@ export function ContactFirstProspectionView() {
                       </TableRow>
                     );
                   })}
-                  {!loading && !filteredContacts.length ? <TableRow><TableCell colSpan={isRecommendationSegment ? 10 : 9} className="h-40 text-center text-muted-foreground">{activeSessionId ? "Session terminée : aucun contact restant." : "Aucun contact pour ces filtres."}</TableCell></TableRow> : null}
+                  {!loading && !filteredContacts.length ? <TableRow><TableCell colSpan={isRecommendationSegment ? 11 : 10} className="h-40 text-center text-muted-foreground">{activeSessionId ? "Session terminée : aucun contact restant." : "Aucun contact pour ces filtres."}</TableCell></TableRow> : null}
                 </TableBody>
               </Table>
             </div>
