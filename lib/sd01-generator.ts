@@ -5,9 +5,9 @@ import { normalizeManualSD01 } from "@/lib/sd01-agent";
 import type { SD01Content } from "@/lib/sd-room-types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-export const SD01_PROMPT_VERSION = "sd01-v1.2-fast-single-pass";
-const FAST_DEFAULT_MODEL = "google/gemini-2.5-flash-lite";
-const REQUEST_BUDGET_MS = 28_000;
+export const SD01_PROMPT_VERSION = "sd01-v1.3-free-single-pass";
+const FAST_DEFAULT_MODEL = "google/gemma-4-31b-it:free";
+const REQUEST_BUDGET_MS = 88_000;
 const MAX_SOURCE_CHARS = 42_000;
 
 type AgentSource = { id: string; title: string; transcript: string };
@@ -43,10 +43,7 @@ const SD01_SCHEMA = {
         additionalProperties: false,
         required: ["name", "role", "organization", "notes"],
         properties: {
-          name: { type: "string" },
-          role: { type: "string" },
-          organization: { type: "string" },
-          notes: { type: "string" },
+          name: { type: "string" }, role: { type: "string" }, organization: { type: "string" }, notes: { type: "string" },
         },
       },
     },
@@ -59,11 +56,7 @@ const SD01_SCHEMA = {
         type: "object",
         additionalProperties: false,
         required: ["priority", "title", "details"],
-        properties: {
-          priority: { type: "integer" },
-          title: { type: "string" },
-          details: stringArray,
-        },
+        properties: { priority: { type: "integer" }, title: { type: "string" }, details: stringArray },
       },
     },
     solutionFit: {
@@ -86,11 +79,7 @@ const SD01_SCHEMA = {
             type: "object",
             additionalProperties: false,
             required: ["lever", "mechanism", "value"],
-            properties: {
-              lever: { type: "string" },
-              mechanism: { type: "string" },
-              value: { type: "string" },
-            },
+            properties: { lever: { type: "string" }, mechanism: { type: "string" }, value: { type: "string" } },
           },
         },
         metricsRequired: stringArray,
@@ -106,25 +95,19 @@ const SD01_SCHEMA = {
         additionalProperties: false,
         required: ["owner", "action", "dueDate", "status"],
         properties: {
-          owner: { type: "string" },
-          action: { type: "string" },
-          dueDate: { type: ["string", "null"] },
+          owner: { type: "string" }, action: { type: "string" }, dueDate: { type: ["string", "null"] },
           status: { type: "string", enum: ["not_started", "in_progress", "done"] },
         },
       },
     },
     evidence: {
       type: "array",
-      maxItems: 30,
+      maxItems: 24,
       items: {
         type: "object",
         additionalProperties: false,
         required: ["field", "sourceId", "quote"],
-        properties: {
-          field: { type: "string" },
-          sourceId: { type: "string" },
-          quote: { type: "string" },
-        },
+        properties: { field: { type: "string" }, sourceId: { type: "string" }, quote: { type: "string" } },
       },
     },
   },
@@ -147,7 +130,7 @@ function isTimeoutLike(error: unknown) {
 
 function timeoutError() {
   return Object.assign(
-    new Error("Le modèle IA n’a pas répondu assez vite. La génération a été arrêtée proprement avant le timeout Vercel. Relancez une fois ; si cela persiste, réduisez la transcription."),
+    new Error("Le modèle gratuit OpenRouter n’a pas terminé dans le délai disponible. Relancez la génération ; si le trafic gratuit est saturé, réessayez quelques secondes plus tard."),
     { status: 504 },
   );
 }
@@ -157,16 +140,12 @@ function extractText(payload: unknown) {
   const content = choice?.message?.content;
   if (typeof content === "string") return content.trim();
   if (Array.isArray(content)) {
-    return content
-      .map(item => {
-        if (typeof item === "string") return item;
-        if (!item || typeof item !== "object") return "";
-        const record = item as Record<string, unknown>;
-        return typeof record.text === "string" ? record.text : typeof record.content === "string" ? record.content : "";
-      })
-      .filter(Boolean)
-      .join("\n")
-      .trim();
+    return content.map(item => {
+      if (typeof item === "string") return item;
+      if (!item || typeof item !== "object") return "";
+      const record = item as Record<string, unknown>;
+      return typeof record.text === "string" ? record.text : typeof record.content === "string" ? record.content : "";
+    }).filter(Boolean).join("\n").trim();
   }
   if (typeof choice?.text === "string") return choice.text.trim();
   return "";
@@ -220,10 +199,7 @@ function extractBalancedObject(value: string) {
 }
 
 function parseJsonObject(value: string) {
-  const clean = value
-    .replace(/^\s*```(?:json|javascript|js)?\s*/i, "")
-    .replace(/\s*```\s*$/i, "")
-    .trim();
+  const clean = value.replace(/^\s*```(?:json|javascript|js)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
   const direct = parseCandidate(clean);
   if (direct) return direct;
   const balanced = extractBalancedObject(clean);
@@ -237,7 +213,7 @@ function compactTranscript(transcript: string, budget: number) {
   if (clean.length <= budget) return clean;
   const head = Math.floor(budget * 0.72);
   const tail = Math.max(0, budget - head);
-  return `${clean.slice(0, head)}\n\n[… transcription raccourcie pour respecter le temps de génération …]\n\n${clean.slice(-tail)}`;
+  return `${clean.slice(0, head)}\n\n[… transcription raccourcie pour la génération …]\n\n${clean.slice(-tail)}`;
 }
 
 function compactSources(sources: AgentSource[]) {
@@ -246,28 +222,18 @@ function compactSources(sources: AgentSource[]) {
   const overhead = usable.reduce((sum, source) => sum + source.id.length + source.title.length + 45, 0);
   const available = Math.max(12_000, MAX_SOURCE_CHARS - overhead);
   const perSource = Math.max(3_500, Math.floor(available / usable.length));
-  return usable
-    .map(source => `=== [SOURCE:${source.id}] ${source.title} ===\n${compactTranscript(source.transcript, perSource)}`)
-    .join("\n\n");
+  return usable.map(source => `=== [SOURCE:${source.id}] ${source.title} ===\n${compactTranscript(source.transcript, perSource)}`).join("\n\n");
 }
 
-async function callOpenRouter(input: {
-  token: string;
-  model: string;
-  companyName: string;
-  dealName: string;
-  sourceText: string;
-}) {
-  const system = `Tu es l'agent Deal Room de Gando. Transforme la conversation en brouillon SD01 de vente complexe, lisible par un COMEX.
-Règles : n'invente aucun fait, chiffre, engagement, date, nom ou fonction. Toute information manquante devient une question ouverte. Conserve les contradictions. Reformule de manière concise. Chaque fait structurant important peut avoir une preuve avec le sourceId exact et une citation courte. Maximum 30 preuves. Français professionnel et direct. Réponds uniquement avec le JSON demandé.`;
+async function callOpenRouter(input: { token: string; model: string; companyName: string; dealName: string; sourceText: string }) {
+  const system = `Tu es l'agent Deal Room de Gando. Transforme la conversation en brouillon SD01 de vente complexe, lisible par un COMEX. Sois synthétique : vise environ 1200 à 1800 mots maximum.
+Règles absolues : n'invente aucun fait, chiffre, engagement, date, nom ou fonction. Toute information manquante devient une question ouverte. Conserve les contradictions. Reformule clairement. Les preuves doivent utiliser les sourceId exacts et des citations courtes. Maximum 24 preuves. Français professionnel et direct. Réponds uniquement avec le JSON demandé.`;
   const user = `DEAL : ${input.dealName}\nCLIENT : ${input.companyName}\n\nCONVERSATIONS :\n${input.sourceText}`;
   const startedAt = Date.now();
 
   const execute = async (useSchema: boolean) => {
-    const elapsed = Date.now() - startedAt;
-    const remaining = REQUEST_BUDGET_MS - elapsed;
-    if (remaining < 5_000) throw timeoutError();
-
+    const remaining = REQUEST_BUDGET_MS - (Date.now() - startedAt);
+    if (remaining < 8_000) throw timeoutError();
     try {
       const response = await fetch(OPENROUTER_URL, {
         method: "POST",
@@ -280,8 +246,7 @@ Règles : n'invente aucun fait, chiffre, engagement, date, nom ou fonction. Tout
         body: JSON.stringify({
           model: input.model,
           temperature: 0.1,
-          max_tokens: 4_200,
-          reasoning: { max_tokens: 0 },
+          max_tokens: 2_600,
           messages: [
             { role: "system", content: system },
             { role: "user", content: user },
@@ -293,11 +258,10 @@ Règles : n'invente aucun fait, chiffre, engagement, date, nom ou fonction. Tout
             require_parameters: true,
             allow_fallbacks: true,
             sort: "throughput",
-            preferred_max_latency: 2,
           },
         }),
         cache: "no-store",
-        signal: AbortSignal.timeout(Math.min(remaining - 1_000, useSchema ? 23_000 : 8_000)),
+        signal: AbortSignal.timeout(Math.min(remaining - 2_000, useSchema ? 78_000 : 14_000)),
       });
       const raw = await response.text();
       let payload: unknown = {};
@@ -312,7 +276,7 @@ Règles : n'invente aucun fait, chiffre, engagement, date, nom ou fonction. Tout
   };
 
   let result = await execute(true);
-  if (!result.response.ok && [400, 404, 422].includes(result.response.status) && Date.now() - startedAt < 19_000) {
+  if (!result.response.ok && [400, 404, 422].includes(result.response.status) && Date.now() - startedAt < 68_000) {
     result = await execute(false);
   }
   if (!result.response.ok) {
@@ -329,7 +293,7 @@ Règles : n'invente aucun fait, chiffre, engagement, date, nom ou fonction. Tout
 
 function sanitizeGeneratedSD01(value: JsonRecord, companyName: string, sourceIds: Set<string>): SD01Content {
   const normalized = normalizeManualSD01(value, companyName);
-  normalized.evidence = normalized.evidence.filter(item => sourceIds.has(item.sourceId)).slice(0, 30);
+  normalized.evidence = normalized.evidence.filter(item => sourceIds.has(item.sourceId)).slice(0, 24);
   return normalized;
 }
 
@@ -338,16 +302,15 @@ export async function generateSD01(input: { companyName: string; dealName: strin
   if (!sources.length) throw Object.assign(new Error("Ajoutez ou sélectionnez au moins une conversation exploitable."), { status: 400 });
 
   const token = await getOpenRouterApiKey();
-  // A dedicated SD01 model can still override this. We deliberately ignore the generic
-  // OPENROUTER_MODEL here so a slower reasoning model cannot make this route time out.
+  // Only a dedicated SD01 override may replace the free model. The generic OpenRouter
+  // model is intentionally ignored so another feature cannot accidentally select a slow model.
   const model = process.env.OPENROUTER_SD01_MODEL?.trim() || FAST_DEFAULT_MODEL;
-  const sourceText = compactSources(sources);
   const result = await callOpenRouter({
     token,
     model,
     companyName: input.companyName,
     dealName: input.dealName,
-    sourceText,
+    sourceText: compactSources(sources),
   });
 
   return {
