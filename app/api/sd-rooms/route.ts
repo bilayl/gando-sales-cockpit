@@ -99,8 +99,8 @@ export async function POST(request: NextRequest) {
     const prospectLogoUrl = String(body?.prospectLogoUrl || "").trim().slice(0, 2000) || null;
     const brandBannerImageUrl = String(body?.brandBannerImageUrl || "").trim().slice(0, 2000) || null;
     const roomBrandTheme = brandTheme(body?.brandTheme);
-    const brandTitle = String(body?.brandTitle || title).trim().slice(0, 240) || title;
-    const brandSubtitle = String(body?.brandSubtitle || "Espace de collaboration stratégique").trim().slice(0, 500) || null;
+    const brandTitle = companyName;
+    const brandSubtitle = "Espace de collaboration stratégique";
 
     if (!companyName) throw Object.assign(new Error("Le nom de l’organisation est obligatoire."), { status: 400 });
     if (!title) throw Object.assign(new Error("Le nom de la dealroom est obligatoire."), { status: 400 });
