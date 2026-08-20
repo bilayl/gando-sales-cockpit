@@ -2,10 +2,14 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
 import { requireSDInternalAccess } from "@/lib/sd-room";
-import { SD_CODES, SD_STAGE_META, createEmptySD01 } from "@/lib/sd-room-types";
+import { SD_CODES, SD_STAGE_META, createEmptySD01, type SDRoomBrandTheme } from "@/lib/sd-room-types";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
+
+function brandTheme(value: unknown): SDRoomBrandTheme {
+  return value === "gradient" || value === "dark" || value === "light" ? value : "gando";
+}
 
 export async function GET() {
   try {
@@ -13,7 +17,7 @@ export async function GET() {
     const admin = getSupabaseAdmin();
     const { data: rooms, error: roomsError } = await admin
       .from("deal_rooms")
-      .select("id,hubspot_deal_id,title,company_name,crm_link,prospect_logo_url,share_token,status,current_stage,published_at,last_shared_at,created_at,updated_at")
+      .select("id,hubspot_deal_id,title,company_name,crm_link,prospect_logo_url,brand_banner_image_url,brand_theme,brand_title,brand_subtitle,share_token,status,current_stage,published_at,last_shared_at,created_at,updated_at")
       .order("updated_at", { ascending: false })
       .limit(250);
 
@@ -93,6 +97,10 @@ export async function POST(request: NextRequest) {
     const title = String(body?.title || "").trim().slice(0, 240);
     const crmLink = String(body?.crmLink || "").trim().slice(0, 2000) || null;
     const prospectLogoUrl = String(body?.prospectLogoUrl || "").trim().slice(0, 2000) || null;
+    const brandBannerImageUrl = String(body?.brandBannerImageUrl || "").trim().slice(0, 2000) || null;
+    const roomBrandTheme = brandTheme(body?.brandTheme);
+    const brandTitle = String(body?.brandTitle || title).trim().slice(0, 240) || title;
+    const brandSubtitle = String(body?.brandSubtitle || "Espace de collaboration stratégique").trim().slice(0, 500) || null;
 
     if (!companyName) throw Object.assign(new Error("Le nom de l’organisation est obligatoire."), { status: 400 });
     if (!title) throw Object.assign(new Error("Le nom de la dealroom est obligatoire."), { status: 400 });
@@ -109,6 +117,10 @@ export async function POST(request: NextRequest) {
         company_name: companyName,
         crm_link: crmLink,
         prospect_logo_url: prospectLogoUrl,
+        brand_banner_image_url: brandBannerImageUrl,
+        brand_theme: roomBrandTheme,
+        brand_title: brandTitle,
+        brand_subtitle: brandSubtitle,
         share_token: shareToken,
         created_by_email: createdByEmail,
       })
