@@ -66,6 +66,8 @@ export type SDRoomRecord = {
   company_hubspot_id: string | null;
   title: string;
   company_name: string;
+  crm_link: string | null;
+  prospect_logo_url: string | null;
   share_token: string;
   access_mode: SDRoomAccessMode;
   allowed_emails: string[];
