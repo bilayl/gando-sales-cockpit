@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, ListFilter, Loader2, Play, RefreshCw, Search, SquareKanban, Table2, Users } from "lucide-react";
+import { Building2, ListFilter, Loader2, MapPin, Play, RefreshCw, Search, SquareKanban, Table2, Users } from "lucide-react";
 import { CallRecommendationStrip } from "@/components/call-recommendation-strip";
 import { CompanyDrawer } from "@/components/company-drawer";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
@@ -18,6 +18,7 @@ import {
   getCompanyProspectionDecision,
   type ProspectionBucket,
 } from "@/lib/company-prospection-priority";
+import { fetchAllPagedResults } from "@/lib/fetch-all-paged-results";
 import {
   PROSPECTION_SEGMENT_PREFS_EVENT,
   orderVisibleCompanySegments,
@@ -51,6 +52,10 @@ function callLabel(value?: string | null) {
   return value ? labels[value] || value : "—";
 }
 
+function companyLocation(properties: Record<string, string | null | undefined>) {
+  return [properties.zip, properties.city, properties.state, properties.country].filter(Boolean).join(" · ") || "—";
+}
+
 function companySuggestion(
   stage: CompanyStage,
   decision: ReturnType<typeof getCompanyProspectionDecision>,
@@ -76,6 +81,7 @@ export function CompanyFirstProspectionView() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
+  const [locationQuery, setLocationQuery] = useState("");
   const [owner, setOwner] = useState("");
   const [stageFilter, setStageFilter] = useState<CompanyStage | "">("");
   const [workFilter, setWorkFilter] = useState<WorkFilter>("ACTIONABLE");
@@ -131,11 +137,10 @@ export function CompanyFirstProspectionView() {
       if (segmentId) params.set("segmentId", segmentId);
       if (!segmentId && query) params.set("q", query);
       if (!segmentId && owner) params.set("owner", owner);
-      const response = await fetch(`/api/companies?${params.toString()}`, { cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Impossible de charger les entreprises");
-      setCompanies(payload.results || []);
-      setTotal(payload.total || payload.results?.length || 0);
+      const payload = await fetchAllPagedResults<Company>(`/api/companies?${params.toString()}`);
+      setCompanies(payload.results);
+      setTotal(payload.total);
+      if (payload.truncated) setError("Le volume est très important : seuls les 10 000 premiers comptes ont été chargés.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Erreur de chargement");
     } finally {
@@ -147,14 +152,17 @@ export function CompanyFirstProspectionView() {
 
   const baseFiltered = useMemo(() => {
     const needle = query.trim().toLowerCase();
+    const locationNeedle = locationQuery.trim().toLowerCase();
     return companies.filter(company => {
       const p = company.properties;
-      const haystack = [p.name, p.domain, p.city, p.country, p.phone].filter(Boolean).join(" ").toLowerCase();
+      const haystack = [p.name, p.domain, p.phone, p.website, p.industry].filter(Boolean).join(" ").toLowerCase();
+      const locationHaystack = [p.zip, p.city, p.state, p.country].filter(Boolean).join(" ").toLowerCase();
       return (!needle || haystack.includes(needle))
+        && (!locationNeedle || locationHaystack.includes(locationNeedle))
         && (!owner || p.hubspot_owner_id === owner)
         && (!stageFilter || deriveCompanyStage(company) === stageFilter);
     });
-  }, [companies, query, owner, stageFilter]);
+  }, [companies, query, locationQuery, owner, stageFilter]);
 
   const classified = useMemo(() => {
     const now = Date.now();
@@ -287,7 +295,8 @@ export function CompanyFirstProspectionView() {
               <SelectTrigger className="h-9 w-[165px]"><SelectValue placeholder="Statut compte" /></SelectTrigger>
               <SelectContent><SelectItem value="all">Tous les statuts</SelectItem>{COMPANY_PIPELINE.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
             </Select>
-            <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, ville…" className="h-9 w-52 pl-9" /></div>
+            <div className="relative"><MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={locationQuery} onChange={event => setLocationQuery(event.target.value)} placeholder="Ville, région, pays, CP…" className="h-9 w-52 pl-9" /></div>
+            <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, domaine…" className="h-9 w-52 pl-9" /></div>
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>{syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}</Button>
             <span className="ml-auto text-[11px] text-muted-foreground">La session appelle uniquement les comptes « À traiter maintenant » correspondant à ces filtres.</span>
           </div>
@@ -307,11 +316,12 @@ export function CompanyFirstProspectionView() {
 
           {view === "table" ? (
             <div className="min-h-0 flex-1 overflow-auto border-t border-border minari-scrollbar">
-              <Table className="min-w-[1250px]">
+              <Table className="min-w-[1400px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Priorité</TableHead>
                     <TableHead>Entreprise</TableHead>
+                    <TableHead>Localisation</TableHead>
                     <TableHead>Étape workflow</TableHead>
                     <TableHead>Dernier appel</TableHead>
                     <TableHead>Prochaine reprise</TableHead>
@@ -322,7 +332,7 @@ export function CompanyFirstProspectionView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell colSpan={9} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filtered.map(company => {
+                  {loading ? <TableRow><TableCell colSpan={10} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filtered.map(company => {
                     const p = company.properties;
                     const stage = deriveCompanyStage(company);
                     const decision = getCompanyProspectionDecision(company, stage);
@@ -340,6 +350,7 @@ export function CompanyFirstProspectionView() {
                             <div><div className="font-medium">{p.name || "Sans nom"}</div><div className="text-[11px] text-muted-foreground">{p.domain || "—"}</div></div>
                           </div>
                         </TableCell>
+                        <TableCell className="text-xs text-muted-foreground"><span className="inline-flex items-center gap-1.5"><MapPin size={12} />{companyLocation(p)}</span></TableCell>
                         <TableCell><Badge variant="outline">{STAGE_LABELS[stage]}</Badge></TableCell>
                         <TableCell>{callLabel(p.statut_de_lappel)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{stage === "LATER" || stage === "FOLLOW_UP" ? formatDate(p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date) : "—"}</TableCell>
@@ -350,7 +361,7 @@ export function CompanyFirstProspectionView() {
                       </TableRow>
                     );
                   })}
-                  {!loading && !filtered.length ? <TableRow><TableCell colSpan={9} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow> : null}
+                  {!loading && !filtered.length ? <TableRow><TableCell colSpan={10} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow> : null}
                 </TableBody>
               </Table>
             </div>
