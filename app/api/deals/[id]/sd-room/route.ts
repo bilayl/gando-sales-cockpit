@@ -13,6 +13,7 @@ import {
   updateSDRoomSettings,
 } from "@/lib/sd-room";
 import type { SDRoomRecord } from "@/lib/sd-room-types";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -37,13 +38,7 @@ function standaloneDeal(room: SDRoomRecord): DealRoomDetail {
     daysSinceLastActivity: null,
     closed: false,
     closedWon: false,
-    company: {
-      id: room.company_hubspot_id || room.id,
-      name: room.company_name,
-      domain: null,
-      industry: null,
-      city: null,
-    },
+    company: { id: room.company_hubspot_id || room.id, name: room.company_name, domain: null, industry: null, city: null },
     contacts: [],
     championId: null,
     decisionMakerId: null,
@@ -106,15 +101,33 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
     const { userEmail, deal, bundle, standalone } = await loadContext(id);
     if (standalone) {
-      const linkedConversations: never[] = [];
-      return Response.json({ deal, ...bundle, linkedConversations, crmConnected: false }, { status: 200 });
+      return Response.json({ deal, ...bundle, linkedConversations: [], crmConnected: false }, { status: 200 });
     }
-    await createSDRoom(deal, userEmail);
+
+    let body: Record<string, unknown> = {};
+    try { body = await request.json(); } catch { body = {}; }
+
+    const created = await createSDRoom(deal, userEmail);
+    const title = String(body.title || "").trim().slice(0, 240);
+    const companyName = String(body.companyName || "").trim().slice(0, 240);
+    const crmLink = String(body.crmLink || "").trim().slice(0, 2000) || null;
+    const prospectLogoUrl = String(body.prospectLogoUrl || "").trim().slice(0, 2000) || null;
+
+    if (title || companyName || crmLink || prospectLogoUrl) {
+      const updates: Record<string, unknown> = {};
+      if (title) updates.title = title;
+      if (companyName) updates.company_name = companyName;
+      if (crmLink) updates.crm_link = crmLink;
+      if (prospectLogoUrl) updates.prospect_logo_url = prospectLogoUrl;
+      const { error: updateError } = await getSupabaseAdmin().from("deal_rooms").update(updates).eq("id", created.id);
+      if (updateError) throw updateError;
+    }
+
     const nextBundle = await getSDRoomBundle(id);
     const linkedConversations = await listLinkedConversations(id, deal.company?.id || null, nextBundle.room?.id);
     return Response.json({ deal, ...nextBundle, linkedConversations, crmConnected: true }, { status: 201 });
