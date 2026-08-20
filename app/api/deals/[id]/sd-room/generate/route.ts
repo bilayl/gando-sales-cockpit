@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
 import { getDealRoomDetail } from "@/lib/hubspot/deals";
-import { generateSD01 } from "@/lib/sd01-agent";
+import { generateSD01 } from "@/lib/sd01-generator";
 import {
   getSDRoomBundle,
   loadAuthorizedOnoffCalls,
