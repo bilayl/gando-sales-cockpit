@@ -4,6 +4,7 @@ export type SDCode = (typeof SD_CODES)[number];
 export type SDDocumentStatus = "draft" | "review" | "published" | "validated";
 export type SDRoomStatus = "draft" | "published" | "archived";
 export type SDRoomAccessMode = "email" | "allowlist";
+export type SDRoomBrandTheme = "gando" | "gradient" | "dark" | "light";
 
 export const SD_STAGE_META: Record<SDCode, { title: string; subtitle: string }> = {
   SD01: { title: "Alignement stratégique", subtitle: "Contexte, enjeux, processus, valeur et prochaines étapes" },
@@ -68,6 +69,10 @@ export type SDRoomRecord = {
   company_name: string;
   crm_link: string | null;
   prospect_logo_url: string | null;
+  brand_banner_image_url: string | null;
+  brand_theme: SDRoomBrandTheme;
+  brand_title: string | null;
+  brand_subtitle: string | null;
   share_token: string;
   access_mode: SDRoomAccessMode;
   allowed_emails: string[];
