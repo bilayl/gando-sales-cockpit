@@ -6,11 +6,11 @@ import { SD_CODES, type SDCode } from "@/lib/sd-room-types";
 
 export const dynamic = "force-dynamic";
 
-const PREVIOUS_STAGE: Partial<Record<SDCode, SDCode>> = {
-  SD02: "SD01",
-  SD03: "SD02",
-  SD04: "SD03",
-  SD05: "SD04",
+const REQUIRED_BEFORE_PUBLISH: Partial<Record<SDCode, SDCode[]>> = {
+  SD02: ["SD01"],
+  SD03: ["SD02"],
+  SD04: ["SD02"],
+  SD05: ["SD01", "SD02"],
 };
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -26,10 +26,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const publish = Boolean(body?.publish);
     if (publish) {
-      const previousCode = PREVIOUS_STAGE[code];
-      const previous = bundle.documents.find(document => document.code === previousCode);
-      if (previousCode && previous?.status !== "validated") {
-        throw Object.assign(new Error(`${previousCode} doit être validé par le client avant de publier ${code}.`), { status: 409 });
+      const requiredCodes = REQUIRED_BEFORE_PUBLISH[code] || [];
+      const missing = requiredCodes.filter(requiredCode => bundle.documents.find(document => document.code === requiredCode)?.status !== "validated");
+      if (missing.length) {
+        throw Object.assign(new Error(`${missing.join(" et ")} doivent être validés par le client avant de publier ${code}.`), { status: 409 });
       }
     }
 
