@@ -1,0 +1,44 @@
+name: Production sourcing smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/production-sourcing-smoke.yml'
+
+jobs:
+  live-sourcing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call production sourcing endpoint
+        run: |
+          set -euo pipefail
+          HTTP_CODE=$(curl -sS --max-time 120 \
+            -o response.json \
+            -w '%{http_code}' \
+            -X POST 'https://gando-sales-cockpit-web.vercel.app/api/enrichment/search' \
+            -H 'content-type: application/json' \
+            --data '{"query":"loueurs indépendants de voitures à Lyon","territories":["France métropolitaine"],"sources":["Google","sites web de loueurs","annuaires professionnels"],"limit":3,"minConfidence":0.6}')
+
+          echo "HTTP $HTTP_CODE"
+          cat response.json
+          echo
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            exit 1
+          fi
+
+          NEW_PROSPECTS=$(jq -r '.newProspects // 0' response.json)
+          PROSPECT_COUNT=$(jq -r '(.prospects // []) | length' response.json)
+          FIRST_COMPANY=$(jq -r '(.prospects // [])[0].companyName // ""' response.json)
+
+          echo "newProspects=$NEW_PROSPECTS"
+          echo "prospectCount=$PROSPECT_COUNT"
+          echo "firstCompany=$FIRST_COMPANY"
+
+          if [ "$PROSPECT_COUNT" -lt 1 ] || [ -z "$FIRST_COMPANY" ]; then
+            echo 'Production sourcing returned no companies.' >&2
+            exit 1
+          fi
