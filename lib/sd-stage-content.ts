@@ -56,6 +56,7 @@ export type SD05Content = {
 };
 
 export type SDStageContent = SD02Content | SD03Content | SD04Content | SD05Content;
+type EmptyStage = Record<string, unknown>;
 
 export function createEmptySD02(): SD02Content {
   return { objective: "", successDefinition: "", milestones: [], clientCommitments: [], gandoCommitments: [], dependencies: [], risks: [], exitCriteria: [] };
@@ -73,7 +74,7 @@ export function createEmptySD05(): SD05Content {
   return { contractSummary: "", legalItems: [], signatories: [], signatureSteps: [], finalConditions: [], goLiveDate: "", handoverPlan: [] };
 }
 
-export function emptyStageContent(code: SDCode): SDStageContent | Record<string, never> {
+export function emptyStageContent(code: SDCode): SDStageContent | EmptyStage {
   if (code === "SD02") return createEmptySD02();
   if (code === "SD03") return createEmptySD03();
   if (code === "SD04") return createEmptySD04();
@@ -89,15 +90,15 @@ function stringList(value: unknown, maxItems = 80) {
   return Array.isArray(value) ? value.map(item => text(item, 1000)).filter(Boolean).slice(0, maxItems) : [];
 }
 
-export function normalizeStageContent(code: SDCode, value: unknown): SDStageContent | Record<string, never> {
+export function normalizeStageContent(code: SDCode, value: unknown): SDStageContent | EmptyStage {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   if (code === "SD02") {
-    return {
+    const result: SD02Content = {
       objective: text(source.objective),
       successDefinition: text(source.successDefinition),
       milestones: Array.isArray(source.milestones) ? source.milestones.slice(0, 80).map(item => {
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
-        const status = row.status === "done" || row.status === "in_progress" ? row.status : "not_started";
+        const status: MutualActionItem["status"] = row.status === "done" || row.status === "in_progress" ? row.status : "not_started";
         return { milestone: text(row.milestone, 1000), owner: text(row.owner, 300), dueDate: text(row.dueDate, 40), status, dependency: text(row.dependency, 1000) };
       }).filter(item => item.milestone) : [],
       clientCommitments: stringList(source.clientCommitments),
@@ -105,11 +106,12 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       dependencies: stringList(source.dependencies),
       risks: stringList(source.risks),
       exitCriteria: stringList(source.exitCriteria),
-    } satisfies SD02Content;
+    };
+    return result;
   }
   if (code === "SD03") {
     const pilot = source.pilot && typeof source.pilot === "object" ? source.pilot as Record<string, unknown> : {};
-    return {
+    const result: SD03Content = {
       solutionSummary: text(source.solutionSummary),
       scopeIn: stringList(source.scopeIn),
       scopeOut: stringList(source.scopeOut),
@@ -119,10 +121,11 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       pilot: { perimeter: text(pilot.perimeter), duration: text(pilot.duration, 300), successMetrics: stringList(pilot.successMetrics) },
       deploymentPlan: stringList(source.deploymentPlan),
       technicalOwners: stringList(source.technicalOwners),
-    } satisfies SD03Content;
+    };
+    return result;
   }
   if (code === "SD04") {
-    return {
+    const result: SD04Content = {
       offerSummary: text(source.offerSummary),
       pricing: Array.isArray(source.pricing) ? source.pricing.slice(0, 60).map(item => {
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
@@ -136,14 +139,15 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       commercialTerms: stringList(source.commercialTerms),
       procurementSteps: stringList(source.procurementSteps),
       validityDate: text(source.validityDate, 40),
-    } satisfies SD04Content;
+    };
+    return result;
   }
   if (code === "SD05") {
-    return {
+    const result: SD05Content = {
       contractSummary: text(source.contractSummary),
       legalItems: Array.isArray(source.legalItems) ? source.legalItems.slice(0, 80).map(item => {
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
-        const status = row.status === "approved" || row.status === "in_review" ? row.status : "open";
+        const status: SD05Content["legalItems"][number]["status"] = row.status === "approved" || row.status === "in_review" ? row.status : "open";
         return { topic: text(row.topic, 500), status, owner: text(row.owner, 300), notes: text(row.notes, 1000) };
       }).filter(item => item.topic) : [],
       signatories: Array.isArray(source.signatories) ? source.signatories.slice(0, 30).map(item => {
@@ -154,7 +158,8 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       finalConditions: stringList(source.finalConditions),
       goLiveDate: text(source.goLiveDate, 40),
       handoverPlan: stringList(source.handoverPlan),
-    } satisfies SD05Content;
+    };
+    return result;
   }
   return {};
 }
