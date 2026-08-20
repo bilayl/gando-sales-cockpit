@@ -18,15 +18,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   try {
     const userEmail = await requireSDInternalAccess();
-    const [deal, bundle, body] = await Promise.all([getDealRoomDetail(id), getSDRoomBundle(id), request.json()]);
+    const [bundle, body] = await Promise.all([getSDRoomBundle(id), request.json()]);
     if (!bundle.room) throw Object.assign(new Error("Créez d’abord la room SD."), { status: 404 });
 
+    const standalone = id.startsWith("standalone:");
     const callIds = Array.isArray(body?.callIds) ? body.callIds.map(String).filter(Boolean).slice(0, 50) : [];
     const manualTranscript = String(body?.manualTranscript || "").trim().slice(0, 300_000);
     const manualTitle = String(body?.manualTitle || "Conversation ajoutée manuellement").trim().slice(0, 240);
-    const calls = await loadAuthorizedOnoffCalls({ callIds, dealId: id, companyId: deal.company?.id || null });
-    if (calls.length !== callIds.length) {
-      throw Object.assign(new Error("Une conversation sélectionnée n’est pas reliée à ce deal ou à cette entreprise."), { status: 403 });
+
+    let companyName = bundle.room.company_name || "Client";
+    let dealName = bundle.room.title;
+    let calls: Awaited<ReturnType<typeof loadAuthorizedOnoffCalls>> = [];
+
+    if (standalone) {
+      if (callIds.length) {
+        throw Object.assign(new Error("Cette dealroom n’est pas reliée au CRM. Collez une conversation ou associez d’abord un deal HubSpot."), { status: 400 });
+      }
+    } else {
+      const deal = await getDealRoomDetail(id);
+      companyName = deal.company?.name || companyName;
+      dealName = deal.name;
+      calls = await loadAuthorizedOnoffCalls({ callIds, dealId: id, companyId: deal.company?.id || null });
+      if (calls.length !== callIds.length) {
+        throw Object.assign(new Error("Une conversation sélectionnée n’est pas reliée à ce deal ou à cette entreprise."), { status: 403 });
+      }
     }
 
     const savedSources = await Promise.all(calls.map(call => snapshotConversation({
@@ -50,11 +65,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         createdByEmail: userEmail,
       }));
     }
-    if (!savedSources.length) throw Object.assign(new Error("Sélectionnez un appel ou collez une conversation."), { status: 400 });
+    if (!savedSources.length) throw Object.assign(new Error("Collez une conversation ou sélectionnez un appel relié au CRM."), { status: 400 });
 
     const generated = await generateSD01({
-      companyName: deal.company?.name || "Client",
-      dealName: deal.name,
+      companyName,
+      dealName,
       sources: savedSources.map(source => ({ id: source.id, title: source.title, transcript: source.transcript_text })),
     });
     const document = await saveSDDocument({
