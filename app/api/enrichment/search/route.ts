@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dedupeSourcingCandidates, listHubSpotCompaniesForSourcing, type SourcingProspect } from "@/lib/enrichment-dedup";
 import { enrichmentAuthHeaders, enrichmentBackendUrl } from "@/lib/enrichment-auth";
+import { searchRentalCompaniesLocally } from "@/lib/enrichment-local-search";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const SOURCING_ENGINE = "enrichment-backend-inpi-v2-errors";
+const BACKEND_ENGINE = "enrichment-backend-inpi-v2-errors";
+const FALLBACK_ENGINE = "openrouter-direct-fallback-v1";
 
 type EnrichmentPayload = {
   searchId?: string;
@@ -92,6 +94,16 @@ async function searchThroughEnrichmentBackend(body: Record<string, unknown>) {
   return payload;
 }
 
+function shouldUseDirectFallback(error: unknown) {
+  const message = readableError(error, "").toLowerCase();
+  return [
+    "vercel ai gateway identity missing",
+    "protected deployment",
+    "backend d'enrichissement http 502",
+    "backend d'enrichissement http 503",
+  ].some(fragment => message.includes(fragment));
+}
+
 export async function POST(request: NextRequest) {
   try {
     const input = await request.json().catch(() => ({}));
@@ -105,11 +117,24 @@ export async function POST(request: NextRequest) {
       minConfidence,
     };
 
-    const [payload, companies] = await Promise.all([
-      searchThroughEnrichmentBackend(body),
-      listHubSpotCompaniesForSourcing(),
-    ]);
+    const companiesPromise = listHubSpotCompaniesForSourcing();
+    let payload: EnrichmentPayload;
+    let backendError: string | null = null;
+    let source = "gando-enrichment-backend";
+    let sourcingEngine = BACKEND_ENGINE;
 
+    try {
+      payload = await searchThroughEnrichmentBackend(body);
+    } catch (error) {
+      if (!shouldUseDirectFallback(error)) throw error;
+      backendError = readableError(error, "Backend d'enrichissement indisponible");
+      const direct = await searchRentalCompaniesLocally(body);
+      payload = direct as EnrichmentPayload;
+      source = "openrouter-direct-fallback";
+      sourcingEngine = FALLBACK_ENGINE;
+    }
+
+    const companies = await companiesPromise;
     const candidates = (Array.isArray(payload.prospects) ? payload.prospects : []) as SourcingProspect[];
     const deduped = dedupeSourcingCandidates(candidates, companies, limit, minConfidence);
 
@@ -125,25 +150,25 @@ export async function POST(request: NextRequest) {
       prospects: deduped.prospects,
       excluded: deduped.excluded,
       inpi: payload.inpi || null,
-      source: "gando-enrichment-backend",
-      sourcingEngine: SOURCING_ENGINE,
-      backendError: null,
+      source,
+      sourcingEngine,
+      backendError,
     }, {
       headers: {
         "cache-control": "no-store",
-        "x-gando-sourcing-engine": SOURCING_ENGINE,
+        "x-gando-sourcing-engine": sourcingEngine,
       },
     });
   } catch (error) {
     const message = error instanceof Error && error.name === "TimeoutError"
-      ? "La recherche a dépassé le délai maximum du backend d'enrichissement."
+      ? "La recherche a dépassé le délai maximum du moteur de sourcing."
       : readableError(error, "Erreur de sourcing");
 
-    return NextResponse.json({ error: message, sourcingEngine: SOURCING_ENGINE }, {
+    return NextResponse.json({ error: message, sourcingEngine: BACKEND_ENGINE }, {
       status: 502,
       headers: {
         "cache-control": "no-store",
-        "x-gando-sourcing-engine": SOURCING_ENGINE,
+        "x-gando-sourcing-engine": BACKEND_ENGINE,
       },
     });
   }
