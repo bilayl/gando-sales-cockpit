@@ -4,27 +4,27 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowUpRight,
-  Bot,
+  ArrowRight,
+  Building2,
+  CalendarClock,
   CheckCircle2,
-  Clock3,
+  ChevronDown,
+  ExternalLink,
   Eye,
-  FileText,
+  ImageIcon,
   Loader2,
   MessageSquare,
   Plus,
   RefreshCw,
   Search,
-  Send,
-  Sparkles,
   Users,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { DealRoomDeal } from "@/lib/deal-room-types";
-import { SD_CODES, SD_STAGE_META, type SDCode, type SDDocumentStatus } from "@/lib/sd-room-types";
+import type { SDCode, SDDocumentStatus } from "@/lib/sd-room-types";
 import { cn } from "@/lib/utils";
 
 type SDRoomHubDocument = {
@@ -42,6 +42,8 @@ type SDRoomSummary = {
   hubspot_deal_id: string;
   title: string;
   company_name: string;
+  crm_link: string | null;
+  prospect_logo_url: string | null;
   share_token: string;
   status: "draft" | "published" | "archived";
   current_stage: SDCode;
@@ -56,83 +58,56 @@ type SDRoomSummary = {
   openComments: number;
 };
 
-type HubFilter = "all" | "to_create" | "draft" | "published" | "viewed";
+type TabKey = "all" | "active" | "late" | "inactive";
+type Lifecycle = "not_started" | "in_progress" | "active" | "late" | "inactive";
 
-const FILTERS: Array<{ key: HubFilter; label: string }> = [
-  { key: "all", label: "Tous" },
-  { key: "to_create", label: "À créer" },
-  { key: "draft", label: "En préparation" },
-  { key: "published", label: "Publiées" },
-  { key: "viewed", label: "Consultées" },
+const tabs: Array<{ key: TabKey; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "active", label: "Active" },
+  { key: "late", label: "Late" },
+  { key: "inactive", label: "Inactive" },
 ];
 
-function money(value: number | null) {
-  if (!value) return "—";
-  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
-}
-
-function relativeDate(value: string | null) {
-  if (!value) return "Jamais";
+function formatDate(value: string | null, withYear = true) {
+  if (!value) return "–";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Jamais";
-  const diffDays = Math.round((date.getTime() - Date.now()) / 86_400_000);
-  if (diffDays === 0) return "Aujourd’hui";
-  if (diffDays === -1) return "Hier";
-  if (diffDays > -7 && diffDays < 0) return `Il y a ${Math.abs(diffDays)} j`;
-  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+  if (Number.isNaN(date.getTime())) return "–";
+  return new Intl.DateTimeFormat("fr-FR", withYear ? { day: "2-digit", month: "short", year: "numeric" } : { day: "2-digit", month: "short" }).format(date);
 }
 
 function initials(value: string) {
   return value.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "SD";
 }
 
-function roomLabel(room: SDRoomSummary | undefined) {
-  if (!room) return { label: "À créer", className: "border-slate-400/20 bg-slate-400/[0.07] text-slate-300" };
-  const current = room.documents.find(document => document.code === room.current_stage) || room.documents.find(document => document.code === "SD01");
-  if (room.status === "published") return { label: "Room publiée", className: "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-300" };
-  if (current?.status === "review") return { label: "À relire", className: "border-amber-400/25 bg-amber-400/[0.08] text-amber-300" };
-  return { label: "Brouillon", className: "border-primary/25 bg-primary/[0.08] text-primary" };
+function dueDate(deal: DealRoomDeal | undefined) {
+  return deal?.nextTaskDueAt || deal?.nextMeetingAt || deal?.closeDate || null;
 }
 
-function StagePill({ code, room }: { code: SDCode; room?: SDRoomSummary }) {
-  const document = room?.documents.find(item => item.code === code);
-  const isCurrent = room?.current_stage === code;
-  const className = document?.status === "validated" || document?.status === "published"
-    ? "border-emerald-400/30 bg-emerald-400/[0.09] text-emerald-300"
-    : document?.status === "review"
-      ? "border-amber-400/30 bg-amber-400/[0.09] text-amber-300"
-      : document?.status === "draft" && room
-        ? "border-primary/25 bg-primary/[0.07] text-primary"
-        : "border-border bg-muted/30 text-muted-foreground";
-
-  return (
-    <div className={cn("relative rounded-lg border px-2.5 py-2", className, isCurrent && "ring-1 ring-primary/30")}>
-      <div className="flex items-center gap-1.5">
-        {document?.status === "published" || document?.status === "validated" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-        <span className="text-[10px] font-black tracking-[0.08em]">{code}</span>
-      </div>
-      <div className="mt-1 truncate text-[10px] font-medium opacity-80">{document?.status === "review" ? "À relire" : document?.status === "published" ? "Publié" : document?.status === "validated" ? "Validé" : document?.status === "draft" && room ? "Brouillon" : "À venir"}</div>
-    </div>
-  );
+function lifecycle(room: SDRoomSummary, deal: DealRoomDeal | undefined): Lifecycle {
+  const now = Date.now();
+  const due = dueDate(deal);
+  if (room.status === "archived") return "inactive";
+  const updated = new Date(room.updated_at).getTime();
+  if (Number.isFinite(updated) && now - updated > 30 * 86_400_000) return "inactive";
+  if (due && new Date(due).getTime() < now && !deal?.closed) return "late";
+  if (room.status === "published") return "active";
+  const progressed = room.documents.some(document => document.version > 1 || document.status !== "draft");
+  return progressed ? "in_progress" : "not_started";
 }
 
-function Metric({ icon: Icon, label, value }: { icon: typeof Eye; label: string; value: string | number }) {
-  return (
-    <div className="rounded-xl border border-border bg-muted/20 px-3 py-2.5">
-      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground"><Icon className="h-3.5 w-3.5" />{label}</div>
-      <div className="mt-1 text-sm font-bold">{value}</div>
-    </div>
-  );
-}
+const lifecycleMeta: Record<Lifecycle, { label: string; className: string }> = {
+  not_started: { label: "Not started", className: "border-slate-400/20 bg-slate-400/10 text-slate-300" },
+  in_progress: { label: "In progress", className: "border-blue-400/20 bg-blue-400/10 text-blue-300" },
+  active: { label: "Active", className: "border-emerald-400/20 bg-emerald-400/10 text-emerald-300" },
+  late: { label: "Late", className: "border-rose-400/20 bg-rose-400/10 text-rose-300" },
+  inactive: { label: "Inactive", className: "border-zinc-400/20 bg-zinc-400/10 text-zinc-400" },
+};
 
-function OverviewStat({ label, value, detail }: { label: string; value: number; detail: string }) {
-  return (
-    <Card className="p-4">
-      <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{label}</div>
-      <div className="mt-1 text-2xl font-black tracking-[-0.04em]">{value}</div>
-      <div className="mt-1 text-[11px] text-muted-foreground">{detail}</div>
-    </Card>
-  );
+function Logo({ room }: { room: SDRoomSummary }) {
+  if (room.prospect_logo_url) {
+    return <img src={room.prospect_logo_url} alt="" className="h-9 w-9 rounded-lg border border-border bg-white object-contain p-1" />;
+  }
+  return <div className="grid h-9 w-9 place-items-center rounded-lg border border-border bg-muted text-[11px] font-black text-muted-foreground">{initials(room.company_name)}</div>;
 }
 
 export function SDDealRoomHub() {
@@ -140,10 +115,17 @@ export function SDDealRoomHub() {
   const [deals, setDeals] = useState<DealRoomDeal[]>([]);
   const [rooms, setRooms] = useState<SDRoomSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [workingDealId, setWorkingDealId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<HubFilter>("all");
+  const [tab, setTab] = useState<TabKey>("all");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [selectedDealId, setSelectedDealId] = useState("");
+  const [dealroomName, setDealroomName] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+  const [crmLink, setCrmLink] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -155,7 +137,7 @@ export function SDDealRoomHub() {
       ]);
       const [dealsPayload, roomsPayload] = await Promise.all([dealsResponse.json(), roomsResponse.json()]);
       if (!dealsResponse.ok) throw new Error(dealsPayload.message || dealsPayload.error || "Impossible de charger les deals.");
-      if (!roomsResponse.ok) throw new Error(roomsPayload.message || roomsPayload.error || "Impossible de charger les Rooms SD.");
+      if (!roomsResponse.ok) throw new Error(roomsPayload.message || roomsPayload.error || "Impossible de charger les dealrooms.");
       setDeals(dealsPayload.results || []);
       setRooms(roomsPayload.results || []);
     } catch (loadError) {
@@ -167,176 +149,263 @@ export function SDDealRoomHub() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const roomMap = useMemo(() => new Map(rooms.map(room => [room.hubspot_deal_id, room])), [rooms]);
-  const stats = useMemo(() => ({
-    active: rooms.filter(room => room.status !== "archived").length,
-    toCreate: deals.filter(deal => !roomMap.has(deal.id)).length,
-    published: rooms.filter(room => room.status === "published").length,
-    viewed: rooms.filter(room => room.opens > 0).length,
-    comments: rooms.reduce((sum, room) => sum + room.openComments, 0),
-  }), [deals, roomMap, rooms]);
+  const dealMap = useMemo(() => new Map(deals.map(deal => [deal.id, deal])), [deals]);
+  const roomDealIds = useMemo(() => new Set(rooms.map(room => room.hubspot_deal_id)), [rooms]);
+  const availableDeals = useMemo(() => deals.filter(deal => !roomDealIds.has(deal.id)), [deals, roomDealIds]);
 
-  const visibleDeals = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return deals
-      .filter(deal => {
-        const room = roomMap.get(deal.id);
-        if (filter === "to_create" && room) return false;
-        if (filter === "draft" && (!room || room.status === "published" || room.status === "archived")) return false;
-        if (filter === "published" && room?.status !== "published") return false;
-        if (filter === "viewed" && (!room || room.opens < 1)) return false;
-        if (!normalizedQuery) return true;
-        return [deal.company?.name, deal.name, deal.ownerName, deal.company?.domain]
-          .filter(Boolean)
-          .some(value => String(value).toLowerCase().includes(normalizedQuery));
-      })
-      .sort((a, b) => {
-        const roomA = roomMap.get(a.id);
-        const roomB = roomMap.get(b.id);
-        if (Boolean(roomA) !== Boolean(roomB)) return roomA ? -1 : 1;
-        return (b.priorityScore || 0) - (a.priorityScore || 0);
-      });
-  }, [deals, filter, query, roomMap]);
+  const counts = useMemo(() => {
+    const result = { all: rooms.length, active: 0, late: 0, inactive: 0 };
+    for (const room of rooms) {
+      const state = lifecycle(room, dealMap.get(room.hubspot_deal_id));
+      if (state === "active" || state === "in_progress") result.active += 1;
+      if (state === "late") result.late += 1;
+      if (state === "inactive") result.inactive += 1;
+    }
+    return result;
+  }, [dealMap, rooms]);
 
-  async function createRoom(dealId: string) {
-    setWorkingDealId(dealId);
-    setError("");
+  const visibleRooms = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rooms.filter(room => {
+      const deal = dealMap.get(room.hubspot_deal_id);
+      const state = lifecycle(room, deal);
+      if (tab === "active" && state !== "active" && state !== "in_progress") return false;
+      if (tab === "late" && state !== "late") return false;
+      if (tab === "inactive" && state !== "inactive") return false;
+      if (!q) return true;
+      return [room.title, room.company_name, deal?.name, deal?.ownerName]
+        .filter(Boolean)
+        .some(value => String(value).toLowerCase().includes(q));
+    });
+  }, [dealMap, query, rooms, tab]);
+
+  function openCreate() {
+    setCreateError("");
+    setSelectedDealId("");
+    setDealroomName("");
+    setOrganizationName("");
+    setCrmLink("");
+    setLogoUrl("");
+    setModalOpen(true);
+  }
+
+  function selectDeal(dealId: string) {
+    setSelectedDealId(dealId);
+    const deal = deals.find(item => item.id === dealId);
+    if (!deal) return;
+    const company = deal.company?.name || "Client";
+    setOrganizationName(company);
+    setDealroomName(`Gando × ${company}`);
+    setCrmLink(deal.hubspotUrl || "");
+  }
+
+  async function createDealroom() {
+    if (!selectedDealId || !dealroomName.trim() || !organizationName.trim()) {
+      setCreateError("Sélectionne un compte CRM et renseigne le nom de la dealroom et de l’organisation.");
+      return;
+    }
+    setCreating(true);
+    setCreateError("");
     try {
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, { method: "POST" });
+      const response = await fetch(`/api/deals/${encodeURIComponent(selectedDealId)}/sd-room`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: dealroomName.trim(),
+          companyName: organizationName.trim(),
+          crmLink: crmLink.trim(),
+          prospectLogoUrl: logoUrl.trim(),
+        }),
+      });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.message || payload.error || "Création de la Room SD impossible.");
-      router.push(`/deal-room/${dealId}/sd`);
+      if (!response.ok) throw new Error(payload.message || payload.error || "Création impossible.");
+      setModalOpen(false);
+      router.push(`/deal-room/${selectedDealId}/sd`);
     } catch (creationError) {
-      setError(creationError instanceof Error ? creationError.message : "Création impossible");
-      setWorkingDealId(null);
+      setCreateError(creationError instanceof Error ? creationError.message : "Création impossible.");
+    } finally {
+      setCreating(false);
     }
   }
 
   return (
-    <div className="page-shell h-screen overflow-y-auto p-5 lg:px-7 lg:py-6">
-      <div className="mx-auto max-w-[1500px] space-y-6">
-        <header className="overflow-hidden rounded-2xl border border-primary/20 bg-card">
-          <div className="grid gap-0 xl:grid-cols-[1.45fr_0.9fr]">
-            <div className="p-6 lg:p-8">
-              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-primary"><Sparkles className="h-4 w-4" /> Méthode SD · Grands comptes</div>
-              <h1 className="mt-3 max-w-3xl text-3xl font-black tracking-[-0.045em] lg:text-4xl">Une Deal Room qui devient le dossier de décision partagé avec le client.</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">Du premier échange à la signature : construis le SD01 depuis les conversations, valide les faits, publie une version client, mesure ce que le board consulte puis avance jusqu’au SD05 sans perdre le contexte.</p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Badge variant="outline" className="rounded-md border-primary/20 bg-primary/[0.07] text-primary"><Bot className="mr-1.5 h-3.5 w-3.5" /> Agent depuis Onoff / transcript</Badge>
-                <Badge variant="outline" className="rounded-md"><FileText className="mr-1.5 h-3.5 w-3.5" /> Saisie manuelle possible</Badge>
-                <Badge variant="outline" className="rounded-md"><Eye className="mr-1.5 h-3.5 w-3.5" /> Tracking des consultations</Badge>
-                <Badge variant="outline" className="rounded-md"><MessageSquare className="mr-1.5 h-3.5 w-3.5" /> Remarques du board</Badge>
-              </div>
-            </div>
-            <div className="border-t border-border bg-muted/20 p-5 xl:border-l xl:border-t-0 lg:p-6">
-              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">Principe de publication</div>
-              <div className="mt-4 space-y-3">
-                <div className="flex gap-3"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Bot className="h-4 w-4" /></div><div><div className="text-sm font-bold">1. Capturer la vérité terrain</div><p className="mt-0.5 text-xs leading-5 text-muted-foreground">Appels, retranscriptions et notes alimentent le brouillon avec preuves.</p></div></div>
-                <div className="flex gap-3"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-400/10 text-amber-300"><Clock3 className="h-4 w-4" /></div><div><div className="text-sm font-bold">2. Relire en interne</div><p className="mt-0.5 text-xs leading-5 text-muted-foreground">L’agent ne publie jamais seul : le brouillon reste séparé du client.</p></div></div>
-                <div className="flex gap-3"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-400/10 text-emerald-300"><Send className="h-4 w-4" /></div><div><div className="text-sm font-bold">3. Publier et suivre</div><p className="mt-0.5 text-xs leading-5 text-muted-foreground">Lien sécurisé, vues, visiteurs, temps actif et commentaires deviennent des signaux de deal.</p></div></div>
-              </div>
-            </div>
+    <div className="page-shell h-screen overflow-y-auto bg-background">
+      <div className="mx-auto max-w-[1600px] px-5 py-5 lg:px-7 lg:py-6">
+        <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.15em] text-primary">Méthode SD</div>
+            <h1 className="mt-1 text-2xl font-black tracking-[-0.035em]">Dealrooms</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Crée, partage et suis les dossiers de décision grands comptes jusqu’au SD05.</p>
           </div>
-        </header>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative min-w-72">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Rechercher une dealroom…" className="h-10 pl-9" />
+            </div>
+            <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => void load()} aria-label="Actualiser"><RefreshCw className="h-4 w-4" /></Button>
+            <Button className="h-10 px-4" onClick={openCreate}><Plus className="mr-2 h-4 w-4" /> New dealroom</Button>
+          </div>
+        </div>
 
-        <section>
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div><div className="text-[10px] font-black uppercase tracking-[0.14em] text-muted-foreground">Process de décision</div><h2 className="mt-1 text-lg font-bold">SD01 → SD05</h2></div>
-            <div className="text-xs text-muted-foreground">Le contenu publié reste distinct du brouillon interne.</div>
-          </div>
-          <div className="grid gap-2 md:grid-cols-5">
-            {SD_CODES.map((code, index) => (
-              <Card key={code} className="relative overflow-hidden p-4">
-                <div className="flex items-center justify-between"><span className="text-xs font-black tracking-[0.12em] text-primary">{code}</span><span className="text-[10px] font-bold text-muted-foreground">0{index + 1}</span></div>
-                <div className="mt-2 text-sm font-bold">{SD_STAGE_META[code].title}</div>
-                <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{SD_STAGE_META[code].subtitle}</p>
-              </Card>
+        <div className="border-b border-border">
+          <div className="flex gap-7 overflow-x-auto">
+            {tabs.map(item => (
+              <button
+                key={item.key}
+                onClick={() => setTab(item.key)}
+                className={cn(
+                  "relative flex items-center gap-2 whitespace-nowrap pb-3 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground",
+                  tab === item.key && "text-foreground",
+                )}
+              >
+                {item.label}
+                <span className={cn("rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-bold", tab === item.key && "bg-foreground text-background")}>{counts[item.key]}</span>
+                {tab === item.key ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-foreground" /> : null}
+              </button>
             ))}
           </div>
-        </section>
+        </div>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <OverviewStat label="Rooms actives" value={stats.active} detail="dossiers SD créés" />
-          <OverviewStat label="À créer" value={stats.toCreate} detail="deals sans Room SD" />
-          <OverviewStat label="Publiées" value={stats.published} detail="visibles côté client" />
-          <OverviewStat label="Consultées" value={stats.viewed} detail="au moins une ouverture" />
-          <OverviewStat label="Remarques ouvertes" value={stats.comments} detail="feedback à traiter" />
-        </section>
+        {error ? <div className="mt-4 rounded-lg border border-rose-400/20 bg-rose-400/[0.06] px-4 py-3 text-sm text-rose-200">{error}</div> : null}
 
-        <section className="space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-xl font-black tracking-[-0.03em]">Rooms grands comptes</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Crée une Room SD directement depuis le deal, puis travaille le dossier jusqu’à la signature.</p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative min-w-64"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, deal, owner…" className="pl-9" /></div>
-              <Button variant="outline" size="icon" onClick={() => void load()} aria-label="Actualiser"><RefreshCw className="h-4 w-4" /></Button>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {FILTERS.map(item => {
-              const count = item.key === "all" ? deals.length : item.key === "to_create" ? stats.toCreate : item.key === "published" ? stats.published : item.key === "viewed" ? stats.viewed : rooms.filter(room => room.status === "draft").length;
-              return <Button key={item.key} variant={filter === item.key ? "default" : "outline"} size="sm" onClick={() => setFilter(item.key)}>{item.label}<span className="ml-1.5 opacity-70">{count}</span></Button>;
-            })}
-          </div>
-
-          {error ? <Card className="border-rose-400/25 bg-rose-400/[0.06] p-4 text-sm text-rose-200">{error}</Card> : null}
-
+        <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
           {loading ? (
-            <Card className="grid min-h-72 place-items-center"><div className="text-center"><Loader2 className="mx-auto h-7 w-7 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Chargement des Rooms SD…</p></div></Card>
-          ) : visibleDeals.length === 0 ? (
-            <Card className="grid min-h-64 place-items-center p-8 text-center"><div><Sparkles className="mx-auto h-8 w-8 text-primary" /><div className="mt-3 font-bold">Aucune room dans cette vue</div><p className="mt-1 text-sm text-muted-foreground">Change le filtre ou recherche une autre entreprise.</p></div></Card>
+            <div className="grid min-h-72 place-items-center"><div className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Chargement des dealrooms…</p></div></div>
+          ) : visibleRooms.length === 0 ? (
+            <div className="grid min-h-72 place-items-center px-6 text-center">
+              <div>
+                <Building2 className="mx-auto h-9 w-9 text-muted-foreground" />
+                <div className="mt-3 font-bold">Aucune dealroom ici</div>
+                <p className="mt-1 text-sm text-muted-foreground">Crée une dealroom de test pour commencer le process SD01 → SD05.</p>
+                <Button className="mt-4" onClick={openCreate}><Plus className="mr-2 h-4 w-4" /> New dealroom</Button>
+              </div>
+            </div>
           ) : (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {visibleDeals.map(deal => {
-                const room = roomMap.get(deal.id);
-                const state = roomLabel(room);
-                return (
-                  <Card key={deal.id} className="overflow-hidden transition-colors hover:border-primary/25">
-                    <div className="p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex min-w-0 gap-3">
-                          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-sm font-black text-primary">{initials(deal.company?.name || deal.name)}</div>
-                          <div className="min-w-0"><div className="truncate text-base font-black">{deal.company?.name || "Entreprise non associée"}</div><div className="mt-0.5 truncate text-xs text-muted-foreground">{deal.name}</div><div className="mt-2 flex flex-wrap gap-1.5">{deal.stageLabel ? <Badge variant="outline" className="rounded-md text-[10px]">{deal.stageLabel}</Badge> : null}{deal.ownerName ? <Badge variant="outline" className="rounded-md text-[10px]">{deal.ownerName}</Badge> : null}<Badge variant="outline" className="rounded-md text-[10px]">{money(deal.amount)}</Badge></div></div>
-                        </div>
-                        <Badge variant="outline" className={cn("shrink-0 rounded-md font-bold", state.className)}>{state.label}</Badge>
-                      </div>
-
-                      <div className="mt-5 grid grid-cols-5 gap-1.5">{SD_CODES.map(code => <StagePill key={code} code={code} room={room} />)}</div>
-
-                      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        <Metric icon={Eye} label="Ouvertures" value={room?.opens || 0} />
-                        <Metric icon={Users} label="Visiteurs" value={room?.uniqueVisitors || 0} />
-                        <Metric icon={MessageSquare} label="Remarques" value={room?.openComments || 0} />
-                        <Metric icon={Clock3} label="Dernière vue" value={relativeDate(room?.lastViewedAt || null)} />
-                      </div>
-
-                      <div className="mt-4 rounded-xl border border-border bg-muted/20 p-3 text-xs leading-5 text-muted-foreground">
-                        <span className="font-bold text-foreground">Prochaine action :</span> {deal.hsNextStep || deal.nextTaskSubject || (room ? `Faire avancer ${room.current_stage} et aligner le client.` : "Créer le SD01 et capturer le premier échange.")}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/10 px-5 py-3">
-                      <div className="text-[11px] text-muted-foreground">{room ? <>Room mise à jour {relativeDate(room.updated_at)}{room.lastViewedAt ? <> · vue {relativeDate(room.lastViewedAt)}</> : null}</> : <>Aucun dossier SD pour ce deal</>}</div>
-                      <div className="flex flex-wrap gap-2">
-                        {room?.status === "published" ? <Button variant="outline" size="sm" asChild><a href={`/r/${room.share_token}`} target="_blank" rel="noreferrer"><Eye className="mr-1.5 h-3.5 w-3.5" /> Voir côté client</a></Button> : null}
-                        <Button variant="outline" size="sm" asChild><Link href={`/deal-room/${deal.id}`}>War room</Link></Button>
-                        {room ? (
-                          <Button size="sm" asChild><Link href={`/deal-room/${deal.id}/sd`}>Ouvrir la Room SD <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" /></Link></Button>
-                        ) : (
-                          <Button size="sm" onClick={() => void createRoom(deal.id)} disabled={workingDealId === deal.id}>{workingDealId === deal.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}Créer le SD01</Button>
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-border bg-muted/20 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                    <th className="w-11 px-4 py-3"><input type="checkbox" className="h-4 w-4 rounded border-border bg-background" aria-label="Tout sélectionner" /></th>
+                    <th className="px-3 py-3">Name</th>
+                    <th className="px-3 py-3">Contacts</th>
+                    <th className="px-3 py-3">SD stage</th>
+                    <th className="px-3 py-3">Status</th>
+                    <th className="px-3 py-3">Next due date</th>
+                    <th className="px-3 py-3">Activity</th>
+                    <th className="px-3 py-3">Created</th>
+                    <th className="w-24 px-3 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRooms.map(room => {
+                    const deal = dealMap.get(room.hubspot_deal_id);
+                    const state = lifecycle(room, deal);
+                    const meta = lifecycleMeta[state];
+                    const due = dueDate(deal);
+                    return (
+                      <tr key={room.id} className="group border-b border-border last:border-b-0 transition-colors hover:bg-muted/25">
+                        <td className="px-4 py-4"><input type="checkbox" className="h-4 w-4 rounded border-border bg-background" aria-label={`Sélectionner ${room.title}`} /></td>
+                        <td className="px-3 py-4">
+                          <Link href={`/deal-room/${room.hubspot_deal_id}/sd`} className="flex min-w-[240px] items-center gap-3">
+                            <Logo room={room} />
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-bold text-foreground group-hover:text-primary">{room.title}</div>
+                              <div className="mt-0.5 truncate text-xs text-muted-foreground">{room.company_name}</div>
+                            </div>
+                          </Link>
+                        </td>
+                        <td className="px-3 py-4">
+                          <div className="flex items-center gap-2 text-sm"><Users className="h-4 w-4 text-muted-foreground" /><span className="font-semibold">{deal?.contacts.length || 0}</span>{(deal?.contacts.length || 0) > 0 ? <div className="flex -space-x-1.5">{deal?.contacts.slice(0, 3).map(contact => <span key={contact.id} title={contact.name} className="grid h-6 w-6 place-items-center rounded-full border-2 border-card bg-muted text-[9px] font-black">{initials(contact.name)}</span>)}</div> : null}</div>
+                        </td>
+                        <td className="px-3 py-4"><Badge variant="outline" className="rounded-md border-primary/20 bg-primary/[0.06] text-primary">{room.current_stage}</Badge></td>
+                        <td className="px-3 py-4"><Badge variant="outline" className={cn("rounded-md font-semibold", meta.className)}>{meta.label}</Badge></td>
+                        <td className="px-3 py-4"><div className={cn("flex items-center gap-2 text-sm", state === "late" ? "font-semibold text-rose-300" : "text-muted-foreground")}><CalendarClock className="h-4 w-4" />{formatDate(due, false)}</div></td>
+                        <td className="px-3 py-4">
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1"><Eye className="h-3.5 w-3.5" />{room.opens}</span>
+                            <span className="flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{room.openComments}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-4 text-sm text-muted-foreground">{formatDate(room.created_at)}</td>
+                        <td className="px-3 py-4">
+                          <div className="flex items-center justify-end gap-1">
+                            {room.crm_link ? <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Ouvrir le CRM"><a href={room.crm_link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a></Button> : null}
+                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Ouvrir la dealroom"><Link href={`/deal-room/${room.hubspot_deal_id}/sd`}><ArrowRight className="h-4 w-4" /></Link></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">
+                <span>Results : {visibleRooms.length} of {rooms.length}</span>
+                <span>{availableDeals.length} compte{availableDeals.length > 1 ? "s" : ""} CRM disponible{availableDeals.length > 1 ? "s" : ""} pour une nouvelle room</span>
+              </div>
             </div>
           )}
-        </section>
+        </div>
       </div>
+
+      {modalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]" onMouseDown={event => { if (event.target === event.currentTarget && !creating) setModalOpen(false); }}>
+          <div className="w-full max-w-[560px] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+            <div className="flex items-center justify-between px-6 pb-4 pt-6">
+              <div>
+                <h2 className="text-xl font-black tracking-[-0.025em]">Create new dealroom</h2>
+                <p className="mt-1 text-xs text-muted-foreground">La room sera initialisée avec SD01 → SD05.</p>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setModalOpen(false)} disabled={creating}><X className="h-4 w-4" /></Button>
+            </div>
+
+            <div className="space-y-4 px-6 pb-6">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Dealroom name*</label>
+                <Input value={dealroomName} onChange={event => setDealroomName(event.target.value)} placeholder="ex: Gando × Acme Corp." />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">CRM account*</label>
+                <div className="relative">
+                  <select value={selectedDealId} onChange={event => selectDeal(event.target.value)} className="h-10 w-full appearance-none rounded-md border border-input bg-background px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-ring">
+                    <option value="">Select CRM account…</option>
+                    {availableDeals.map(deal => <option key={deal.id} value={deal.id}>{deal.company?.name || deal.name} — {deal.name}</option>)}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+                {availableDeals.length === 0 ? <p className="mt-1.5 text-[11px] text-amber-300">Tous les deals chargés ont déjà une dealroom.</p> : null}
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">CRM link</label>
+                <Input value={crmLink} onChange={event => setCrmLink(event.target.value)} placeholder="https://app.hubspot.com/…" />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Organization name*</label>
+                <Input value={organizationName} onChange={event => setOrganizationName(event.target.value)} placeholder="ex: Tesla" />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Prospect logo</label>
+                <div className="flex items-center gap-3">
+                  <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground">
+                    {logoUrl ? <img src={logoUrl} alt="" className="h-full w-full object-contain p-1.5" /> : organizationName ? <span className="text-xs font-black">{initials(organizationName)}</span> : <ImageIcon className="h-5 w-5" />}
+                  </div>
+                  <Input value={logoUrl} onChange={event => setLogoUrl(event.target.value)} placeholder="URL du logo (optionnel)" />
+                </div>
+              </div>
+
+              {createError ? <div className="rounded-lg border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2.5 text-xs text-rose-200">{createError}</div> : null}
+
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" /> Aucun changement n’est envoyé vers HubSpot.</div>
+                <Button onClick={() => void createDealroom()} disabled={creating || !availableDeals.length} className="min-w-24">{creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Create</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
