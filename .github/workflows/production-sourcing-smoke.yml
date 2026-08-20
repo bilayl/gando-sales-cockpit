@@ -1,5 +1,6 @@
 name: Production sourcing smoke test
 
+# Live production smoke test for the current sourcing route.
 on:
   workflow_dispatch:
   push:
