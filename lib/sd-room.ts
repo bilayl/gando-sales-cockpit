@@ -14,6 +14,7 @@ import {
   type SDDocumentRecord,
   type SDRoomAccessMode,
   type SDRoomAnalytics,
+  type SDRoomBrandTheme,
   type SDRoomComment,
   type SDRoomRecord,
   type SDSourceConversation,
@@ -44,6 +45,14 @@ function cleanEmail(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
+function cleanOptionalText(value: unknown, max: number) {
+  return String(value || "").trim().slice(0, max) || null;
+}
+
+function cleanBrandTheme(value: unknown): SDRoomBrandTheme {
+  return value === "gradient" || value === "dark" || value === "light" ? value : "gando";
+}
+
 export async function requireSDInternalAccess() {
   if (!isAuthBypassEnabled() && !(await isHubSpotAuthenticated())) {
     throw Object.assign(new Error("UNAUTHORIZED"), { status: 401 });
@@ -71,6 +80,9 @@ export async function createSDRoom(deal: DealRoomDetail, createdByEmail: string)
       company_hubspot_id: deal.company?.id || null,
       title: `${companyName} × Gando`,
       company_name: companyName,
+      brand_theme: "gando",
+      brand_title: `${companyName} × Gando`,
+      brand_subtitle: "Espace de collaboration stratégique",
       share_token: shareToken,
       created_by_email: createdByEmail,
     })
@@ -346,11 +358,32 @@ export async function updateSDRoomSettings(input: {
   roomId: string;
   accessMode: SDRoomAccessMode;
   allowedEmails: string[];
+  companyName?: string;
+  prospectLogoUrl?: string | null;
+  brandBannerImageUrl?: string | null;
+  brandTheme?: SDRoomBrandTheme;
+  brandTitle?: string | null;
+  brandSubtitle?: string | null;
 }) {
   const allowedEmails = [...new Set(input.allowedEmails.map(cleanEmail).filter(Boolean))].slice(0, 100);
+  const updates: Record<string, unknown> = {
+    access_mode: input.accessMode,
+    allowed_emails: allowedEmails,
+  };
+  if (input.companyName !== undefined) {
+    const companyName = String(input.companyName || "").trim().slice(0, 240);
+    if (!companyName) throw Object.assign(new Error("Le nom de l’entreprise ne peut pas être vide."), { status: 400 });
+    updates.company_name = companyName;
+  }
+  if (input.prospectLogoUrl !== undefined) updates.prospect_logo_url = cleanOptionalText(input.prospectLogoUrl, 2000);
+  if (input.brandBannerImageUrl !== undefined) updates.brand_banner_image_url = cleanOptionalText(input.brandBannerImageUrl, 2000);
+  if (input.brandTheme !== undefined) updates.brand_theme = cleanBrandTheme(input.brandTheme);
+  if (input.brandTitle !== undefined) updates.brand_title = cleanOptionalText(input.brandTitle, 240);
+  if (input.brandSubtitle !== undefined) updates.brand_subtitle = cleanOptionalText(input.brandSubtitle, 500);
+
   const { data, error } = await getSupabaseAdmin()
     .from("deal_rooms")
-    .update({ access_mode: input.accessMode, allowed_emails: allowedEmails })
+    .update(updates)
     .eq("id", input.roomId)
     .select("*")
     .single();
@@ -405,6 +438,11 @@ export async function getPublicSDRoom(token: string, email: string) {
       id: room.id,
       title: room.title,
       companyName: room.company_name,
+      companyLogoUrl: room.prospect_logo_url,
+      bannerImageUrl: room.brand_banner_image_url,
+      theme: cleanBrandTheme(room.brand_theme),
+      displayTitle: room.brand_title || room.title,
+      displaySubtitle: room.brand_subtitle || "Espace de collaboration stratégique avec Gando",
       currentStage: room.current_stage,
       updatedAt: room.updated_at,
     },
