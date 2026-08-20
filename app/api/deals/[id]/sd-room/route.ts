@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getDealRoomDetail } from "@/lib/hubspot/deals";
 import { apiError } from "@/lib/hubspot";
 import { normalizeManualSD01 } from "@/lib/sd01-agent";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import {
   createSDRoom,
   getSDRoomBundle,
@@ -32,11 +33,25 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
     const { userEmail, deal } = await loadContext(id);
-    await createSDRoom(deal, userEmail);
+    const body = await request.json().catch(() => ({}));
+    const room = await createSDRoom(deal, userEmail);
+
+    const defaultCompanyName = deal.company?.name || "Client";
+    const companyName = String(body?.companyName || defaultCompanyName).trim().slice(0, 200) || defaultCompanyName;
+    const title = String(body?.title || `${companyName} × Gando`).trim().slice(0, 240) || `${companyName} × Gando`;
+    const crmLink = String(body?.crmLink || deal.hubspotUrl || "").trim().slice(0, 1000) || null;
+    const prospectLogoUrl = String(body?.prospectLogoUrl || "").trim().slice(0, 2000) || null;
+
+    const { error: updateError } = await getSupabaseAdmin()
+      .from("deal_rooms")
+      .update({ title, company_name: companyName, crm_link: crmLink, prospect_logo_url: prospectLogoUrl })
+      .eq("id", room.id);
+    if (updateError) throw updateError;
+
     const bundle = await getSDRoomBundle(id);
     const linkedConversations = await listLinkedConversations(id, deal.company?.id || null, bundle.room?.id);
     return Response.json({ deal, ...bundle, linkedConversations }, { status: 201 });
