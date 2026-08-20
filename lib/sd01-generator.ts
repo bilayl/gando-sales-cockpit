@@ -4,21 +4,22 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { normalizeManualSD01 } from "@/lib/sd01-agent";
 import type { SD01Content } from "@/lib/sd-room-types";
 
-const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_URL = "https://api.openai.com/v1/responses";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-export const SD01_PROMPT_VERSION = "sd01-v1.5-openai-primary";
+export const SD01_PROMPT_VERSION = "sd01-v1.6-openai-responses";
 
 const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
 const FAST_DEFAULT_MODEL = "google/gemma-4-31b-it:free";
 const FREE_FALLBACK_MODEL = "openrouter/free";
-const OPENAI_BUDGET_MS = 66_000;
-const OPENROUTER_PRIMARY_BUDGET_MS = 90_000;
-const OPENROUTER_FALLBACK_BUDGET_MS = 38_000;
+const OPENAI_BUDGET_MS = 55_000;
+const OPENROUTER_PRIMARY_BUDGET_MS = 70_000;
+const OPENROUTER_FALLBACK_BUDGET_MS = 20_000;
 const MAX_SOURCE_CHARS = 42_000;
 
 type AgentSource = { id: string; title: string; transcript: string };
 type JsonRecord = Record<string, unknown>;
+type ProviderError = Error & { status?: number; fallbackAllowed?: boolean };
 
 const stringArray = { type: "array", items: { type: "string" } } as const;
 
@@ -140,6 +141,10 @@ const SD01_SCHEMA = {
   },
 } as const;
 
+function providerError(message: string, status: number, fallbackAllowed = false) {
+  return Object.assign(new Error(message), { status, fallbackAllowed }) as ProviderError;
+}
+
 async function getServerSecret(name: string) {
   try {
     const { data, error } = await getSupabaseAdmin().rpc("get_server_secret", { p_name: name });
@@ -156,7 +161,7 @@ async function getOpenAIApiKey() {
 
 async function getOpenRouterApiKey() {
   const key = process.env.OPENROUTER_API_KEY?.trim() || await getServerSecret("openrouter_api_key");
-  if (!key) throw Object.assign(new Error("OpenRouter non configuré côté serveur."), { status: 503 });
+  if (!key) throw providerError("OpenRouter non configuré côté serveur.", 503);
   return key;
 }
 
@@ -165,7 +170,7 @@ function isTimeoutLike(error: unknown) {
   return /timeout|timed out|aborted|abort/i.test(`${error.name} ${error.message}`);
 }
 
-function extractText(payload: unknown) {
+function extractChatText(payload: unknown) {
   const choice = (payload as { choices?: Array<{ message?: { content?: unknown }; text?: unknown }> })?.choices?.[0];
   const content = choice?.message?.content;
   if (typeof content === "string") return content.trim();
@@ -178,6 +183,47 @@ function extractText(payload: unknown) {
     }).filter(Boolean).join("\n").trim();
   }
   if (typeof choice?.text === "string") return choice.text.trim();
+  return "";
+}
+
+function extractResponsesText(payload: unknown) {
+  const direct = (payload as { output_text?: unknown })?.output_text;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  const output = (payload as {
+    output?: Array<{
+      type?: string;
+      content?: Array<{ type?: string; text?: unknown; refusal?: unknown }>;
+    }>;
+  })?.output;
+
+  if (!Array.isArray(output)) return "";
+
+  return output
+    .flatMap(item => Array.isArray(item.content) ? item.content : [])
+    .filter(part => part?.type === "output_text" && typeof part.text === "string")
+    .map(part => String(part.text).trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function extractResponsesRefusal(payload: unknown) {
+  const output = (payload as {
+    output?: Array<{
+      content?: Array<{ type?: string; refusal?: unknown }>;
+    }>;
+  })?.output;
+
+  if (!Array.isArray(output)) return "";
+
+  for (const item of output) {
+    for (const part of Array.isArray(item.content) ? item.content : []) {
+      if (part?.type === "refusal" && typeof part.refusal === "string" && part.refusal.trim()) {
+        return part.refusal.trim();
+      }
+    }
+  }
   return "";
 }
 
@@ -217,12 +263,10 @@ function extractBalancedObject(value: string) {
       else if (char === '"') inString = false;
       continue;
     }
-
     if (char === '"') {
       inString = true;
       continue;
     }
-
     if (char === "{") {
       if (depth === 0) start = index;
       depth += 1;
@@ -231,7 +275,6 @@ function extractBalancedObject(value: string) {
       if (depth === 0 && start >= 0) return value.slice(start, index + 1);
     }
   }
-
   return "";
 }
 
@@ -243,18 +286,15 @@ function parseJsonObject(value: string) {
 
   const direct = parseCandidate(clean);
   if (direct) return direct;
-
   const balanced = extractBalancedObject(clean);
   const extracted = parseCandidate(balanced);
   if (extracted) return extracted;
-
-  throw Object.assign(new Error("Le modèle a répondu, mais le format JSON SD01 est invalide."), { status: 502 });
+  throw providerError("Le modèle a répondu, mais le format JSON SD01 est invalide.", 502);
 }
 
 function compactTranscript(transcript: string, budget: number) {
   const clean = transcript.replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim();
   if (clean.length <= budget) return clean;
-
   const head = Math.floor(budget * 0.72);
   const tail = Math.max(0, budget - head);
   return `${clean.slice(0, head)}\n\n[… transcription raccourcie pour la génération …]\n\n${clean.slice(-tail)}`;
@@ -263,11 +303,9 @@ function compactTranscript(transcript: string, budget: number) {
 function compactSources(sources: AgentSource[]) {
   const usable = sources.filter(source => source.transcript.trim()).slice(0, 20);
   if (!usable.length) return "";
-
   const overhead = usable.reduce((sum, source) => sum + source.id.length + source.title.length + 45, 0);
   const available = Math.max(12_000, MAX_SOURCE_CHARS - overhead);
   const perSource = Math.max(3_500, Math.floor(available / usable.length));
-
   return usable
     .map(source => `=== [SOURCE:${source.id}] ${source.title} ===\n${compactTranscript(source.transcript, perSource)}`)
     .join("\n\n");
@@ -310,28 +348,27 @@ async function callOpenAI(input: {
       body: JSON.stringify({
         model: input.model,
         store: false,
-        messages: [
-          { role: "system", content: systemPrompt() },
-          { role: "user", content: userPrompt(input) },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
+        instructions: systemPrompt(),
+        input: userPrompt(input),
+        reasoning: { effort: "minimal" },
+        text: {
+          format: {
+            type: "json_schema",
             name: "sd01",
             strict: true,
             schema: SD01_SCHEMA,
           },
         },
-        max_completion_tokens: 3_200,
+        max_output_tokens: 7_000,
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(OPENAI_BUDGET_MS),
     });
   } catch (error) {
     if (isTimeoutLike(error)) {
-      throw Object.assign(new Error("OpenAI a dépassé le délai de génération SD01."), { status: 504 });
+      throw providerError("OpenAI a dépassé le délai de génération SD01.", 504, true);
     }
-    throw error;
+    throw providerError(`Erreur réseau OpenAI : ${error instanceof Error ? error.message : "erreur inconnue"}`, 502, true);
   }
 
   const raw = await response.text();
@@ -339,7 +376,7 @@ async function callOpenAI(input: {
   try {
     payload = raw ? JSON.parse(raw) : {};
   } catch {
-    throw Object.assign(new Error(`OpenAI a renvoyé une réponse HTTP non JSON (${response.status}).`), { status: 502 });
+    throw providerError(`OpenAI a renvoyé une réponse HTTP non JSON (${response.status}).`, 502, response.status >= 500);
   }
 
   if (!response.ok) {
@@ -347,18 +384,43 @@ async function callOpenAI(input: {
       (payload as { error?: { message?: string } })?.error?.message ||
       response.statusText ||
       raw.slice(0, 300);
-    throw Object.assign(new Error(`OpenAI ${response.status}: ${message}`), { status: response.status });
+    const canFallback = response.status === 408 || response.status === 429 || response.status >= 500;
+    throw providerError(`OpenAI ${response.status}: ${message}`, response.status, canFallback);
   }
 
-  const refusal =
-    (payload as { choices?: Array<{ message?: { refusal?: unknown } }> })?.choices?.[0]?.message?.refusal;
-  if (typeof refusal === "string" && refusal.trim()) {
-    throw Object.assign(new Error("OpenAI a refusé de produire le SD01 pour cette entrée."), { status: 422 });
+  const providerStatus = (payload as { status?: unknown })?.status;
+  const responseError = (payload as { error?: { message?: unknown; code?: unknown } | null })?.error;
+  if (responseError && typeof responseError === "object") {
+    const message = typeof responseError.message === "string" ? responseError.message : "erreur OpenAI";
+    throw providerError(`OpenAI: ${message}`, 502, true);
   }
 
-  const content = extractText(payload);
+  if (providerStatus === "incomplete") {
+    const reason = (payload as { incomplete_details?: { reason?: unknown } | null })?.incomplete_details?.reason;
+    throw providerError(
+      `OpenAI a interrompu la sortie SD01 avant la fin${typeof reason === "string" ? ` (${reason})` : ""}.`,
+      422,
+    );
+  }
+
+  const refusal = extractResponsesRefusal(payload);
+  if (refusal) {
+    throw providerError("OpenAI a refusé de produire le SD01 pour cette entrée.", 422);
+  }
+
+  const content = extractResponsesText(payload);
   if (!content) {
-    throw Object.assign(new Error("OpenAI a répondu sans contenu exploitable pour le SD01."), { status: 502 });
+    const usage = (payload as {
+      usage?: { output_tokens?: unknown; output_tokens_details?: { reasoning_tokens?: unknown } };
+    })?.usage;
+    const outputTokens = typeof usage?.output_tokens === "number" ? usage.output_tokens : null;
+    const reasoningTokens = typeof usage?.output_tokens_details?.reasoning_tokens === "number"
+      ? usage.output_tokens_details.reasoning_tokens
+      : null;
+    throw providerError(
+      `OpenAI a terminé la requête sans output_text SD01${outputTokens !== null ? ` (sortie: ${outputTokens} tokens` : ""}${reasoningTokens !== null ? `, raisonnement: ${reasoningTokens}` : ""}${outputTokens !== null ? ")" : ""}.`,
+      502,
+    );
   }
 
   return {
@@ -380,7 +442,6 @@ async function callOpenRouter(input: {
   timeoutMs: number;
 }) {
   const user = `${userPrompt(input)}\n\nSCHÉMA JSON OBLIGATOIRE :\n${JSON.stringify(SD01_SCHEMA)}`;
-
   let response: Response;
 
   try {
@@ -404,22 +465,16 @@ async function callOpenRouter(input: {
           { role: "user", content: user },
         ],
         response_format: { type: "json_object" },
-        provider: {
-          allow_fallbacks: true,
-          sort: "throughput",
-        },
+        provider: { allow_fallbacks: true, sort: "throughput" },
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(input.timeoutMs),
     });
   } catch (error) {
     if (isTimeoutLike(error)) {
-      throw Object.assign(
-        new Error("Le fallback OpenRouter n’a pas terminé dans le délai disponible."),
-        { status: 504 },
-      );
+      throw providerError("Le fallback OpenRouter n’a pas terminé dans le délai disponible.", 504);
     }
-    throw error;
+    throw providerError(`Erreur réseau OpenRouter : ${error instanceof Error ? error.message : "erreur inconnue"}`, 502);
   }
 
   const raw = await response.text();
@@ -427,7 +482,7 @@ async function callOpenRouter(input: {
   try {
     payload = raw ? JSON.parse(raw) : {};
   } catch {
-    throw Object.assign(new Error(`OpenRouter a renvoyé une réponse HTTP non JSON (${response.status}).`), { status: 502 });
+    throw providerError(`OpenRouter a renvoyé une réponse HTTP non JSON (${response.status}).`, 502);
   }
 
   if (!response.ok) {
@@ -435,15 +490,10 @@ async function callOpenRouter(input: {
       (payload as { error?: { message?: string } })?.error?.message ||
       response.statusText ||
       raw.slice(0, 300);
-
     if (response.status === 429) {
-      throw Object.assign(
-        new Error("OpenRouter 429 : les modèles gratuits sont momentanément limités ou le quota gratuit est atteint."),
-        { status: 429 },
-      );
+      throw providerError("OpenRouter 429 : les modèles gratuits sont momentanément limités ou le quota gratuit est atteint.", 429);
     }
-
-    throw Object.assign(new Error(`OpenRouter ${response.status}: ${message}`), { status: 502 });
+    throw providerError(`OpenRouter ${response.status}: ${message}`, 502);
   }
 
   const structured = directJson(payload);
@@ -454,10 +504,8 @@ async function callOpenRouter(input: {
     };
   }
 
-  const content = extractText(payload);
-  if (!content) {
-    throw Object.assign(new Error("OpenRouter a répondu sans contenu exploitable pour le SD01."), { status: 502 });
-  }
+  const content = extractChatText(payload);
+  if (!content) throw providerError("OpenRouter a répondu sans contenu exploitable pour le SD01.", 502);
 
   return {
     data: parseJsonObject(content),
@@ -475,6 +523,10 @@ function errorSummary(error: unknown) {
   return error instanceof Error ? error.message : "Erreur inconnue";
 }
 
+function canFallback(error: unknown) {
+  return Boolean((error as ProviderError | undefined)?.fallbackAllowed);
+}
+
 export async function generateSD01(input: {
   companyName: string;
   dealName: string;
@@ -482,10 +534,11 @@ export async function generateSD01(input: {
 }) {
   const sources = input.sources.filter(source => source.transcript.trim()).slice(0, 20);
   if (!sources.length) {
-    throw Object.assign(new Error("Ajoutez ou sélectionnez au moins une conversation exploitable."), { status: 400 });
+    throw providerError("Ajoutez ou sélectionnez au moins une conversation exploitable.", 400);
   }
 
   const sourceText = compactSources(sources);
+  const sourceIds = new Set(sources.map(source => source.id));
   const openAIKey = await getOpenAIApiKey();
   let openAIError: unknown = null;
 
@@ -498,15 +551,15 @@ export async function generateSD01(input: {
         dealName: input.dealName,
         sourceText,
       });
-
       return {
-        content: sanitizeGeneratedSD01(result.data, input.companyName, new Set(sources.map(source => source.id))),
+        content: sanitizeGeneratedSD01(result.data, input.companyName, sourceIds),
         model: result.returnedModel,
         promptVersion: SD01_PROMPT_VERSION,
       };
     } catch (error) {
       openAIError = error;
-      console.error("SD01 OpenAI primary failed; switching to OpenRouter fallback:", errorSummary(error));
+      console.error("SD01 OpenAI primary failed:", errorSummary(error));
+      if (!canFallback(error)) throw error;
     }
   }
 
@@ -520,23 +573,20 @@ export async function generateSD01(input: {
       sourceText,
       timeoutMs: openAIKey ? OPENROUTER_FALLBACK_BUDGET_MS : OPENROUTER_PRIMARY_BUDGET_MS,
     });
-
     return {
-      content: sanitizeGeneratedSD01(result.data, input.companyName, new Set(sources.map(source => source.id))),
+      content: sanitizeGeneratedSD01(result.data, input.companyName, sourceIds),
       model: result.returnedModel,
       promptVersion: SD01_PROMPT_VERSION,
     };
   } catch (openRouterError) {
     if (openAIError) {
       const status =
-        (openRouterError as Error & { status?: number })?.status ||
-        (openAIError as Error & { status?: number })?.status ||
+        (openRouterError as ProviderError)?.status ||
+        (openAIError as ProviderError)?.status ||
         502;
-      throw Object.assign(
-        new Error(
-          `OpenAI indisponible (${errorSummary(openAIError)}). Fallback OpenRouter également indisponible (${errorSummary(openRouterError)}).`,
-        ),
-        { status },
+      throw providerError(
+        `OpenAI indisponible (${errorSummary(openAIError)}). Fallback OpenRouter également indisponible (${errorSummary(openRouterError)}).`,
+        status,
       );
     }
     throw openRouterError;
