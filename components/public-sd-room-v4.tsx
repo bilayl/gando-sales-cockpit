@@ -87,15 +87,47 @@ function SD01Document({ content }: { content: SD01Content }) {
 }
 
 function SD02Document({ content }: { content: SD02Content }) {
+  const roadmap = content.milestones || [];
+  const workstreamLabel = (workstream: string) => workstream === "technical" ? "Technique" : workstream === "legal" ? "Juridique" : workstream === "procurement" ? "Achats" : workstream === "other" ? "Autre" : "Business";
+  const organizationLabel = (organization: string) => organization === "client" ? "Client" : organization === "gando" ? "Gando" : "Commun";
+
   return <div className="space-y-5 sm:space-y-6">
-    <Lead code="SD02">{content.objective || "Plan d’action à finaliser."}</Lead>
+    <Lead code="SD02">{content.objective || "Roadmap commune à finaliser."}</Lead>
     <EditorialSection title="Objectif et résultat attendu" kicker="Cap commun"><p>{content.successDefinition || "À confirmer ensemble."}</p></EditorialSection>
-    <EditorialSection title="Plan d’action" kicker="Agenda des objectifs et actions">
-      {content.milestones?.length ? <div className="overflow-x-auto"><table className="w-full min-w-[680px] border-separate border-spacing-0 text-left text-[14px]"><thead><tr className="text-[11px] uppercase tracking-[0.08em] text-[#7a8388]"><th className="border-b border-[#dfe3e5] px-3 py-3 font-semibold">Action / objectif</th><th className="border-b border-[#dfe3e5] px-3 py-3 font-semibold">Responsable</th><th className="border-b border-[#dfe3e5] px-3 py-3 font-semibold">Échéance</th><th className="border-b border-[#dfe3e5] px-3 py-3 font-semibold">Statut</th></tr></thead><tbody>{content.milestones.map((item, index) => { const status = actionStatus(item.status); return <tr key={index} className="align-top"><td className="border-b border-[#eceeef] px-3 py-4"><div className="font-semibold text-[#202a2f]">{item.milestone}</div>{item.dependency ? <div className="mt-1 text-[12px] text-[#80888c]">Dépendance · {item.dependency}</div> : null}</td><td className="border-b border-[#eceeef] px-3 py-4 text-[#5e686d]">{item.owner || "À définir"}</td><td className="border-b border-[#eceeef] px-3 py-4 font-medium text-[#4d575c]">{item.dueDate || "À définir"}</td><td className="border-b border-[#eceeef] px-3 py-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.classes}`}>{status.label}</span></td></tr>; })}</tbody></table></div> : <p className="italic text-[#8a9296]">Aucune action définie.</p>}
+
+    <EditorialSection title="Roadmap commune" kicker="Du cadrage au go-live">
+      <div className="mb-7 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-[#e5e8ea] bg-[#f7f8f9] px-4 py-3"><div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#7b8388]">Prochain point</div><div className="mt-1.5 text-[14px] font-semibold text-[#263136]">{formatDate(content.nextMeetingDate) || "À définir"}</div></div>
+        <div className="rounded-xl border border-[#e5e8ea] bg-[#f7f8f9] px-4 py-3"><div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#7b8388]">Décision cible</div><div className="mt-1.5 text-[14px] font-semibold text-[#263136]">{formatDate(content.decisionDate) || "À définir"}</div></div>
+        <div className="rounded-xl border border-[#ddd9f5] bg-[#f4f1ff] px-4 py-3"><div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#6b60ba]">Go-live cible</div><div className="mt-1.5 text-[14px] font-semibold text-[#443a91]">{formatDate(content.targetGoLiveDate) || "À définir"}</div></div>
+      </div>
+
+      {roadmap.length ? <div className="relative">
+        <div className="absolute bottom-8 left-[15px] top-8 w-px bg-[#dcdfe2] sm:left-[19px]" />
+        <div className="space-y-4">{roadmap.map((item, index) => {
+          const status = actionStatus(item.status);
+          return <article key={`${item.milestone}-${index}`} className="relative grid grid-cols-[32px_1fr] gap-3 sm:grid-cols-[40px_1fr] sm:gap-4">
+            <div className="relative z-10 mt-5 grid h-8 w-8 place-items-center rounded-full border-2 border-white bg-[#6e62c3] font-mono text-[10px] font-semibold text-white shadow-sm sm:h-10 sm:w-10 sm:text-[11px]">{String(index + 1).padStart(2, "0")}</div>
+            <div className="rounded-[14px] border border-[#e2e5e7] bg-white p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-[#f2f0ff] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6156ad]">{workstreamLabel(item.workstream)}</span><span className="text-[11px] font-medium text-[#7b8388]">{organizationLabel(item.organization)}</span></div><h3 className="mt-2 text-[17px] font-semibold leading-6 text-[#202a2f]">{item.milestone}</h3></div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.classes}`}>{status.label}</span>
+              </div>
+              <div className="mt-4 grid gap-3 border-t border-[#eceeef] pt-4 text-[13px] text-[#697378] sm:grid-cols-2">
+                <div><span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#92999d]">Responsable</span><div className="mt-0.5 font-medium text-[#4c565b]">{item.owner || "À définir"}</div></div>
+                <div><span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#92999d]">Échéance</span><div className="mt-0.5 font-medium text-[#4c565b]">{formatDate(item.dueDate) || "À définir"}</div></div>
+              </div>
+              {item.dependency ? <div className="mt-3 rounded-lg bg-[#f6f7f8] px-3 py-2 text-[12px] leading-5 text-[#717b80]"><span className="font-semibold text-[#596368]">Dépendance :</span> {item.dependency}</div> : null}
+            </div>
+          </article>;
+        })}</div>
+      </div> : <p className="italic text-[#8a9296]">Aucune étape de roadmap définie.</p>}
     </EditorialSection>
+
+    {content.decisionProcess?.length ? <EditorialSection title="Circuit de décision" kicker="Validations nécessaires"><NumberedList items={content.decisionProcess} /></EditorialSection> : null}
     <EditorialSection title="Engagements réciproques" kicker="Responsabilités"><PairGrid leftTitle="Côté client" left={<BulletList items={content.clientCommitments} />} rightTitle="Côté Gando" right={<BulletList items={content.gandoCommitments} />} /></EditorialSection>
     <EditorialSection title="Dépendances et risques" kicker="Points de vigilance"><PairGrid leftTitle="Dépendances" left={<BulletList items={content.dependencies} />} rightTitle="Risques" right={<BulletList items={content.risks} />} /></EditorialSection>
-    <EditorialSection title="Critères de réussite" kicker="Clôture du plan d’action"><BulletList items={content.exitCriteria} /></EditorialSection>
+    <EditorialSection title="Critères de réussite" kicker="Sortie de roadmap"><BulletList items={content.exitCriteria} /></EditorialSection>
   </div>;
 }
 
@@ -218,7 +250,7 @@ export function PublicSDRoomV4({ token }: { token: string }) {
       className="min-h-[330px] border-b border-[#e1e4e6] sm:min-h-[390px] sm:pb-14 sm:pt-14"
     />
 
-    <section className="border-b border-[#e4e7e9] bg-white"><div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-3 px-5 py-4 text-[12px] text-[#7c858a] sm:px-7"><div className="flex flex-wrap items-center gap-x-5 gap-y-2"><span>Mis à jour le {formatDate(data.room.updatedAt)}</span><span className="h-1 w-1 rounded-full bg-[#bcc2c5]" /><span>{requiredValidated}/3 étapes obligatoires validées</span></div><span className="text-[#737d82]">Synthèse → Plan d’action → Contrat</span></div></section>
+    <section className="border-b border-[#e4e7e9] bg-white"><div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-3 px-5 py-4 text-[12px] text-[#7c858a] sm:px-7"><div className="flex flex-wrap items-center gap-x-5 gap-y-2"><span>Mis à jour le {formatDate(data.room.updatedAt)}</span><span className="h-1 w-1 rounded-full bg-[#bcc2c5]" /><span>{requiredValidated}/3 étapes obligatoires validées</span></div><span className="text-[#737d82]">Synthèse → Roadmap → Contrat</span></div></section>
 
     <div className="mx-auto grid max-w-[1180px] gap-8 px-5 py-9 sm:px-7 lg:grid-cols-[245px_minmax(0,790px)] lg:justify-between lg:py-12"><aside className="lg:sticky lg:top-24 lg:self-start"><div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#777f84]">Parcours</div><nav className="mt-4 space-y-1.5">{stages.map(({ code, document }) => { const active = code === currentDocument.code; const enabled = Boolean(document); const optional = OPTIONAL_CODES.includes(code); return <button key={code} type="button" disabled={!enabled} onClick={() => enabled && setActiveStage(code)} className={`group flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition ${active ? "bg-white shadow-sm ring-1 ring-[#e0e4e6]" : enabled ? "hover:bg-white" : "cursor-default opacity-50"}`}><span className={`mt-0.5 font-mono text-[11px] font-semibold ${active ? "text-[#584ead]" : "text-[#8b9296]"}`}>{code.slice(2)}</span><span className="min-w-0 flex-1"><span className={`block text-[13px] font-semibold leading-5 ${active ? "text-[#202a2f]" : "text-[#576166]"}`}>{SD_STAGE_META[code].title}</span><span className="mt-0.5 block text-[11px] text-[#8a9296]">{optional ? "Facultatif · " : "Obligatoire · "}{document?.status === "validated" ? "Validé" : document?.status === "published" ? "À valider" : "À venir"}</span></span>{document?.status === "validated" ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#4f835e]" /> : active ? <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[#6558c8]" /> : null}</button>; })}</nav></aside>
 
