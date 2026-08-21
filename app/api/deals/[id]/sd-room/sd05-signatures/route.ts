@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
 import { getSDRoomBundle } from "@/lib/sd-room";
 import { requireSDInternalAccess } from "@/lib/sd-room-access";
-import { normalizeSD05NativeContent, SD05_SIGNATURE_CONSENT } from "@/lib/sd05-contract";
+import { contractPageCount, normalizeSD05NativeContent, SD05_SIGNATURE_CONSENT } from "@/lib/sd05-contract";
 import {
   buildSD05SigningSnapshot,
   createSignatureToken,
@@ -48,6 +48,36 @@ async function listRequests(documentId: string) {
   return (data || []).map(item => signatureRequestSummary(item as SignatureRequestRow));
 }
 
+function emailHtml(input: {
+  logoUrl: string;
+  signingUrl: string;
+  signerLabel: string;
+  companyName: string;
+  title: string;
+  reference: string;
+  intro: string;
+  expiresAt: string;
+  contractHash: string;
+  pageCount: number;
+  legalTemplate: boolean;
+}) {
+  const header = input.legalTemplate ? "#323232" : "#735DF3";
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f4f5f8;font-family:Arial,Helvetica,sans-serif;color:#111827">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f5f8;padding:28px 12px">
+<tr><td align="center">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:18px;overflow:hidden">
+<tr><td style="height:68px;background:${header};text-align:center;vertical-align:bottom"><img src="${escapeHtml(input.logoUrl)}" width="76" height="76" alt="Gando" style="display:block;margin:0 auto -38px auto;width:76px;height:76px;border:0" /></td></tr>
+<tr><td style="padding:58px 42px 18px 42px;text-align:center"><div style="font-size:12px;font-weight:800;letter-spacing:.14em;color:#735DF3;text-transform:uppercase">Signature électronique Gando</div><h1 style="margin:12px 0 0;font-size:27px;line-height:1.2;letter-spacing:-.03em;color:#111827">Document à signer</h1></td></tr>
+<tr><td style="padding:4px 42px 0 42px;font-size:15px;line-height:1.7;color:#4b5563"><p style="margin:0 0 16px">Bonjour <strong style="color:#111827">${escapeHtml(input.signerLabel)}</strong>,</p><p style="margin:0 0 16px">${escapeHtml(input.intro)}</p></td></tr>
+<tr><td style="padding:4px 42px 8px 42px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px"><tr><td style="padding:18px 20px;font-size:13px;line-height:1.7;color:#475569"><div style="font-size:16px;font-weight:800;color:#111827">${escapeHtml(input.title)}</div>${input.reference ? `<div style="margin-top:5px;color:#735DF3;font-weight:700">${escapeHtml(input.reference)}</div>` : ""}<div style="margin-top:12px"><strong>Organisation :</strong> ${escapeHtml(input.companyName)}</div><div><strong>Pages :</strong> ${input.pageCount}</div><div><strong>Expiration du lien :</strong> ${new Date(input.expiresAt).toLocaleDateString("fr-FR")}</div></td></tr></table></td></tr>
+<tr><td align="center" style="padding:24px 42px"><a href="${escapeHtml(input.signingUrl)}" style="display:inline-block;background:#735DF3;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:10px;font-size:14px;font-weight:800">Consulter et signer le contrat</a><div style="margin-top:12px;font-size:11px;line-height:1.5;color:#94a3b8">Ce lien est personnel et ne doit pas être transféré.</div></td></tr>
+<tr><td style="padding:0 42px 28px 42px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#111827;border-radius:12px"><tr><td style="padding:18px 20px;color:#ffffff"><div style="font-size:12px;font-weight:800">Intégrité & preuve</div><div style="margin-top:7px;font-size:11px;line-height:1.6;color:#cbd5e1">Le contrat est figé par empreinte SHA-256. Les consultations, paraphes, choix de signature et horodatages sont conservés dans le journal d'audit.</div><div style="margin-top:10px;word-break:break-all;font-family:monospace;font-size:9px;line-height:1.5;color:#94a3b8">${input.contractHash}</div></td></tr></table></td></tr>
+<tr><td style="padding:20px 42px 28px 42px;border-top:1px solid #e5e7eb;text-align:center;font-size:10px;line-height:1.6;color:#94a3b8">GANDO SOLUTIONS · RCS Meaux 943 391 201 · 3 chemin de la porte verte, 77144 Montévrain<br />Besoin d'aide ? Répondez à cet email ou contactez contact@gando.app.</td></tr>
+</table>
+</td></tr></table></body></html>`;
+}
+
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
@@ -79,6 +109,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const content = normalizeSD05NativeContent(document.content);
     if (!content.contractTitle.trim()) throw Object.assign(new Error("Ajoutez un titre au contrat."), { status: 400 });
     if (content.contractSummary.trim().length < 300) throw Object.assign(new Error("Le texte du contrat est incomplet."), { status: 400 });
+    if (!content.allowTypedSignature && !content.allowDrawnSignature) throw Object.assign(new Error("Activez au moins un mode de signature."), { status: 400 });
     if (content.contractStatus === "signed") throw Object.assign(new Error("Cette version du contrat est déjà signée et figée."), { status: 409 });
 
     let signers = content.signatories.filter(item => looksLikeEmail(email(item.email)));
@@ -90,6 +121,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const snapshot = buildSD05SigningSnapshot(bundle.room, document, content);
     const contractHash = hashSD05SigningSnapshot(snapshot);
     const expiresAt = signatureExpiry(content.signatureDeadline);
+    const pageCount = contractPageCount(content);
     const admin = getSupabaseAdmin();
     const sent: string[] = [];
     const failed: Array<{ email: string; error: string }> = [];
@@ -126,6 +158,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           contract_hash: contractHash,
           status: "pending",
           consent_text: SD05_SIGNATURE_CONSENT,
+          document_page_count: pageCount,
           expires_at: expiresAt,
           created_by_email: userEmail,
         })
@@ -133,36 +166,42 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .single();
       if (createError) throw createError;
       const createdRow = created as SignatureRequestRow;
-      await recordSignatureEvent({ requestId: createdRow.id, eventType: "created", metadata: { contractHash } });
+      await recordSignatureEvent({ requestId: createdRow.id, eventType: "created", metadata: { contractHash, pageCount, template: content.contractTemplate } });
 
       const signingUrl = `${request.nextUrl.origin}/sign/${encodeURIComponent(rawToken)}`;
-      const subject = `Signature électronique — ${content.contractTitle}`;
+      const logoUrl = `${request.nextUrl.origin}/api/brand/gando-logo`;
+      const subject = `Signature requise — ${content.contractTitle}`;
       const signerLabel = signer.name || signerEmail;
+      const intro = content.emailIntroText || `Vous êtes invité à consulter puis signer électroniquement le document préparé entre Gando et ${bundle.room.company_name}.`;
       const body = [
         `Bonjour ${signerLabel},`,
         "",
-        `Gando vous invite à consulter et signer électroniquement le contrat « ${content.contractTitle} ».`,
-        content.contractReference ? `Référence : ${content.contractReference}` : "",
+        intro,
         "",
-        `Lien personnel de signature : ${signingUrl}`,
+        content.contractTitle,
+        content.contractReference ? `Référence : ${content.contractReference}` : "",
+        `Nombre de pages : ${pageCount}`,
+        "",
+        `Consulter et signer : ${signingUrl}`,
         "",
         `Ce lien est personnel et valable jusqu'au ${new Date(expiresAt).toLocaleDateString("fr-FR")}.`,
-        `Empreinte du document : ${contractHash}`,
+        `Empreinte SHA-256 : ${contractHash}`,
         "",
-        "Une fois signé, Gando conserve le document figé, les horodatages et le journal d'audit comme éléments de preuve.",
+        "Après signature, Gando conserve le document figé, les paraphes, le mode de signature, les horodatages et le journal d'audit comme éléments de preuve.",
       ].filter(Boolean).join("\n");
-      const htmlBody = `
-        <div style="font-family:Inter,Arial,sans-serif;max-width:620px;margin:0 auto;color:#0f172a;line-height:1.6">
-          <div style="border-top:6px solid #735DF3;padding:28px 8px 8px">
-            <div style="font-size:24px;font-weight:800;letter-spacing:-0.02em">Gando</div>
-            <p>Bonjour ${escapeHtml(signerLabel)},</p>
-            <p>Vous êtes invité à consulter et signer électroniquement le contrat <strong>${escapeHtml(content.contractTitle)}</strong>.</p>
-            ${content.contractReference ? `<p style="color:#64748b">Référence : ${escapeHtml(content.contractReference)}</p>` : ""}
-            <p style="margin:28px 0"><a href="${escapeHtml(signingUrl)}" style="display:inline-block;background:#735DF3;color:white;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:700">Consulter et signer</a></p>
-            <p style="font-size:12px;color:#64748b">Ce lien est personnel. Il expire le ${new Date(expiresAt).toLocaleDateString("fr-FR")}.<br>Empreinte SHA-256 : <span style="word-break:break-all">${contractHash}</span></p>
-            <p style="font-size:12px;color:#64748b">Après signature, Gando conserve le document figé, l'identité déclarée, l'email, les horodatages et le journal d'audit comme éléments de preuve.</p>
-          </div>
-        </div>`;
+      const htmlBody = emailHtml({
+        logoUrl,
+        signingUrl,
+        signerLabel,
+        companyName: bundle.room.company_name,
+        title: content.contractTitle,
+        reference: content.contractReference,
+        intro,
+        expiresAt,
+        contractHash,
+        pageCount,
+        legalTemplate: content.contractTemplate === "legal_convention",
+      });
 
       try {
         const emailResult = await sendSmtp2goEmail({ to: signerEmail, subject, body, htmlBody, replyTo: "contact@gando.app" });

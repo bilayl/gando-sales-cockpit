@@ -61,6 +61,8 @@ export type SD04Content = {
   validityDate: string;
 };
 
+export type SD05TemplateId = "gando_standard" | "legal_convention";
+
 export type SD05Content = {
   contractTitle: string;
   contractReference: string;
@@ -68,6 +70,12 @@ export type SD05Content = {
   contractUrl: string;
   contractStatus: "draft" | "internal_review" | "client_review" | "ready_to_sign" | "signed";
   contractSummary: string;
+  contractTemplate: SD05TemplateId;
+  footerConfidentialityText: string;
+  emailIntroText: string;
+  allowTypedSignature: boolean;
+  allowDrawnSignature: boolean;
+  requireInitialsEachPage: boolean;
   effectiveDate: string;
   term: string;
   renewal: string;
@@ -135,6 +143,12 @@ export function createEmptySD05(): SD05Content {
     contractUrl: "",
     contractStatus: "draft",
     contractSummary: "",
+    contractTemplate: "gando_standard",
+    footerConfidentialityText: "",
+    emailIntroText: "",
+    allowTypedSignature: true,
+    allowDrawnSignature: true,
+    requireInitialsEachPage: true,
     effectiveDate: "",
     term: "",
     renewal: "",
@@ -236,6 +250,7 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
   }
   if (code === "SD05") {
     const contractStatus: SD05Content["contractStatus"] = source.contractStatus === "internal_review" || source.contractStatus === "client_review" || source.contractStatus === "ready_to_sign" || source.contractStatus === "signed" ? source.contractStatus : "draft";
+    const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : "gando_standard";
     const result: SD05Content = {
       contractTitle: text(source.contractTitle, 500),
       contractReference: text(source.contractReference, 300),
@@ -243,6 +258,12 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       contractUrl: text(source.contractUrl, 2000),
       contractStatus,
       contractSummary: text(source.contractSummary),
+      contractTemplate,
+      footerConfidentialityText: text(source.footerConfidentialityText, 3000),
+      emailIntroText: text(source.emailIntroText, 2000),
+      allowTypedSignature: source.allowTypedSignature !== false,
+      allowDrawnSignature: source.allowDrawnSignature !== false,
+      requireInitialsEachPage: source.requireInitialsEachPage !== false,
       effectiveDate: text(source.effectiveDate, 40),
       term: text(source.term, 500),
       renewal: text(source.renewal, 500),
@@ -257,7 +278,7 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
         const signatureStatus = row.signatureStatus === "sent" || row.signatureStatus === "signed" ? row.signatureStatus : "pending";
         return { name: text(row.name, 300), role: text(row.role, 300), organization: text(row.organization, 300), email: text(row.email, 500), signatureStatus };
-      }).filter(item => item.name) : [],
+      }).filter(item => item.name || item.email) : [],
       signatureSteps: stringList(source.signatureSteps),
       finalConditions: stringList(source.finalConditions),
       goLiveDate: text(source.goLiveDate, 40),

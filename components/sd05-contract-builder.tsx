@@ -9,8 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SD05ContractRenderer, type SD05SignatureSummary } from "@/components/sd05-contract-renderer";
-import { createGandoSD05Template } from "@/lib/sd05-contract";
-import { createEmptySD05, type SD05Content } from "@/lib/sd-stage-content";
+import { createGandoPartnershipTemplate, createGandoSD05Template } from "@/lib/sd05-contract";
+import { createEmptySD05, type SD05Content, type SD05TemplateId } from "@/lib/sd-stage-content";
 import type { SDDocumentRecord } from "@/lib/sd-room-types";
 
 type RoomResponse = {
@@ -26,6 +26,15 @@ function Area({ value, onChange, rows = 5, placeholder, disabled = false }: { va
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return <div className="space-y-2"><div><Label>{label}</Label>{hint ? <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{hint}</p> : null}</div>{children}</div>;
+}
+
+function ToggleField({ checked, onChange, label, description, disabled }: { checked: boolean; onChange: (checked: boolean) => void; label: string; description: string; disabled: boolean }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-muted/20 p-4">
+      <input type="checkbox" checked={checked} onChange={event => onChange(event.target.checked)} disabled={disabled} className="mt-1 h-4 w-4 accent-primary" />
+      <span><span className="block text-sm font-semibold text-foreground">{label}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{description}</span></span>
+    </label>
+  );
 }
 
 function statusLabel(status: string) {
@@ -92,6 +101,8 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
       contractReference: value.contractReference.trim(),
       contractVersion: value.contractVersion.trim(),
       contractSummary: value.contractSummary.trim(),
+      footerConfidentialityText: value.footerConfidentialityText.trim(),
+      emailIntroText: value.emailIntroText.trim(),
       term: value.term.trim(),
       renewal: value.renewal.trim(),
       terminationNotice: value.terminationNotice.trim(),
@@ -102,6 +113,7 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
     };
     if (!content.contractTitle) throw new Error("Ajoutez un titre de contrat.");
     if (!content.contractSummary) throw new Error("Ajoutez le texte contractuel.");
+    if (!content.allowTypedSignature && !content.allowDrawnSignature) throw new Error("Activez au moins un mode de signature.");
 
     const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/document`, {
       method: "PATCH",
@@ -161,9 +173,9 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
     }
   }
 
-  function applyTemplate() {
+  function applyTemplate(templateId: SD05TemplateId) {
     if (locked) return;
-    const template = createGandoSD05Template(companyName);
+    const template = templateId === "legal_convention" ? createGandoPartnershipTemplate(companyName) : createGandoSD05Template(companyName);
     setValue(current => ({
       ...template,
       contractReference: current.contractReference || template.contractReference,
@@ -171,7 +183,7 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
       goLiveDate: current.goLiveDate,
       effectiveDate: current.effectiveDate,
     }));
-    toast.success("Modèle SD05 Gando chargé. Relisez et adaptez les clauses avant envoi.");
+    toast.success(templateId === "legal_convention" ? "Modèle Convention de partenariat chargé." : "Modèle Services Gando chargé.");
   }
 
   const addSigner = () => setValue(current => ({ ...current, signatories: [...current.signatories, { name: "", role: "", organization: companyName, email: "", signatureStatus: "pending" }] }));
@@ -192,13 +204,12 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
               <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><FileSignature className="h-5 w-5" /></div>
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.14em] text-primary">SD05 · Contrat & signature électronique</div>
-                <h1 className="mt-1 text-2xl font-bold tracking-[-0.03em]">Contrat natif Gando</h1>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Le texte est géré directement dans le Sales Cockpit, rendu côté frontend puis figé au moment de l'envoi. Chaque signataire reçoit un lien personnel par email.</p>
+                <h1 className="mt-1 text-2xl font-bold tracking-[-0.03em]">Contrats juridiques Gando</h1>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Deux modèles, rendu paginé, paraphes par page, signature manuscrite ou écrite et dossier de preuve.</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
               {locked ? <Badge variant="outline" className="border-emerald-500/30 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Signé · version figée</Badge> : null}
-              {!locked ? <Button variant="outline" onClick={applyTemplate} disabled={working}><Sparkles className="mr-2 h-4 w-4" /> Charger le modèle Gando</Button> : null}
               <Button variant="outline" onClick={() => void save(false)} disabled={working || locked}><Save className="mr-2 h-4 w-4" /> Enregistrer</Button>
               <Button onClick={() => void sendForSignature()} disabled={working || locked || !requiredReady}><Send className="mr-2 h-4 w-4" /> Envoyer pour signature</Button>
             </div>
@@ -209,9 +220,17 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-5">
+            <Card className="space-y-4 p-5">
+              <div><h2 className="font-semibold">Modèle de contrat</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Le modèle « Convention juridique » reprend l'esprit du contrat de partenariat : bandeau sombre, logo sur la bordure, articles violets et page de signature dédiée.</p></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button type="button" disabled={locked} onClick={() => applyTemplate("gando_standard")} className={value.contractTemplate === "gando_standard" ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left hover:bg-muted/30"}><div className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-primary" /> Services Gando</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Bandeau violet, contrat loueur / services.</p></button>
+                <button type="button" disabled={locked} onClick={() => applyTemplate("legal_convention")} className={value.contractTemplate === "legal_convention" ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left hover:bg-muted/30"}><div className="flex items-center gap-2 text-sm font-semibold"><FileSignature className="h-4 w-4 text-primary" /> Convention juridique</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Bandeau sombre, structure partenariat / grands comptes.</p></button>
+              </div>
+            </Card>
+
             <Card className="space-y-5 p-5">
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Titre du contrat"><Input disabled={locked} value={value.contractTitle} onChange={event => set("contractTitle", event.target.value)} placeholder={`Convention de services Gando × ${companyName}`} /></Field>
+                <Field label="Titre du contrat"><Input disabled={locked} value={value.contractTitle} onChange={event => set("contractTitle", event.target.value)} placeholder={`Convention Gando × ${companyName}`} /></Field>
                 <Field label="Référence SD05"><Input disabled={locked} value={value.contractReference} onChange={event => set("contractReference", event.target.value)} placeholder="SD05-2026-0001" /></Field>
                 <Field label="Version"><Input disabled={locked} value={value.contractVersion} onChange={event => set("contractVersion", event.target.value)} placeholder="GANDO-SD05-2026-08" /></Field>
                 <Field label="Date limite de signature"><Input disabled={locked} type="date" value={value.signatureDeadline} onChange={event => set("signatureDeadline", event.target.value)} /></Field>
@@ -223,19 +242,38 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
             </Card>
 
             <Card className="space-y-4 p-5">
-              <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold">Structure tarifaire</h2><p className="mt-1 text-xs text-muted-foreground">Ces lignes sont reprises dans l'encadré commercial du contrat.</p></div>{!locked ? <Button type="button" variant="outline" size="sm" onClick={addTerm}>Ajouter</Button> : null}</div>
+              <div><h2 className="font-semibold">Signature & paraphes</h2><p className="mt-1 text-xs text-muted-foreground">Définissez les options proposées au signataire. Ces paramètres sont figés avec le contrat au moment de l'envoi.</p></div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <ToggleField disabled={locked} checked={value.allowTypedSignature} onChange={next => set("allowTypedSignature", next)} label="Signature écrite" description="Nom et prénom rendus comme une signature." />
+                <ToggleField disabled={locked} checked={value.allowDrawnSignature} onChange={next => set("allowDrawnSignature", next)} label="Signature manuscrite" description="Dessin au doigt ou à la souris." />
+                <ToggleField disabled={locked} checked={value.requireInitialsEachPage} onChange={next => set("requireInitialsEachPage", next)} label="Paraphe obligatoire" description="Chaque page doit être paraphée avant signature." />
+              </div>
+            </Card>
+
+            <Card className="space-y-4 p-5">
+              <div><h2 className="font-semibold">Email de signature</h2><p className="mt-1 text-xs text-muted-foreground">Le nouvel email utilise le logo Gando officiel, un résumé du contrat et un bouton de signature sécurisé.</p></div>
+              <Field label="Texte d'introduction"><Area disabled={locked} value={value.emailIntroText} onChange={next => set("emailIntroText", next)} rows={3} placeholder={`Vous êtes invité à consulter puis signer électroniquement le document préparé entre Gando et ${companyName}.`} /></Field>
+            </Card>
+
+            <Card className="space-y-4 p-5">
+              <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold">Structure tarifaire / conditions particulières</h2><p className="mt-1 text-xs text-muted-foreground">Ces lignes sont reprises dans la première page du contrat.</p></div>{!locked ? <Button type="button" variant="outline" size="sm" onClick={addTerm}>Ajouter</Button> : null}</div>
               {value.legalItems.length ? <div className="space-y-3">{value.legalItems.map((item, index) => (
                 <div key={index} className="grid gap-3 rounded-xl border border-border bg-muted/20 p-4 md:grid-cols-[220px_1fr_auto]">
                   <Input disabled={locked} value={item.topic} onChange={event => updateTerm(index, "topic", event.target.value)} placeholder="Frais de sécurisation" />
                   <Input disabled={locked} value={item.notes} onChange={event => updateTerm(index, "notes", event.target.value)} placeholder="2,5 % HT…" />
                   {!locked ? <Button type="button" variant="ghost" size="icon" onClick={() => removeTerm(index)} aria-label="Supprimer"><Trash2 className="h-4 w-4" /></Button> : null}
                 </div>
-              ))}</div> : <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Aucune condition commerciale.</div>}
+              ))}</div> : <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Aucune condition particulière.</div>}
             </Card>
 
             <Card className="space-y-4 p-5">
-              <div><h2 className="font-semibold">Texte du contrat</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Le texte est rendu nativement dans le frontend. Les lignes « ARTICLE », « ANNEXE » et « PRÉAMBULE » deviennent automatiquement des titres dans l'aperçu.</p></div>
-              <Area disabled={locked} value={value.contractSummary} onChange={next => set("contractSummary", next)} rows={34} placeholder="PRÉAMBULE\n…\n\nARTICLE 1 : DÉFINITIONS\n…" />
+              <div><h2 className="font-semibold">Texte du contrat</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Hiérarchie automatique : « PRÉAMBULE » et grands titres, « ARTICLE 1 », sous-articles « 3.1. », puis paragraphes et listes. Le rendu est paginé comme un véritable contrat.</p></div>
+              <Area disabled={locked} value={value.contractSummary} onChange={next => set("contractSummary", next)} rows={34} placeholder="PRÉAMBULE\n…\n\nARTICLE 1 : DÉFINITIONS\n…\n\n1.1. Sous-titre\n…" />
+            </Card>
+
+            <Card className="space-y-4 p-5">
+              <div><h2 className="font-semibold">Pied de page & confidentialité</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Ce texte apparaît en bas de chaque page et peut être adapté pour chaque SD05.</p></div>
+              <Area disabled={locked} value={value.footerConfidentialityText} onChange={next => set("footerConfidentialityText", next)} rows={4} placeholder="CONFIDENTIALITÉ — …" />
             </Card>
 
             <Card className="space-y-4 p-5">
@@ -256,6 +294,8 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
                       {evidence?.sentAt ? <span className="text-[11px] text-muted-foreground">Envoyé le {new Date(evidence.sentAt).toLocaleString("fr-FR")}</span> : null}
                       {evidence?.firstViewedAt ? <span className="text-[11px] text-muted-foreground">· consulté le {new Date(evidence.firstViewedAt).toLocaleString("fr-FR")}</span> : null}
                       {evidence?.signedAt ? <span className="text-[11px] font-semibold text-emerald-700">· signé le {new Date(evidence.signedAt).toLocaleString("fr-FR")}</span> : null}
+                      {evidence?.signatureMode ? <span className="text-[11px] text-muted-foreground">· {evidence.signatureMode === "drawn" ? "manuscrite" : "écrite"}</span> : null}
+                      {evidence?.initials && Object.keys(evidence.initials).length ? <span className="text-[11px] text-muted-foreground">· {Object.keys(evidence.initials).length} page(s) paraphée(s)</span> : null}
                       {!locked && signer.email && evidence?.status !== "signed" ? <Button type="button" variant="ghost" size="sm" onClick={() => void sendForSignature(signer.email)} disabled={working || !requiredReady}><Mail className="mr-1.5 h-3.5 w-3.5" /> Envoyer / renvoyer</Button> : null}
                       {evidence?.status === "signed" ? <a href={`/api/deals/${encodeURIComponent(dealId)}/sd-room/sd05-signatures/${encodeURIComponent(evidence.id)}/proof`} className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-primary hover:bg-primary/10"><Download className="h-3.5 w-3.5" /> Télécharger la preuve</a> : null}
                     </div>
@@ -267,13 +307,13 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
 
           <div className="space-y-5">
             <Card className="p-5">
-              <div className="flex items-start gap-3"><div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-700"><ShieldCheck className="h-5 w-5" /></div><div><h2 className="font-semibold">Preuve de signature</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Le système fige une copie du SD05, calcule son empreinte SHA-256 et journalise l'envoi, la consultation et la signature.</p></div></div>
+              <div className="flex items-start gap-3"><div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-700"><ShieldCheck className="h-5 w-5" /></div><div><h2 className="font-semibold">Preuve de signature</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Le système fige une copie du SD05, calcule son empreinte SHA-256 et journalise l'envoi, la consultation, les paraphes et la signature.</p></div></div>
               <div className="mt-4 space-y-2 text-xs text-muted-foreground">
                 <div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" /> identité déclarée + email du signataire</div>
+                <div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" /> paraphes associés à chaque page</div>
+                <div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" /> signature manuscrite ou écrite + empreinte</div>
                 <div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" /> consentement explicite à la signature électronique</div>
-                <div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" /> horodatages envoi / consultation / signature</div>
                 <div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" /> IP, user-agent, IDs SMTP2GO et journal d'audit</div>
-                <div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-emerald-600" /> empreinte SHA-256 du contrat + empreinte de la preuve signée</div>
               </div>
               {latestContractHash ? <div className="mt-4 rounded-xl bg-muted/50 p-3"><div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Empreinte active</div><div className="mt-2 break-all font-mono text-[10px] leading-4 text-foreground">{latestContractHash}</div></div> : null}
             </Card>
@@ -281,18 +321,18 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
             <Card className="p-5">
               <div className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Workflow</div>
               <ol className="mt-3 space-y-3 text-xs leading-5 text-muted-foreground">
-                <li><strong className="text-foreground">1.</strong> Relire le texte et les conditions commerciales.</li>
-                <li><strong className="text-foreground">2.</strong> Renseigner les signataires et leurs emails.</li>
-                <li><strong className="text-foreground">3.</strong> Cliquer sur « Envoyer pour signature ».</li>
-                <li><strong className="text-foreground">4.</strong> Le client ouvre le lien personnel, accepte et signe.</li>
-                <li><strong className="text-foreground">5.</strong> La preuve devient téléchargeable dans le Sales Cockpit.</li>
+                <li><strong className="text-foreground">1.</strong> Choisir le modèle et relire le texte.</li>
+                <li><strong className="text-foreground">2.</strong> Adapter les mentions et le pied de page.</li>
+                <li><strong className="text-foreground">3.</strong> Renseigner les signataires et envoyer.</li>
+                <li><strong className="text-foreground">4.</strong> Le signataire paraphe les pages puis signe.</li>
+                <li><strong className="text-foreground">5.</strong> La preuve complète devient téléchargeable.</li>
               </ol>
             </Card>
           </div>
         </div>
 
         <Card className="overflow-hidden p-0">
-          <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><div className="text-xs font-bold uppercase tracking-[0.12em] text-primary">Aperçu client</div><h2 className="mt-1 font-semibold">Rendu du contrat</h2></div><Badge variant="outline">Frontend natif</Badge></div>
+          <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><div className="text-xs font-bold uppercase tracking-[0.12em] text-primary">Aperçu client</div><h2 className="mt-1 font-semibold">Rendu paginé du contrat</h2></div><Badge variant="outline">Frontend natif</Badge></div>
           <div className="bg-slate-100 p-4 sm:p-6"><SD05ContractRenderer content={value} companyName={companyName} contractHash={latestContractHash} signatures={signatures} /></div>
         </Card>
       </div>
