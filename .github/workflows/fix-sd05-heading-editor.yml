@@ -1,0 +1,41 @@
+name: Fix SD05 heading editor
+
+on:
+  push:
+    branches:
+      - feat/remove-sd01-stage-cards
+    paths:
+      - scripts/fix_sd05_heading_editor.py
+      - .github/workflows/fix-sd05-heading-editor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/remove-sd01-stage-cards
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply editor fix
+        run: python scripts/fix_sd05_heading_editor.py
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Commit validated changes
+        run: |
+          git config user.name "gando-ci"
+          git config user.email "gando-ci@users.noreply.github.com"
+          git add components
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git commit -m "fix: make SD05 title hierarchy predictable"
+          git push origin HEAD:feat/remove-sd01-stage-cards
