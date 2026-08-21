@@ -1,6 +1,7 @@
 name: Apply SD room polish
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feat/sd05-contract-room-polish
