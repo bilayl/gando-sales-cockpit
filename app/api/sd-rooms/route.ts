@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
-import { requireSDInternalAccess } from "@/lib/sd-room";
+import { requireSDInternalAccess } from "@/lib/sd-room-access";
 import { SD_CODES, SD_STAGE_META, createEmptySD01, type SDRoomBrandTheme } from "@/lib/sd-room-types";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
