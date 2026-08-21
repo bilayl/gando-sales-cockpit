@@ -1,0 +1,36 @@
+name: Finalize room polish
+
+on:
+  push:
+    branches:
+      - feat/room-contract-pdf-polish
+
+permissions:
+  contents: write
+
+jobs:
+  finalize-and-build:
+    if: github.actor != 'gando-ci'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Finalize changes
+        run: python scripts/finalize_room_polish.py
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Commit generated changes
+        run: |
+          git config user.name "gando-ci"
+          git config user.email "gando-ci@users.noreply.github.com"
+          git add app components lib next.config.ts
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "feat: complete public Room localization"
+          git push
