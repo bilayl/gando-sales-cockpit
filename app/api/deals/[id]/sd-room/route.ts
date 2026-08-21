@@ -124,7 +124,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const brandBannerImageUrl = String(body.brandBannerImageUrl || "").trim().slice(0, 2000) || null;
     const roomBrandTheme = brandTheme(body.brandTheme);
     const brandTitle = String(body.brandTitle || title || created.title).trim().slice(0, 240) || null;
-    const brandSubtitle = String(body.brandSubtitle || "Espace de collaboration stratégique").trim().slice(0, 500) || null;
+    const brandSubtitle = String(body.brandSubtitle || "Espace de collaboration").trim().slice(0, 500) || null;
 
     const updates: Record<string, unknown> = {
       brand_theme: roomBrandTheme,

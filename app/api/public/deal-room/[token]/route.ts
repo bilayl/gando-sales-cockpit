@@ -22,8 +22,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ...data,
       room: {
         ...data.room,
-        displayTitle: data.room.companyName,
-        displaySubtitle: "Espace de collaboration stratégique",
+        displayTitle: data.room.displayTitle || data.room.companyName,
+        displaySubtitle: data.room.displaySubtitle || "Espace de collaboration",
       },
     });
   } catch (error) {

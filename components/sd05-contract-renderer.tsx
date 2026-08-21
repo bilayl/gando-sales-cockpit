@@ -25,7 +25,7 @@ export type SD05SignatureSummary = {
   initialsCompletedAt?: string | null;
 };
 
-type BlockKind = "major" | "article" | "h2" | "h3" | "h4" | "subsection" | "bullet" | "paragraph";
+type BlockKind = "major" | "article" | "h2" | "h3" | "h4" | "subsection" | "bullet" | "table" | "paragraph";
 type RenderBlock = { text: string; kind: BlockKind };
 
 function dateLabel(value?: string | null) {
@@ -54,6 +54,7 @@ function blockKind(raw: string): BlockKind {
   if (/^(ARTICLE\s+\d+|ANNEXE\s+\d+)/i.test(value)) return "article";
   if (/^\d+\.\d+\.?\s+/i.test(value)) return "subsection";
   if (/^(?:[-–•]\s+)/.test(value)) return "bullet";
+  if (/^\|.*\|$/.test(value)) return "table";
   return "paragraph";
 }
 
@@ -64,29 +65,26 @@ function displayText(raw: string) {
 function weight(block: RenderBlock) {
   if (["major", "article"].includes(block.kind)) return 1.35 + Math.ceil(block.text.length / 520) * 0.25;
   if (block.kind === "subsection") return 0.9 + Math.ceil(block.text.length / 600) * 0.3;
+  if (block.kind === "table") return 1 + Math.max(1, block.text.split("\n").length) * 0.55;
   return Math.max(0.7, Math.ceil(block.text.length / 520) * 0.85);
 }
 
 function renderSegments(raw: string): RenderBlock[] {
   const result: RenderBlock[] = [];
   let paragraph: string[] = [];
-  const flushParagraph = () => {
-    if (!paragraph.length) return;
-    result.push({ kind: "paragraph", text: paragraph.join("\n").trim() });
-    paragraph = [];
-  };
+  let table: string[] = [];
+  const flushParagraph = () => { if (!paragraph.length) return; result.push({ kind: "paragraph", text: paragraph.join("\n").trim() }); paragraph = []; };
+  const flushTable = () => { if (!table.length) return; result.push({ kind: "table", text: table.join("\n") }); table = []; };
   for (const line of raw.split(/\n/)) {
     const trimmed = line.trim();
-    if (!trimmed) { flushParagraph(); continue; }
+    if (!trimmed) { flushParagraph(); flushTable(); continue; }
     const kind = blockKind(trimmed);
+    if (kind === "table") { flushParagraph(); table.push(trimmed); continue; }
+    flushTable();
     if (kind === "paragraph") paragraph.push(trimmed);
-    else {
-      flushParagraph();
-      result.push({ kind, text: displayText(trimmed) });
-    }
+    else { flushParagraph(); result.push({ kind, text: displayText(trimmed) }); }
   }
-  flushParagraph();
-  return result;
+  flushParagraph(); flushTable(); return result;
 }
 
 function paginate(body: string): RenderBlock[][] {
@@ -111,11 +109,17 @@ function paginate(body: string): RenderBlock[][] {
 function ContractBlock({ block, articleColor }: { block: RenderBlock; articleColor: string }) {
   if (block.kind === "major") return <h2 className="pt-1 text-[17px] font-black uppercase tracking-[0.02em]" style={{ color: articleColor }}>{block.text}</h2>;
   if (block.kind === "article" || block.kind === "h2") return <h2 className="pt-2 text-[16px] font-black uppercase tracking-[0.01em]" style={{ color: articleColor }}>{block.text}</h2>;
-  if (block.kind === "h3") return <h3 className="pt-1 text-[14px] font-black leading-5 text-slate-950">{block.text}</h3>;
-  if (block.kind === "h4") return <h4 className="pt-1 text-[12px] font-bold uppercase tracking-[0.035em] text-slate-700">{block.text}</h4>;
-  if (block.kind === "subsection") return <h3 className="pt-1 text-[13px] font-black leading-5 text-slate-950">{block.text}</h3>;
-  if (block.kind === "bullet") return <p className="whitespace-pre-line pl-5 text-[12px] leading-[1.65] text-slate-700">{block.text}</p>;
-  return <p className="whitespace-pre-line text-[12px] leading-[1.7] text-slate-700">{block.text}</p>;
+  if (block.kind === "h3") return <h3 className="pt-1 text-[14px] font-black leading-5 text-[#333333]">{block.text}</h3>;
+  if (block.kind === "h4") return <h4 className="pt-1 text-[12px] font-bold uppercase tracking-[0.035em] text-[#333333]">{block.text}</h4>;
+  if (block.kind === "subsection") return <h3 className="pt-1 text-[13px] font-black leading-5 text-[#333333]">{block.text}</h3>;
+  if (block.kind === "bullet") return <p className="whitespace-pre-line pl-5 text-[12px] leading-[1.65] text-[#333333]">{block.text}</p>;
+  if (block.kind === "table") {
+    const rows = block.text.split("\n").map(line => line.trim()).filter(Boolean).map(line => line.replace(/^\|/, "").replace(/\|$/, "").split("|").map(cell => cell.trim()));
+    const hasDivider = rows[1]?.every(cell => /^:?-{3,}:?$/.test(cell.replace(/\s/g, "")));
+    const head = rows[0] || []; const body = hasDivider ? rows.slice(2) : rows.slice(1);
+    return <div className="my-2 overflow-hidden rounded-lg border border-slate-300"><table className="w-full border-collapse text-left text-[11px] leading-5 text-[#333333]"><thead className="bg-slate-100"><tr>{head.map((cell, index) => <th key={index} className="border-r border-slate-300 px-3 py-2.5 font-black last:border-r-0">{cell}</th>)}</tr></thead><tbody>{body.map((row, rowIndex) => <tr key={rowIndex} className="border-t border-slate-200">{row.map((cell, cellIndex) => <td key={cellIndex} className="border-r border-slate-200 px-3 py-2 align-top last:border-r-0">{cell}</td>)}</tr>)}</tbody></table></div>;
+  }
+  return <p className="whitespace-pre-line text-[12px] leading-[1.7] text-[#333333]">{block.text}</p>;
 }
 
 function ContractFooter({ content, pageNumber, totalPages, signatures, initialsByPage }: { content: SD05Content; pageNumber: number; totalPages: number; signatures: SD05SignatureSummary[]; initialsByPage?: Record<string, string> }) {
@@ -123,7 +127,7 @@ function ContractFooter({ content, pageNumber, totalPages, signatures, initialsB
   const values = [initialsByPage?.[key], ...signatures.map(item => item.initials?.[key]).filter(Boolean)].filter(Boolean) as string[];
   const initials = [...new Set(values.map(value => value.trim()).filter(Boolean))];
   return <footer className="mt-auto border-t border-slate-200 pt-3"><div className="relative min-h-[52px] text-center">
-    <div className="flex items-center justify-center gap-1 text-[11px] font-black text-slate-700"><span className="text-[17px] leading-none">G</span><span>gando</span></div>
+    <div className="flex items-center justify-center"><img src="https://www.gando.app/Logo.svg" alt="Gando" className="h-[18px] w-auto object-contain" /></div>
     {initials.length ? <div className="absolute right-0 top-0 flex items-center gap-1.5">{initials.map((item, index) => <div key={`${item}-${index}`} className="min-w-[50px] rounded-md border border-[#735DF3]/20 bg-white px-2 py-1 font-serif text-[14px] italic text-[#4f3ec2] shadow-sm">{item}</div>)}</div> : content.requireInitialsEachPage ? <div className="absolute right-0 top-0 rounded-md border border-dashed border-slate-300 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400">Paraphe</div> : null}
     <p className="mx-auto mt-2 max-w-[92%] text-[7px] leading-[1.35] text-slate-400">{content.footerConfidentialityText}</p>
     <div className="mt-1 text-[7px] font-semibold text-slate-300">Page {pageNumber} / {totalPages}</div>
@@ -155,16 +159,15 @@ export function SD05ContractRenderer({ content, companyName, contractHash, signa
 
   return <div className="space-y-5 print:space-y-0">
     <PageShell content={content} pageNumber={1} totalPages={totalPages} signatures={signatures} initialsByPage={initialsByPage} compact={compact}>
-      <section className={legal ? "pt-4 text-center" : "pt-2"}><div className={legal ? "mx-auto max-w-[680px]" : "max-w-[680px]"}><div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">SD05 · {legal ? "Convention juridique" : "Contrat Gando"}</div><h1 className={legal ? "mt-5 text-[33px] font-black tracking-[-0.035em]" : "mt-3 text-[31px] font-black tracking-[-0.04em]"}>{content.contractTitle || "Contrat Gando"}</h1><p className="mt-3 text-[11px] font-semibold text-[#735DF3]">{content.contractReference || "Référence à compléter"} · {content.contractVersion || "Version à compléter"}</p></div></section>
-
-      <section className={legal ? "mt-12 space-y-10" : "mt-9 grid gap-8 sm:grid-cols-2"}>
-        <div className={legal ? "text-left" : ""}><div className="text-[11px] font-black uppercase tracking-[0.12em] text-[#735DF3]">Entre :</div><div className="mt-3 text-[12px] leading-6 text-slate-700"><strong className="text-[14px] text-slate-950">GANDO SOLUTIONS</strong><br />Société par actions simplifiée au capital de 1 000,00 euros<br />RCS Meaux 943 391 201<br />3 chemin de la porte verte, 77144 Montévrain<br />Représentée par {gandoSigner?.name || "Bilayl MATOU"}, {gandoSigner?.role || "Président"}<br />contact@gando.app</div>{legal ? <div className="mt-4 text-right text-[12px] font-semibold text-slate-600">Ci-après dénommée « Gando », d'une part,</div> : null}</div>
-        <div className={legal ? "text-left" : "sm:text-right"}><div className="text-[11px] font-black uppercase tracking-[0.12em] text-[#735DF3]">Et :</div><div className="mt-3 text-[12px] leading-6 text-slate-700"><strong className="text-[14px] text-slate-950">{companyName || clientSigner?.organization || "Société cliente"}</strong><br />{clientSigner?.name ? <>Représentée par {clientSigner.name}<br /></> : null}{clientSigner?.role ? <>{clientSigner.role}<br /></> : null}{clientSigner?.email || "Coordonnées du signataire à compléter"}</div>{legal ? <div className="mt-4 text-right text-[12px] font-semibold text-slate-600">Ci-après dénommée le « Partenaire », d'autre part,</div> : null}</div>
-      </section>
-      {legal ? <p className="mt-8 text-center text-[12px] text-slate-600">Ci-après conjointement désignées les « Parties » ou individuellement la « Partie ».</p> : null}
-
-      {content.legalItems.length ? <section className="mt-10"><div className="mb-3 text-[12px] font-black uppercase tracking-[0.08em] text-slate-700">Conditions particulières</div><div className="overflow-hidden rounded-lg border border-slate-200">{content.legalItems.map((item, index) => <div key={`${item.topic}-${index}`} className="grid gap-1 border-b border-slate-200 px-4 py-3 text-[11px] last:border-b-0 sm:grid-cols-[210px_1fr]"><strong>{item.topic}</strong><span className="leading-5 text-slate-600">{item.notes || "À compléter"}</span></div>)}</div></section> : null}
-      <section className="mt-8 rounded-lg bg-slate-50 p-4"><div className="grid gap-4 text-[11px] text-slate-600 sm:grid-cols-2"><div><span className="font-black text-slate-900">Date de mise en production</span><br />{dateLabel(content.goLiveDate || content.effectiveDate)}</div><div><span className="font-black text-slate-900">Durée initiale</span><br />{content.term || "À compléter"}</div><div><span className="font-black text-slate-900">Renouvellement</span><br />{content.renewal || "À compléter"}</div><div><span className="font-black text-slate-900">Préavis / résiliation</span><br />{content.terminationNotice || "À compléter"}</div></div></section>
+      {legal ? <>
+        <section className="pt-4 text-center"><div className="mx-auto max-w-[680px]"><div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">SD05 · Convention juridique</div><h1 className="mt-5 text-[33px] font-black tracking-[-0.035em]">{content.contractTitle || "Contrat Gando"}</h1><p className="mt-3 text-[11px] font-semibold text-[#735DF3]">{content.contractReference || "Référence à compléter"} · {content.contractVersion || "Version à compléter"}</p></div></section>
+        <section className="mt-12 space-y-10"><div className="text-left"><div className="text-[11px] font-black uppercase tracking-[0.12em] text-[#735DF3]">Entre :</div><div className="mt-3 text-[12px] leading-6 text-[#333333]"><strong className="text-[14px] text-slate-950">GANDO SOLUTIONS</strong><br />Société par actions simplifiée au capital de 1 000,00 euros<br />RCS Meaux 943 391 201<br />3 chemin de la porte verte, 77144 Montévrain<br />Représentée par {gandoSigner?.name || "Bilayl MATOU"}, {gandoSigner?.role || "Président"}<br />contact@gando.app</div><div className="mt-4 text-right text-[12px] font-semibold text-slate-600">Ci-après dénommée « Gando », d'une part,</div></div><div className="text-left"><div className="text-[11px] font-black uppercase tracking-[0.12em] text-[#735DF3]">Et :</div><div className="mt-3 text-[12px] leading-6 text-[#333333]"><strong className="text-[14px] text-slate-950">{companyName || clientSigner?.organization || "Société cliente"}</strong><br />{clientSigner?.name ? <>Représentée par {clientSigner.name}<br /></> : null}{clientSigner?.role ? <>{clientSigner.role}<br /></> : null}{clientSigner?.email || "Coordonnées du signataire à compléter"}</div><div className="mt-4 text-right text-[12px] font-semibold text-slate-600">Ci-après dénommée le « Partenaire », d'autre part,</div></div></section><p className="mt-8 text-center text-[12px] text-slate-600">Ci-après conjointement désignées les « Parties » ou individuellement la « Partie ».</p>
+      </> : <>
+        <div className="relative flex items-start justify-between gap-6 border-b border-slate-200 pb-7 pt-1"><div><div className="text-[24px] font-black tracking-[-0.04em] text-[#222222]">GANDO SOLUTIONS</div><p className="mt-2 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">Convention de services · SD05</p></div><div className="max-w-[280px] text-right"><div className="text-[13px] font-bold text-[#222222]">{content.contractTitle || "Contrat Gando"}</div><div className="mt-1 text-[13px] font-black text-[#735DF3]">{content.contractReference || "Référence à compléter"}</div><div className="mt-2 text-[10px] leading-5 text-slate-500">Version : {content.contractVersion || "—"}<br />Validité de signature : {dateLabel(content.signatureDeadline)}</div></div></div>
+        <div className="grid gap-6 py-8 sm:grid-cols-2"><section><div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#735DF3]">L'établissement</div><div className="mt-3 text-[12px] leading-6 text-[#333333]"><strong className="text-slate-950">GANDO SOLUTIONS</strong><br />SAS au capital de 1 000,00 euros<br />RCS Meaux, N° 943 391 201<br />3 chemin de la porte verte, 77144 Montévrain<br />contact@gando.app</div></section><section className="sm:text-right"><div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#735DF3]">Le Loueur utilisateur</div><div className="mt-3 text-[12px] leading-6 text-[#333333]"><strong className="text-slate-950">{companyName || clientSigner?.organization || "Société cliente"}</strong><br />{clientSigner?.name ? <>Représenté par {clientSigner.name}<br /></> : null}{clientSigner?.role ? <>{clientSigner.role}<br /></> : null}{clientSigner?.email || "Coordonnées à compléter"}</div></section></div>
+      </>}
+      {content.legalItems.length ? <section className={legal ? "mt-10" : "mb-8"}><div className={legal ? "mb-3 text-[12px] font-black uppercase tracking-[0.08em] text-slate-700" : "mb-3 text-[12px] font-black text-[#333333]"}>{legal ? "Conditions particulières" : "Service(s) de l'offre de sécurisation de caution en ligne Gando"}</div><div className={legal ? "overflow-hidden rounded-lg border border-slate-200" : "rounded-xl border border-[#735DF3]/45 bg-[#735DF3]/[0.035] p-5"}>{!legal ? <div className="mb-3 text-[10px] font-black uppercase tracking-[0.13em] text-[#735DF3]">Structure tarifaire</div> : null}{content.legalItems.map((item, index) => <div key={`${item.topic}-${index}`} className={legal ? "grid gap-1 border-b border-slate-200 px-4 py-3 text-[11px] last:border-b-0 sm:grid-cols-[210px_1fr]" : "grid gap-1 py-1.5 text-[12px] sm:grid-cols-[220px_1fr]"}><strong>{item.topic}</strong><span className="leading-5 text-[#333333]">{item.notes || "À compléter"}</span></div>)}</div></section> : null}
+      <section className="mt-8 rounded-lg bg-slate-50 p-4"><div className="mb-3 text-[12px] font-black text-[#333333]">Entrée en vigueur</div><div className="grid gap-4 text-[11px] text-[#333333] sm:grid-cols-2"><div><span className="font-black text-slate-900">Date de mise en production</span><br />{dateLabel(content.goLiveDate || content.effectiveDate)}</div><div><span className="font-black text-slate-900">Durée initiale</span><br />{content.term || "À compléter"}</div><div><span className="font-black text-slate-900">Renouvellement</span><br />{content.renewal || "À compléter"}</div><div><span className="font-black text-slate-900">Préavis / résiliation</span><br />{content.terminationNotice || "À compléter"}</div></div></section>
     </PageShell>
 
     {bodyPages.map((blocks, index) => <PageShell key={index} content={content} pageNumber={index + 2} totalPages={totalPages} signatures={signatures} initialsByPage={initialsByPage} compact={compact}><div className="space-y-4 pt-1">{blocks.length ? blocks.map((block, blockIndex) => <ContractBlock key={`${index}-${blockIndex}`} block={block} articleColor={articleColor} />) : <p className="text-sm italic text-slate-500">Le texte contractuel doit être renseigné avant l'envoi en signature.</p>}</div></PageShell>)}

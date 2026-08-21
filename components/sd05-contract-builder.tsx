@@ -20,7 +20,7 @@ function Area({ value, onChange, rows = 5, placeholder, disabled = false }: { va
   return <textarea value={value} onChange={event => onChange(event.target.value)} rows={rows} placeholder={placeholder} disabled={disabled} className="w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60" />;
 }
 
-function ContractTextEditor({ value, onChange, disabled, onAddAnnex }: { value: string; onChange: (value: string) => void; disabled: boolean; onAddAnnex: () => void }) {
+function ContractTextEditor({ value, onChange, disabled, onAddAnnex, onAddTable }: { value: string; onChange: (value: string) => void; disabled: boolean; onAddAnnex: () => void; onAddTable: () => void }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
 
   const applyFormat = (prefix: "" | "## " | "### " | "#### ") => {
@@ -49,7 +49,7 @@ function ContractTextEditor({ value, onChange, disabled, onAddAnnex }: { value: 
       <Button type="button" variant="outline" size="sm" onClick={() => applyFormat("## ")}>Titre H2</Button>
       <Button type="button" variant="outline" size="sm" onClick={() => applyFormat("### ")}>Sous-titre H3</Button>
       <Button type="button" variant="outline" size="sm" onClick={() => applyFormat("#### ")}>Sous-section H4</Button>
-      <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={onAddAnnex}>+ Annexe</Button>
+      <Button type="button" variant="outline" size="sm" onClick={onAddTable}>+ Tableau</Button><Button type="button" variant="outline" size="sm" className="ml-auto" onClick={onAddAnnex}>+ Annexe</Button>
     </div> : null}
     <textarea
       ref={ref}
@@ -58,7 +58,7 @@ function ContractTextEditor({ value, onChange, disabled, onAddAnnex }: { value: 
       rows={34}
       disabled={disabled}
       placeholder={"## ARTICLE 1 — OBJET\nLe présent article définit…\n\n### 1.1 Périmètre\nLe périmètre comprend…\n\n#### Modalités pratiques\nLes modalités sont…"}
-      className="w-full resize-y border-0 bg-transparent px-4 py-4 font-mono text-[13px] leading-6 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+      className="w-full resize-y border-0 bg-transparent px-4 py-4 font-mono text-[14px] leading-6 text-[#333333] outline-none placeholder:text-[#777777] disabled:cursor-not-allowed disabled:opacity-60"
     />
     <div className="border-t border-border bg-muted/15 px-4 py-2 text-[11px] leading-5 text-muted-foreground">Place le curseur sur une ligne puis choisis son niveau. Les symboles de structure ne sont jamais affichés dans le contrat final. H2 = titre, H3 = sous-titre, H4 = sous-section.</div>
   </div>;
@@ -172,6 +172,7 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
   const addTerm = () => setValue(current => ({ ...current, legalItems: [...current.legalItems, { topic: "", status: "open", owner: "", notes: "" }] }));
   const updateTerm = (index: number, key: "topic" | "owner" | "notes", next: string) => setValue(current => ({ ...current, legalItems: current.legalItems.map((item, i) => i === index ? { ...item, [key]: next } : item) }));
   const removeTerm = (index: number) => setValue(current => ({ ...current, legalItems: current.legalItems.filter((_, i) => i !== index) }));
+  const addTable = () => setValue(current => ({ ...current, contractSummary: `${current.contractSummary.trimEnd()}\n\n| Intitulé | Description | Valeur |\n| --- | --- | --- |\n| Élément | À compléter | À compléter |`.trim() }));
   const addAnnex = () => setValue(current => { const matches = current.contractSummary.match(/^ANNEXE\s+\d+/gim) || []; const number = matches.length + 1; return { ...current, contractSummary: `${current.contractSummary.trimEnd()}\n\nANNEXE ${number} : TITRE DE L'ANNEXE\nTexte de l'annexe à compléter.`.trim() }; });
 
   if (loading && !data) return <div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
@@ -191,7 +192,7 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
       <Card className="space-y-4 p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold">Conditions particulières</h2><p className="mt-1 text-xs text-muted-foreground">Affichées sur la première page.</p></div>{!locked ? <Button type="button" variant="outline" size="sm" onClick={addTerm}>Ajouter</Button> : null}</div>{value.legalItems.length ? <div className="space-y-3">{value.legalItems.map((item, index) => <div key={index} className="grid gap-3 rounded-xl border border-border bg-muted/20 p-4 md:grid-cols-[220px_1fr_auto]"><Input disabled={locked} value={item.topic} onChange={event => updateTerm(index, "topic", event.target.value)} placeholder="Intitulé" /><Input disabled={locked} value={item.notes} onChange={event => updateTerm(index, "notes", event.target.value)} placeholder="Condition" />{!locked ? <Button type="button" variant="ghost" size="icon" onClick={() => removeTerm(index)}><Trash2 className="h-4 w-4" /></Button> : null}</div>)}</div> : <div className="rounded-xl border border-dashed p-5 text-center text-sm text-muted-foreground">Aucune condition particulière.</div>}</Card>
       <Card className="space-y-4 p-5">
         <div><h2 className="font-semibold">Texte du contrat</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Éditeur structuré : applique directement un niveau à la ligne courante. Un titre ou un sous-titre reste distinct du paragraphe qui suit, même sans ligne vide. « ARTICLE », « 3.1. » et « ANNEXE » restent également reconnus.</p></div>
-        <ContractTextEditor disabled={locked} value={value.contractSummary} onChange={next => set("contractSummary", next)} onAddAnnex={addAnnex} />
+        <ContractTextEditor disabled={locked} value={value.contractSummary} onChange={next => set("contractSummary", next)} onAddAnnex={addAnnex} onAddTable={addTable} />
       </Card>
 
       <Card className="space-y-4 p-5"><div><h2 className="font-semibold">Pied de page & confidentialité</h2><p className="mt-1 text-xs text-muted-foreground">Texte modifiable pour chaque contrat.</p></div><Area disabled={locked} value={value.footerConfidentialityText} onChange={next => set("footerConfidentialityText", next)} rows={4} /></Card>
