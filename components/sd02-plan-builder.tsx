@@ -73,7 +73,6 @@ export function SD02PlanBuilder({ dealId }: { dealId: string }) {
 
   useEffect(() => { void load(); }, [load]);
 
-  const sd01Validated = data?.documents.find(item => item.code === "SD01")?.status === "validated";
   const sd02 = data?.documents.find(item => item.code === "SD02");
   const completed = useMemo(() => steps.filter(step => step.status === "done").length, [steps]);
 
@@ -139,10 +138,9 @@ export function SD02PlanBuilder({ dealId }: { dealId: string }) {
             <Badge variant="outline">{completed}/{steps.length} terminée{completed > 1 ? "s" : ""}</Badge>
             {sd02?.status === "validated" ? <Badge variant="outline" className="border-emerald-500/30 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Validé client</Badge> : null}
             <Button variant="outline" onClick={() => void save(false)} disabled={working}><Save className="mr-2 h-4 w-4" /> Enregistrer</Button>
-            <Button onClick={() => void save(true)} disabled={working || !sd01Validated}><Send className="mr-2 h-4 w-4" /> Publier</Button>
+            <Button onClick={() => void save(true)} disabled={working}><Send className="mr-2 h-4 w-4" /> Publier</Button>
           </div>
         </div>
-        {!sd01Validated ? <div className="border-b border-amber-500/20 bg-amber-500/[0.06] px-5 py-3 text-xs text-amber-700">SD01 doit être validé avant de publier le plan d’action.</div> : null}
       </Card>
 
       <div className="space-y-3">
@@ -183,7 +181,7 @@ export function SD02PlanBuilder({ dealId }: { dealId: string }) {
 
       {steps.length ? <Button variant="outline" className="w-full border-dashed py-6" onClick={addStep}><Plus className="mr-2 h-4 w-4" /> Ajouter une étape</Button> : null}
 
-      <div className={cn("rounded-xl border px-4 py-3 text-xs", sd01Validated ? "border-border bg-card text-muted-foreground" : "border-amber-500/20 bg-amber-500/[0.05] text-amber-700")}>Le plan sera affiché côté client comme une roadmap verticale, dans exactement le même ordre que les étapes ci-dessus.</div>
+      <div className={cn("rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted-foreground")}>Le plan sera affiché côté client comme une roadmap verticale, dans exactement le même ordre que les étapes ci-dessus.</div>
     </div>
   </div>;
 }
