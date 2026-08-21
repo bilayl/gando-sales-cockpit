@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { getHubSpotIdentity } from "@/lib/hubspot";
+import { getCockpitSession } from "@/lib/auth";
 
 export async function GET() {
-  const identity = await getHubSpotIdentity();
-  if (!identity) return NextResponse.json({ authenticated: false }, { status: 401 });
-  return NextResponse.json({ authenticated: true, ...identity });
+  const session = await getCockpitSession();
+  if (!session) return NextResponse.json({ authenticated: false }, { status: 401 });
+  return NextResponse.json({ authenticated: true, ...session });
 }
