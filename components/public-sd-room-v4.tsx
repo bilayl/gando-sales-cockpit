@@ -246,7 +246,7 @@ export function PublicSDRoomV4({ token }: { token: string }) {
       bannerUrl={data.room.bannerImageUrl}
       theme={data.room.theme}
       title={data.room.displayTitle || `${data.room.companyName} × Gando`}
-      subtitle={data.room.displaySubtitle || "Espace de collaboration stratégique"}
+      subtitle={data.room.displaySubtitle || "Espace de collaboration"}
       className="min-h-[330px] border-b border-[#e1e4e6] sm:min-h-[390px] sm:pb-14 sm:pt-14"
     />
 

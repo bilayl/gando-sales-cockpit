@@ -61,7 +61,7 @@ export function SDRoomBrandBanner({
         </div>
         <div className={cn("mt-5 text-[9px] font-black uppercase tracking-[0.18em]", light ? "text-[#4d39b8]" : "text-white/80")}>Gando Deal Room</div>
         <div className={cn("mt-2 text-xl font-black tracking-[-0.035em]", light ? "text-[#172a32]" : "text-white")}>{title || `${companyName || "Client"} × Gando`}</div>
-        <div className={cn("mt-2 max-w-xl text-xs leading-5", light ? "text-[#526268]" : "text-white/85")}>{subtitle || "Espace de collaboration stratégique"}</div>
+        <div className={cn("mt-2 max-w-xl text-xs leading-5", light ? "text-[#526268]" : "text-white/85")}>{subtitle || "Espace de collaboration"}</div>
       </div>
     </section>
   );

@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     const brandBannerImageUrl = String(body?.brandBannerImageUrl || "").trim().slice(0, 2000) || null;
     const roomBrandTheme = brandTheme(body?.brandTheme);
     const brandTitle = companyName;
-    const brandSubtitle = "Espace de collaboration stratégique";
+    const brandSubtitle = "Espace de collaboration";
 
     if (!companyName) throw Object.assign(new Error("Le nom de l’organisation est obligatoire."), { status: 400 });
     if (!title) throw Object.assign(new Error("Le nom de la dealroom est obligatoire."), { status: 400 });

@@ -32,7 +32,7 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
     setBannerUrl(next.brand_banner_image_url || "");
     setTheme(next.brand_theme || "gando");
     setTitle(next.brand_title || next.title || "");
-    setSubtitle(next.brand_subtitle || "Espace de collaboration stratégique");
+    setSubtitle(next.brand_subtitle || "Espace de collaboration");
   }, []);
 
   const load = useCallback(async () => {
@@ -113,7 +113,7 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
           <div className="space-y-5">
             <Card className="p-5">
               <h2 className="font-bold">Contenu de la hero</h2>
-              <div className="mt-4 space-y-4"><div><Label>Titre affiché</Label><Input className="mt-2" value={title} onChange={event => setTitle(event.target.value)} placeholder={`${companyName || "Client"} × Gando`} /></div><div><Label>Sous-titre de la bannière</Label><textarea value={subtitle} onChange={event => setSubtitle(event.target.value)} rows={3} className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" placeholder="Espace de collaboration stratégique" /></div></div>
+              <div className="mt-4 space-y-4"><div><Label>Titre affiché</Label><Input className="mt-2" value={title} onChange={event => setTitle(event.target.value)} placeholder={`${companyName || "Client"} × Gando`} /></div><div><Label>Sous-titre de la bannière</Label><textarea value={subtitle} onChange={event => setSubtitle(event.target.value)} rows={3} className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" placeholder="Espace de collaboration" /></div></div>
             </Card>
 
             <Card className="p-5">
