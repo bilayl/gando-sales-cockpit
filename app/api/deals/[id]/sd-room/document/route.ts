@@ -8,7 +8,6 @@ import { SD_CODES, type SDCode } from "@/lib/sd-room-types";
 export const dynamic = "force-dynamic";
 
 const REQUIRED_BEFORE_PUBLISH: Partial<Record<SDCode, SDCode[]>> = {
-  SD02: ["SD01"],
   SD03: ["SD02"],
   SD04: ["SD02"],
   SD05: ["SD01", "SD02"],
