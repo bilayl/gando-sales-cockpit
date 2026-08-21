@@ -28,11 +28,11 @@ const nav = [
   { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
   { href: "/analytics", label: "Statistiques", icon: BarChart3 },
+  { href: "/deal-room", label: "Deal Room", icon: Target },
 ];
 
 export function AppSidebar({ email }: { email?: string }) {
   const pathname = usePathname();
-  const dealRoomActive = pathname.startsWith("/deal-room");
 
   return (
     <aside className="flex h-screen w-[72px] flex-col border-r border-border bg-card px-2.5 py-4 lg:w-[216px] lg:px-3">
@@ -69,18 +69,6 @@ export function AppSidebar({ email }: { email?: string }) {
             </Link>
           );
         })}
-
-        <Link
-          href="/deal-room"
-          title="Deal Room"
-          className={cn(
-            "group flex h-9 items-center justify-center gap-2.5 rounded-lg px-2.5 transition-colors lg:justify-start",
-            dealRoomActive ? "bg-accent" : "hover:bg-muted"
-          )}
-        >
-          <Target className={cn("h-[17px] w-[17px]", dealRoomActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-          <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground lg:block">Deal Room</span>
-        </Link>
       </nav>
 
       <div className="mt-auto space-y-2 border-t border-border pt-3">
