@@ -44,20 +44,24 @@ export function SDRoomBrandBanner({
 
   return (
     <section
-      className={cn("relative isolate w-full overflow-hidden bg-gradient-to-br px-6 !pb-6 !pt-8 !min-h-[260px] sm:!pb-8 sm:!pt-10 sm:!min-h-[300px] shadow-[0_22px_60px_rgba(73,54,160,0.16)]", selected.preview, className)}
+      className={cn(
+        "relative isolate flex min-h-[280px] w-full items-center justify-center overflow-hidden bg-gradient-to-br px-6 py-8 shadow-[0_22px_60px_rgba(73,54,160,0.16)] sm:min-h-[310px] sm:py-10",
+        selected.preview,
+        className,
+      )}
       style={bannerUrl ? { backgroundImage: `linear-gradient(110deg, rgba(87,64,211,.84), rgba(157,139,245,.74)), url(${bannerUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
     >
       <div className="pointer-events-none absolute -left-20 -top-24 h-52 w-[75%] rotate-[8deg] rounded-full bg-white/10" />
       <div className="pointer-events-none absolute -bottom-20 right-[-10%] h-40 w-[70%] -rotate-[8deg] rounded-full bg-[#5a41dc]/20" />
-      <div className="relative z-10 flex flex-col items-center text-center">
-        <div className="flex items-center gap-7">
+      <div className="relative z-10 flex w-full flex-col items-center justify-center text-center">
+        <div className="flex items-center justify-center gap-7">
           <ClientLogo name={companyName || "Client"} url={logoUrl} />
           <span className={cn("text-4xl font-black", light ? "text-[#172a32]" : "text-white")}>×</span>
           <GandoMark className="h-20 w-20" />
         </div>
-        <div className={cn("mt-4 text-[9px] font-black uppercase tracking-[0.18em]", light ? "text-[#4d39b8]" : "text-white/70")}>Gando Deal Room</div>
-        <div className={cn("mt-1.5 text-xl font-black tracking-[-0.035em]", light ? "text-[#172a32]" : "text-white")}>{title || `${companyName || "Client"} × Gando`}</div>
-        <div className={cn("mt-1.5 max-w-xl text-xs leading-5", light ? "text-[#637278]" : "text-white/75")}>{subtitle || "Espace de collaboration stratégique"}</div>
+        <div className={cn("mt-5 text-[9px] font-black uppercase tracking-[0.18em]", light ? "text-[#4d39b8]" : "text-white/80")}>Gando Deal Room</div>
+        <div className={cn("mt-2 text-xl font-black tracking-[-0.035em]", light ? "text-[#172a32]" : "text-white")}>{title || `${companyName || "Client"} × Gando`}</div>
+        <div className={cn("mt-2 max-w-xl text-xs leading-5", light ? "text-[#526268]" : "text-white/85")}>{subtitle || "Espace de collaboration stratégique"}</div>
       </div>
     </section>
   );
