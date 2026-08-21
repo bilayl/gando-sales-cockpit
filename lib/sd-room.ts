@@ -82,7 +82,7 @@ export async function createSDRoom(deal: DealRoomDetail, createdByEmail: string)
       company_name: companyName,
       brand_theme: "gando",
       brand_title: `${companyName} × Gando`,
-      brand_subtitle: "Espace de collaboration stratégique",
+      brand_subtitle: "Espace de collaboration",
       share_token: shareToken,
       created_by_email: createdByEmail,
     })
@@ -442,7 +442,7 @@ export async function getPublicSDRoom(token: string, email: string) {
       bannerImageUrl: room.brand_banner_image_url,
       theme: cleanBrandTheme(room.brand_theme),
       displayTitle: room.brand_title || room.title,
-      displaySubtitle: room.brand_subtitle || "Espace de collaboration stratégique avec Gando",
+      displaySubtitle: room.brand_subtitle || "Espace de collaboration avec Gando",
       currentStage: room.current_stage,
       updatedAt: room.updated_at,
     },

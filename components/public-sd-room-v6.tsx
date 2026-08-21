@@ -44,10 +44,10 @@ function stageTitle(code: SDCode, language: RoomLanguage = "fr") {
   return code === "SD04" ? "PDF commercial" : SD_STAGE_META[code].title;
 }
 
-function formatDate(value?: string | null) {
+function formatDate(value?: string | null, language: RoomLanguage = "fr") {
   if (!value) return "";
   try {
-    return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date(value));
+    return new Intl.DateTimeFormat(language === "en" ? "en-GB" : "fr-FR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date(value));
   } catch {
     return value || "";
   }
@@ -77,74 +77,74 @@ function PairGrid({ leftTitle, left, rightTitle, right }: { leftTitle: string; l
   </div>;
 }
 
-function stageStatus(status: string) {
-  if (status === "done") return { label: "Terminé", classes: "bg-[#edf7ef] text-[#376b43]" };
-  if (status === "in_progress") return { label: "En cours", classes: "bg-[#f3f0ff] text-[#5c50ae]" };
-  return { label: "À faire", classes: "bg-[#f1f3f4] text-[#60696e]" };
+function stageStatus(status: string, language: RoomLanguage) {
+  if (status === "done") return { label: tr(language, "Terminé", "Done"), classes: "bg-[#edf7ef] text-[#376b43]" };
+  if (status === "in_progress") return { label: tr(language, "En cours", "In progress"), classes: "bg-[#f3f0ff] text-[#5c50ae]" };
+  return { label: tr(language, "À faire", "To do"), classes: "bg-[#f1f3f4] text-[#60696e]" };
 }
 
-function SD01Document({ content }: { content: SD01Content }) {
+function SD01Document({ content, language }: { content: SD01Content; language: RoomLanguage }) {
   return <div className="space-y-5 sm:space-y-6">
-    <Section title="Synthèse exécutive" kicker="SD01 · Compréhension commune"><p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.executiveSummary || "Synthèse en cours de validation."}</p></Section>
-    {content.stakeholders?.length ? <SD01KeyPeoplePublic stakeholders={content.stakeholders} /> : null}
-    <Section title="Contexte"><div className="grid gap-5 sm:grid-cols-[170px_1fr]"><div><Eyebrow>Secteur</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.companyProfile?.sector || "À confirmer"}</div></div><div><Eyebrow>Entreprise</Eyebrow><p className="mt-2">{content.companyProfile?.description || "À compléter"}</p></div></div>{content.companyProfile?.context ? <p className="mt-5 border-t border-[#eceeef] pt-5">{content.companyProfile.context}</p> : null}</Section>
-    <Section title="Enjeux prioritaires">{content.painPoints?.length ? <div className="space-y-5">{content.painPoints.map((pain, index) => <div key={index} className="border-b border-[#eceeef] pb-5 last:border-0 last:pb-0"><div className="font-semibold text-[#202a2f]">{pain.title}</div><div className="mt-2"><BulletList items={pain.details} /></div></div>)}</div> : <p className="italic text-[#81898e]">Enjeux à préciser.</p>}</Section>
-    <Section title="Réponse envisagée">{content.solutionFit?.length ? <div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div> : <p className="italic text-[#81898e]">Réponse à préciser.</p>}</Section>
-    <Section title="Décisions et prochaines étapes"><PairGrid leftTitle="Décisions" left={<BulletList items={content.decisions} />} rightTitle="Prochaines actions" right={<BulletList items={(content.nextSteps || []).map(step => `${step.owner || "À définir"} — ${step.action}${step.dueDate ? ` · ${formatDate(step.dueDate)}` : ""}`)} />} /></Section>
+    <Section title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")}><p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.executiveSummary || tr(language, "Synthèse en cours de validation.", "Summary pending approval.")}</p></Section>
+    {content.stakeholders?.length ? <SD01KeyPeoplePublic stakeholders={content.stakeholders} language={language} /> : null}
+    <Section title={tr(language, "Contexte", "Context")}><div className="grid gap-5 sm:grid-cols-[170px_1fr]"><div><Eyebrow>{tr(language, "Secteur", "Industry")}</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.companyProfile?.sector || "À confirmer"}</div></div><div><Eyebrow>{tr(language, "Entreprise", "Company")}</Eyebrow><p className="mt-2">{content.companyProfile?.description || "À compléter"}</p></div></div>{content.companyProfile?.context ? <p className="mt-5 border-t border-[#eceeef] pt-5">{content.companyProfile.context}</p> : null}</Section>
+    <Section title={tr(language, "Enjeux prioritaires", "Top priorities")}>{content.painPoints?.length ? <div className="space-y-5">{content.painPoints.map((pain, index) => <div key={index} className="border-b border-[#eceeef] pb-5 last:border-0 last:pb-0"><div className="font-semibold text-[#202a2f]">{pain.title}</div><div className="mt-2"><BulletList items={pain.details} /></div></div>)}</div> : <p className="italic text-[#81898e]">Enjeux à préciser.</p>}</Section>
+    <Section title={tr(language, "Réponse envisagée", "Proposed response")}>{content.solutionFit?.length ? <div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div> : <p className="italic text-[#81898e]">Réponse à préciser.</p>}</Section>
+    <Section title={tr(language, "Décisions et prochaines étapes", "Decisions & next steps")}><PairGrid leftTitle={tr(language, "Décisions", "Decisions")} left={<BulletList items={content.decisions} />} rightTitle={tr(language, "Prochaines actions", "Next actions")} right={<BulletList items={(content.nextSteps || []).map(step => `${step.owner || tr(language, "À définir", "TBD")} — ${step.action}${step.dueDate ? ` · ${formatDate(step.dueDate, language)}` : ""}`)} />} /></Section>
   </div>;
 }
 
-function SD02Document({ content }: { content: SD02Content }) {
+function SD02Document({ content, language }: { content: SD02Content; language: RoomLanguage }) {
   const steps = content.milestones || [];
-  return <div className="space-y-5 sm:space-y-6"><Section title="Plan d’action" kicker="SD02 · Les étapes à franchir ensemble">
+  return <div className="space-y-5 sm:space-y-6"><Section title={tr(language, "Plan d’action", "Action plan")} kicker={tr(language, "SD02 · Les étapes à franchir ensemble", "SD02 · Steps to complete together")}>
     {steps.length ? <div className="relative"><div className="absolute bottom-8 left-[15px] top-8 w-px bg-[#d9dde0] sm:left-[19px]" /><div className="space-y-4">{steps.map((item, index) => {
-      const status = stageStatus(item.status);
+      const status = stageStatus(item.status, language);
       return <article key={`${item.milestone}-${index}`} className="relative grid grid-cols-[32px_1fr] gap-3 sm:grid-cols-[40px_1fr] sm:gap-4">
         <div className="relative z-10 mt-4 grid h-8 w-8 place-items-center rounded-full border-2 border-white bg-[#6e62c3] font-mono text-[10px] font-semibold text-white shadow-sm sm:h-10 sm:w-10">{String(index + 1).padStart(2, "0")}</div>
-        <div className="rounded-[14px] border border-[#e1e5e7] bg-white p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><h3 className="text-[17px] font-semibold leading-6 text-[#202a2f]">{item.milestone}</h3><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.classes}`}>{status.label}</span></div><div className="mt-4 grid gap-3 border-t border-[#eceeef] pt-4 text-[13px] sm:grid-cols-2"><div><Eyebrow>Responsable</Eyebrow><div className="mt-1 font-medium text-[#4c565b]">{item.owner || "À définir"}</div></div><div><Eyebrow>Échéance</Eyebrow><div className="mt-1 font-medium text-[#4c565b]">{formatDate(item.dueDate) || "À définir"}</div></div></div>{item.dependency ? <div className="mt-3 rounded-lg bg-[#f6f7f8] px-3 py-2 text-[12px] text-[#687277]"><strong>Dépendance :</strong> {item.dependency}</div> : null}</div>
+        <div className="rounded-[14px] border border-[#e1e5e7] bg-white p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><h3 className="text-[17px] font-semibold leading-6 text-[#202a2f]">{item.milestone}</h3><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.classes}`}>{status.label}</span></div><div className="mt-4 grid gap-3 border-t border-[#eceeef] pt-4 text-[13px] sm:grid-cols-2"><div><Eyebrow>{tr(language, "Responsable", "Owner")}</Eyebrow><div className="mt-1 font-medium text-[#4c565b]">{item.owner || tr(language, "À définir", "TBD")}</div></div><div><Eyebrow>{tr(language, "Échéance", "Due date")}</Eyebrow><div className="mt-1 font-medium text-[#4c565b]">{formatDate(item.dueDate, language) || tr(language, "À définir", "TBD")}</div></div></div>{item.dependency ? <div className="mt-3 rounded-lg bg-[#f6f7f8] px-3 py-2 text-[12px] text-[#687277]"><strong>{tr(language, "Dépendance :", "Dependency:")}</strong> {item.dependency}</div> : null}</div>
       </article>;
-    })}</div></div> : <p className="italic text-[#81898e]">Aucune étape définie.</p>}
+    })}</div></div> : <p className="italic text-[#81898e]">{tr(language, "Aucune étape définie.", "No step defined yet.")}</p>}
   </Section></div>;
 }
 
-function SD03Document({ content }: { content: SD03Content }) {
+function SD03Document({ content, language }: { content: SD03Content; language: RoomLanguage }) {
   return <div className="space-y-5 sm:space-y-6">
-    <Section title="Solution retenue" kicker="SD03 · Solution & intégration"><p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.solutionSummary || "Solution à finaliser."}</p></Section>
-    <Section title="Périmètre"><PairGrid leftTitle="Inclus" left={<BulletList items={content.scopeIn} />} rightTitle="Hors périmètre" right={<BulletList items={content.scopeOut} />} /></Section>
-    <Section title="Intégration"><PairGrid leftTitle="Intégrations" left={<BulletList items={content.integrations} />} rightTitle="Données nécessaires" right={<BulletList items={content.dataRequirements} />} /></Section>
-    <Section title="Pilote"><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl bg-[#f6f7f8] p-4"><Eyebrow>Périmètre</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.pilot?.perimeter || "À définir"}</div></div><div className="rounded-xl bg-[#f6f7f8] p-4"><Eyebrow>Durée</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.pilot?.duration || "À définir"}</div></div></div><div className="mt-5"><Eyebrow>Critères de succès</Eyebrow><div className="mt-3"><BulletList items={content.pilot?.successMetrics} /></div></div></Section>
-    <Section title="Déploiement"><PairGrid leftTitle="Sécurité & conformité" left={<BulletList items={content.securityAndCompliance} />} rightTitle="Plan de déploiement" right={<BulletList items={content.deploymentPlan} />} /></Section>
+    <Section title={tr(language, "Solution retenue", "Selected solution")} kicker={tr(language, "SD03 · Solution & intégration", "SD03 · Solution & integration")}><p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.solutionSummary || "Solution à finaliser."}</p></Section>
+    <Section title={tr(language, "Périmètre", "Scope")}><PairGrid leftTitle={tr(language, "Inclus", "Included")} left={<BulletList items={content.scopeIn} />} rightTitle={tr(language, "Hors périmètre", "Out of scope")} right={<BulletList items={content.scopeOut} />} /></Section>
+    <Section title={tr(language, "Intégration", "Integration")}><PairGrid leftTitle={tr(language, "Intégrations", "Integrations")} left={<BulletList items={content.integrations} />} rightTitle={tr(language, "Données nécessaires", "Required data")} right={<BulletList items={content.dataRequirements} />} /></Section>
+    <Section title={tr(language, "Pilote", "Pilot")}><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl bg-[#f6f7f8] p-4"><Eyebrow>{tr(language, "Périmètre", "Scope")}</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.pilot?.perimeter || "À définir"}</div></div><div className="rounded-xl bg-[#f6f7f8] p-4"><Eyebrow>{tr(language, "Durée", "Duration")}</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.pilot?.duration || "À définir"}</div></div></div><div className="mt-5"><Eyebrow>{tr(language, "Critères de succès", "Success criteria")}</Eyebrow><div className="mt-3"><BulletList items={content.pilot?.successMetrics} /></div></div></Section>
+    <Section title={tr(language, "Déploiement", "Rollout")}><PairGrid leftTitle={tr(language, "Sécurité & conformité", "Security & compliance")} left={<BulletList items={content.securityAndCompliance} />} rightTitle={tr(language, "Plan de déploiement", "Rollout plan")} right={<BulletList items={content.deploymentPlan} />} /></Section>
   </div>;
 }
 
-function SD04Document({ content }: { content: SD04Content }) {
+function SD04Document({ content, language }: { content: SD04Content; language: RoomLanguage }) {
   const pdfUrl = /^https?:\/\//i.test(content.deckSubtitle || "") ? content.deckSubtitle : "";
   const fileName = content.deckTitle || "Offre commerciale.pdf";
-  return <div className="space-y-5 sm:space-y-6"><Section title="Document commercial" kicker="SD04 · PDF commercial">
+  return <div className="space-y-5 sm:space-y-6"><Section title={tr(language, "Document commercial", "Commercial document")} kicker={tr(language, "SD04 · PDF commercial", "SD04 · Commercial PDF")}>
     {pdfUrl ? <div className="overflow-hidden rounded-[16px] border border-[#d9dee1] bg-[#eef0f2] shadow-sm">
       <div className="flex flex-col gap-3 border-b border-white/10 bg-[#20282d] px-4 py-3 text-white sm:flex-row sm:items-center">
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10"><FileText className="h-4 w-4" /></div>
-        <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{fileName}</div><div className="mt-0.5 text-[11px] text-white/55">Document PDF partagé par Gando</div></div>
-        <a href={pdfUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 text-[12px] font-semibold text-[#20282d]"><ExternalLink className="h-3.5 w-3.5" /> Ouvrir en plein écran</a>
+        <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{fileName}</div><div className="mt-0.5 text-[11px] text-white/55">{tr(language, "Document PDF partagé par Gando", "PDF shared by Gando")}</div></div>
+        <a href={pdfUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 text-[12px] font-semibold text-[#20282d]"><ExternalLink className="h-3.5 w-3.5" /> {tr(language, "Ouvrir en plein écran", "Open full screen")}</a>
       </div>
-      <div className="p-2 sm:p-4"><iframe src={cleanPdfViewerUrl(pdfUrl)} title={fileName} className="hidden h-[780px] w-full rounded-lg border border-[#d9dee1] bg-white md:block" /><div className="grid min-h-40 place-items-center rounded-lg bg-white p-6 text-center md:hidden"><div><FileText className="mx-auto h-8 w-8 text-[#7166c7]" /><p className="mt-3 text-sm text-[#687277]">Ouvrez le PDF en plein écran pour une lecture confortable.</p></div></div></div>
-    </div> : <p className="italic text-[#81898e]">Aucun PDF n’a encore été publié.</p>}
+      <div className="p-2 sm:p-4"><iframe src={cleanPdfViewerUrl(pdfUrl)} title={fileName} className="hidden h-[780px] w-full rounded-lg border border-[#d9dee1] bg-white md:block" /><div className="grid min-h-40 place-items-center rounded-lg bg-white p-6 text-center md:hidden"><div><FileText className="mx-auto h-8 w-8 text-[#7166c7]" /><p className="mt-3 text-sm text-[#687277]">{tr(language, "Ouvrez le PDF en plein écran pour une lecture confortable.", "Open the PDF full screen for comfortable reading.")}</p></div></div></div>
+    </div> : <p className="italic text-[#81898e]">{tr(language, "Aucun PDF n’a encore été publié.", "No PDF has been published yet.")}</p>}
   </Section></div>;
 }
 
 function SD05Document({ content, token, visitorEmail, language }: { content: SD05Content; token: string; visitorEmail: string; language: RoomLanguage }) {
   const signed = content.contractStatus === "signed";
   const ready = content.contractStatus === "ready_to_sign";
-  return <div className="space-y-5 sm:space-y-6"><Section title={content.contractTitle || "Contrat"} kicker="SD05 · Contrat & signature">
-    <div className="flex flex-col gap-5"><div className="flex flex-wrap items-center gap-3"><span className={`inline-flex rounded-full px-3 py-1.5 text-[12px] font-semibold ${signed ? "bg-[#edf7ef] text-[#376b43]" : ready ? "bg-[#f3f0ff] text-[#5c50ae]" : "bg-[#f1f3f4] text-[#60696e]"}`}>{signed ? "Contrat signé" : ready ? "Prêt à signer" : "Brouillon"}</span>{content.signatureDeadline ? <span className="text-sm text-[#687277]">Signature attendue avant le {formatDate(content.signatureDeadline)}</span> : null}</div>{content.contractSummary ? <p className="text-[16px] leading-7 text-[#465157]">{content.contractSummary}</p> : null}{content.contractUrl ? <div className="flex flex-wrap gap-2"><a href={content.contractUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 w-fit items-center gap-2 rounded-xl bg-[#202a2f] px-5 text-[13px] font-semibold text-white"><FileSignature className="h-4 w-4" />{signed ? tr(language, "Voir le contrat signé", "View signed contract") : tr(language, "Ouvrir et signer le contrat", "Open and sign contract")}<ExternalLink className="h-4 w-4" /></a>{signed ? <a href={`/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(visitorEmail)}`} className="inline-flex h-11 w-fit items-center gap-2 rounded-xl border border-[#ccd2d5] bg-white px-5 text-[13px] font-semibold text-[#202a2f]"><Download className="h-4 w-4" />{tr(language, "Télécharger le PDF signé", "Download signed PDF")}</a> : null}</div> : <p className="italic text-[#81898e]">{tr(language, "Le lien du contrat sera ajouté ici.", "The contract link will appear here.")}</p>}</div>
-  </Section>{content.signatories?.length ? <Section title="Signataires">{content.signatories.map((person, index) => <div key={`${person.email}-${index}`} className="flex items-center justify-between gap-4 border-b border-[#eceeef] py-3 last:border-0"><div><div className="font-semibold text-[#202a2f]">{person.name}</div><div className="text-sm text-[#687277]">{person.role}{person.email ? ` · ${person.email}` : ""}</div></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${person.signatureStatus === "signed" ? "bg-[#edf7ef] text-[#376b43]" : "bg-[#f1f3f4] text-[#60696e]"}`}>{person.signatureStatus === "signed" ? "Signé" : person.signatureStatus === "sent" ? "Envoyé" : "À signer"}</span></div>)}</Section> : null}</div>;
+  return <div className="space-y-5 sm:space-y-6"><Section title={content.contractTitle || tr(language, "Contrat", "Contract")} kicker={tr(language, "SD05 · Contrat & signature", "SD05 · Contract & signature")}>
+    <div className="flex flex-col gap-5"><div className="flex flex-wrap items-center gap-3"><span className={`inline-flex rounded-full px-3 py-1.5 text-[12px] font-semibold ${signed ? "bg-[#edf7ef] text-[#376b43]" : ready ? "bg-[#f3f0ff] text-[#5c50ae]" : "bg-[#f1f3f4] text-[#60696e]"}`}>{signed ? tr(language, "Contrat signé", "Signed contract") : ready ? tr(language, "Prêt à signer", "Ready to sign") : tr(language, "Brouillon", "Draft")}</span>{content.signatureDeadline ? <span className="text-sm text-[#687277]">{tr(language, "Signature attendue avant le", "Signature due by")} {formatDate(content.signatureDeadline, language)}</span> : null}</div>{content.contractSummary ? <p className="text-[16px] leading-7 text-[#465157]">{content.contractSummary}</p> : null}{content.contractUrl ? <div className="flex flex-wrap gap-2"><a href={content.contractUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 w-fit items-center gap-2 rounded-xl bg-[#202a2f] px-5 text-[13px] font-semibold text-white"><FileSignature className="h-4 w-4" />{signed ? tr(language, "Voir le contrat signé", "View signed contract") : tr(language, "Ouvrir et signer le contrat", "Open and sign contract")}<ExternalLink className="h-4 w-4" /></a>{signed ? <a href={`/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(visitorEmail)}`} className="inline-flex h-11 w-fit items-center gap-2 rounded-xl border border-[#ccd2d5] bg-white px-5 text-[13px] font-semibold text-[#202a2f]"><Download className="h-4 w-4" />{tr(language, "Télécharger le PDF signé", "Download signed PDF")}</a> : null}</div> : <p className="italic text-[#81898e]">{tr(language, "Le lien du contrat sera ajouté ici.", "The contract link will appear here.")}</p>}</div>
+  </Section>{content.signatories?.length ? <Section title={tr(language, "Signataires", "Signatories")}>{content.signatories.map((person, index) => <div key={`${person.email}-${index}`} className="flex items-center justify-between gap-4 border-b border-[#eceeef] py-3 last:border-0"><div><div className="font-semibold text-[#202a2f]">{person.name}</div><div className="text-sm text-[#687277]">{person.role}{person.email ? ` · ${person.email}` : ""}</div></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${person.signatureStatus === "signed" ? "bg-[#edf7ef] text-[#376b43]" : "bg-[#f1f3f4] text-[#60696e]"}`}>{person.signatureStatus === "signed" ? tr(language, "Signé", "Signed") : person.signatureStatus === "sent" ? tr(language, "Envoyé", "Sent") : tr(language, "À signer", "To sign")}</span></div>)}</Section> : null}</div>;
 }
 
 function DocumentBody({ document, token, visitorEmail, language }: { document: PublicDocument; token: string; visitorEmail: string; language: RoomLanguage }) {
-  if (document.code === "SD01") return <SD01Document content={document.content as SD01Content} />;
-  if (document.code === "SD02") return <SD02Document content={document.content as unknown as SD02Content} />;
-  if (document.code === "SD03") return <SD03Document content={document.content as unknown as SD03Content} />;
-  if (document.code === "SD04") return <SD04Document content={document.content as unknown as SD04Content} />;
+  if (document.code === "SD01") return <SD01Document content={document.content as SD01Content} language={language} />;
+  if (document.code === "SD02") return <SD02Document content={document.content as unknown as SD02Content} language={language} />;
+  if (document.code === "SD03") return <SD03Document content={document.content as unknown as SD03Content} language={language} />;
+  if (document.code === "SD04") return <SD04Document content={document.content as unknown as SD04Content} language={language} />;
   return <SD05Document content={document.content as unknown as SD05Content} token={token} visitorEmail={visitorEmail} language={language} />;
 }
 
