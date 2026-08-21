@@ -8,7 +8,7 @@ export type SDRoomBrandTheme = "gando" | "gradient" | "dark" | "light";
 
 export const SD_STAGE_META: Record<SDCode, { title: string; subtitle: string }> = {
   SD01: { title: "Synthèse", subtitle: "Contexte, enjeux, processus, décisions et prochaines étapes" },
-  SD02: { title: "Roadmap partagée", subtitle: "Mutual Action Plan · étapes, responsabilités, échéances, décision et go-live" },
+  SD02: { title: "Plan d’action", subtitle: "Étapes partagées · ordre, responsables, échéances et statut" },
   SD03: { title: "Solution & intégration", subtitle: "Étape facultative · périmètre, pilote, données et déploiement" },
   SD04: { title: "Pitch deck commercial", subtitle: "Étape facultative · récit commercial, ROI, preuves, offre et décision" },
   SD05: { title: "Contrat & signature", subtitle: "Étape obligatoire · version contractuelle, points juridiques et circuit de signature" },
