@@ -19,7 +19,7 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
     { value: "content", label: "SD01 · Synthèse", icon: FileText },
     { value: "plan", label: "SD02 · Plan d’action", icon: ListChecks },
     { value: "solution", label: "SD03 · Solution", icon: Settings2 },
-    { value: "offer", label: "SD04 · Offre", icon: Presentation },
+    { value: "offer", label: "SD04 · PDF commercial", icon: Presentation },
     { value: "contract", label: "SD05 · Contrat & signature", icon: FileSignature },
     { value: "branding", label: "Branding client", icon: Palette },
     { value: "preview", label: "Prévisualisation", icon: Eye },
