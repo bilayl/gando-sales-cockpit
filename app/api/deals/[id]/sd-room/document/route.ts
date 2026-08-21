@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
-import { getSDRoomBundle, requireSDInternalAccess, saveSDDocument } from "@/lib/sd-room";
+import { getSDRoomBundle, saveSDDocument } from "@/lib/sd-room";
+import { requireSDInternalAccess } from "@/lib/sd-room-access";
 import { normalizeStageContent } from "@/lib/sd-stage-content";
 import { normalizeSD05NativeContent } from "@/lib/sd05-contract";
 import { SD_CODES, type SDCode } from "@/lib/sd-room-types";
