@@ -114,10 +114,14 @@ function SD04Document({ content }: { content: SD04Content }) {
   const pdfUrl = /^https?:\/\//i.test(content.deckSubtitle || "") ? content.deckSubtitle : "";
   const fileName = content.deckTitle || "Offre commerciale.pdf";
   return <div className="space-y-5 sm:space-y-6"><Section title="Document commercial" kicker="SD04 · PDF commercial">
-    {pdfUrl ? <>
-      <div className="flex flex-col gap-4 rounded-xl border border-[#e1e5e7] bg-[#f7f8f9] p-4 sm:flex-row sm:items-center"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#eeeaff] text-[#5d52b6]"><FileText className="h-5 w-5" /></div><div className="min-w-0 flex-1"><div className="truncate font-semibold text-[#202a2f]">{fileName}</div><div className="mt-1 text-sm text-[#687277]">Offre commerciale au format PDF</div></div><a href={pdfUrl} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#202a2f] px-4 text-[13px] font-semibold text-white"><ExternalLink className="h-4 w-4" /> Ouvrir le PDF</a></div>
-      <iframe src={pdfUrl} title={fileName} className="mt-5 hidden h-[760px] w-full rounded-xl border border-[#dde2e5] bg-white md:block" />
-    </> : <p className="italic text-[#81898e]">Aucun PDF n’a encore été publié.</p>}
+    {pdfUrl ? <div className="overflow-hidden rounded-[16px] border border-[#d9dee1] bg-[#eef0f2] shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-white/10 bg-[#20282d] px-4 py-3 text-white sm:flex-row sm:items-center">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10"><FileText className="h-4 w-4" /></div>
+        <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{fileName}</div><div className="mt-0.5 text-[11px] text-white/55">Document PDF partagé par Gando</div></div>
+        <a href={pdfUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 text-[12px] font-semibold text-[#20282d]"><ExternalLink className="h-3.5 w-3.5" /> Ouvrir en plein écran</a>
+      </div>
+      <div className="p-2 sm:p-4"><iframe src={pdfUrl} title={fileName} className="hidden h-[780px] w-full rounded-lg border border-[#d9dee1] bg-white md:block" /><div className="grid min-h-40 place-items-center rounded-lg bg-white p-6 text-center md:hidden"><div><FileText className="mx-auto h-8 w-8 text-[#7166c7]" /><p className="mt-3 text-sm text-[#687277]">Ouvrez le PDF en plein écran pour une lecture confortable.</p></div></div></div>
+    </div> : <p className="italic text-[#81898e]">Aucun PDF n’a encore été publié.</p>}
   </Section></div>;
 }
 
