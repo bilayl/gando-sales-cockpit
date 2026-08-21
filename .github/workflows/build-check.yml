@@ -26,7 +26,7 @@ jobs:
           if grep -q "function ContractTextEditor" components/sd05-contract-builder.tsx; then
             echo "SD editor fixes already applied"
           else
-            python scripts/apply_editor_heading_fix.py
+            python scripts/apply_sd05_title_fix.py
           fi
       - run: npm ci
       - run: npm run build
