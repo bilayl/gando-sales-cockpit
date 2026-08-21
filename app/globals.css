@@ -101,6 +101,14 @@ body {
 }
 
 button, input, select, textarea { font: inherit; }
+input, select, textarea { color: var(--foreground); }
+input::placeholder, textarea::placeholder { color: #7c858a; opacity: 1; }
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--foreground);
+  caret-color: var(--foreground);
+}
 ::selection { background: color-mix(in srgb, var(--primary) 18%, transparent); }
 
 .font-display { font-family: "Manrope", ui-sans-serif, system-ui, sans-serif; }
