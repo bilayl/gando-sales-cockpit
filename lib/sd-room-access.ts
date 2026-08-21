@@ -9,7 +9,7 @@ function cleanIdentity(value: unknown) {
 export async function requireSDInternalAccess() {
   const session = await getCockpitSession();
   if (!session) {
-    throw Object.assign(new Error("UNAUTHORIZED"), { status: 401 });
+    throw Object.assign(new Error("Reconnectez-vous au Sales Cockpit pour continuer."), { status: 401 });
   }
 
   return cleanIdentity(session.email) || String(session.displayName || "").trim() || "équipe Gando";
