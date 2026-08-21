@@ -2,11 +2,11 @@ import type { SDCode } from "@/lib/sd-room-types";
 
 export type MutualActionItem = {
   milestone: string;
-  workstream: "business" | "technical" | "legal" | "procurement" | "other";
-  organization: "client" | "gando" | "joint";
+  workstream: string;
+  organization: string;
   owner: string;
   dueDate: string;
-  status: "not_started" | "in_progress" | "done";
+  status: string;
   dependency: string;
 };
 
@@ -73,8 +73,8 @@ export type SD05Content = {
   renewal: string;
   terminationNotice: string;
   signatureDeadline: string;
-  legalItems: Array<{ topic: string; status: "open" | "in_review" | "approved"; owner: string; notes: string }>;
-  signatories: Array<{ name: string; role: string; organization: string; email: string; signatureStatus: "pending" | "sent" | "signed" }>;
+  legalItems: Array<{ topic: string; status: string; owner: string; notes: string }>;
+  signatories: Array<{ name: string; role: string; organization: string; email: string; signatureStatus: string }>;
   signatureSteps: string[];
   finalConditions: string[];
   goLiveDate: string;
@@ -177,9 +177,9 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       decisionProcess: stringList(source.decisionProcess),
       milestones: Array.isArray(source.milestones) ? source.milestones.slice(0, 80).map(item => {
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
-        const status: MutualActionItem["status"] = row.status === "done" || row.status === "in_progress" ? row.status : "not_started";
-        const workstream: MutualActionItem["workstream"] = row.workstream === "technical" || row.workstream === "legal" || row.workstream === "procurement" || row.workstream === "other" ? row.workstream : "business";
-        const organization: MutualActionItem["organization"] = row.organization === "client" || row.organization === "gando" ? row.organization : "joint";
+        const status = row.status === "done" || row.status === "in_progress" ? row.status : "not_started";
+        const workstream = row.workstream === "technical" || row.workstream === "legal" || row.workstream === "procurement" || row.workstream === "other" ? row.workstream : "business";
+        const organization = row.organization === "client" || row.organization === "gando" ? row.organization : "joint";
         return { milestone: text(row.milestone, 1000), workstream, organization, owner: text(row.owner, 300), dueDate: text(row.dueDate, 40), status, dependency: text(row.dependency, 1000) };
       }).filter(item => item.milestone) : [],
       clientCommitments: stringList(source.clientCommitments),
@@ -250,12 +250,12 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       signatureDeadline: text(source.signatureDeadline, 40),
       legalItems: Array.isArray(source.legalItems) ? source.legalItems.slice(0, 80).map(item => {
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
-        const status: SD05Content["legalItems"][number]["status"] = row.status === "approved" || row.status === "in_review" ? row.status : "open";
+        const status = row.status === "approved" || row.status === "in_review" ? row.status : "open";
         return { topic: text(row.topic, 500), status, owner: text(row.owner, 300), notes: text(row.notes, 1000) };
       }).filter(item => item.topic) : [],
       signatories: Array.isArray(source.signatories) ? source.signatories.slice(0, 30).map(item => {
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
-        const signatureStatus: SD05Content["signatories"][number]["signatureStatus"] = row.signatureStatus === "sent" || row.signatureStatus === "signed" ? row.signatureStatus : "pending";
+        const signatureStatus = row.signatureStatus === "sent" || row.signatureStatus === "signed" ? row.signatureStatus : "pending";
         return { name: text(row.name, 300), role: text(row.role, 300), organization: text(row.organization, 300), email: text(row.email, 500), signatureStatus };
       }).filter(item => item.name) : [],
       signatureSteps: stringList(source.signatureSteps),
