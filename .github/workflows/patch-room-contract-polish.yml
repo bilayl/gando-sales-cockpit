@@ -1,0 +1,32 @@
+name: Patch room contract polish
+
+on:
+  push:
+    branches:
+      - feat/room-contract-pdf-polish-i18n
+    paths:
+      - scripts/patch_room_contract_polish.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/room-contract-pdf-polish-i18n
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python scripts/patch_room_contract_polish.py
+      - name: Commit patch
+        run: |
+          git config user.name "gando-ci"
+          git config user.email "gando-ci@users.noreply.github.com"
+          git add components/sd04-offer-builder.tsx components/sd05-contract-builder.tsx components/sd05-contract-renderer.tsx components/sd01-key-people-public.tsx components/public-sd-room-v6.tsx
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "feat: polish room PDF, contracts and English mode"
+          git push origin HEAD:feat/room-contract-pdf-polish-i18n
