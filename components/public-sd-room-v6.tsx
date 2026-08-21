@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Check, CheckCircle2, ChevronRight, ExternalLink, FileSignature, FileText, Loader2, LockKeyhole, MessageSquare, ShieldCheck } from "lucide-react";
 import { GandoMark } from "@/components/gando-mark";
+import { SD01KeyPeoplePublic } from "@/components/sd01-key-people-public";
 import { SDRoomBrandBanner } from "@/components/sd-room-brand-banner";
 import { SD_CODES, SD_STAGE_META, type SD01Content, type SDCode, type SDDocumentRecord, type SDRoomBrandTheme } from "@/lib/sd-room-types";
 import type { SD02Content, SD03Content, SD04Content, SD05Content } from "@/lib/sd-stage-content";
@@ -80,6 +81,7 @@ function stageStatus(status: string) {
 function SD01Document({ content }: { content: SD01Content }) {
   return <div className="space-y-5 sm:space-y-6">
     <Section title="Synthèse exécutive" kicker="SD01 · Compréhension commune"><p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.executiveSummary || "Synthèse en cours de validation."}</p></Section>
+    {content.stakeholders?.length ? <SD01KeyPeoplePublic stakeholders={content.stakeholders} /> : null}
     <Section title="Contexte"><div className="grid gap-5 sm:grid-cols-[170px_1fr]"><div><Eyebrow>Secteur</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.companyProfile?.sector || "À confirmer"}</div></div><div><Eyebrow>Entreprise</Eyebrow><p className="mt-2">{content.companyProfile?.description || "À compléter"}</p></div></div>{content.companyProfile?.context ? <p className="mt-5 border-t border-[#eceeef] pt-5">{content.companyProfile.context}</p> : null}</Section>
     <Section title="Enjeux prioritaires">{content.painPoints?.length ? <div className="space-y-5">{content.painPoints.map((pain, index) => <div key={index} className="border-b border-[#eceeef] pb-5 last:border-0 last:pb-0"><div className="font-semibold text-[#202a2f]">{pain.title}</div><div className="mt-2"><BulletList items={pain.details} /></div></div>)}</div> : <p className="italic text-[#81898e]">Enjeux à préciser.</p>}</Section>
     <Section title="Réponse envisagée">{content.solutionFit?.length ? <div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div> : <p className="italic text-[#81898e]">Réponse à préciser.</p>}</Section>

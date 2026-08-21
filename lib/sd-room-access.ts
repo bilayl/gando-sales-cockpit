@@ -1,16 +1,19 @@
 import "server-only";
 
-import { getCockpitSession } from "@/lib/auth";
+import { getCockpitAccess } from "@/lib/cockpit-access";
 
 function cleanIdentity(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
 export async function requireSDInternalAccess() {
-  const session = await getCockpitSession();
-  if (!session) {
+  const access = await getCockpitAccess();
+  if (!access) {
     throw Object.assign(new Error("Reconnectez-vous au Sales Cockpit pour continuer."), { status: 401 });
   }
+  if (!access.canAccessDealRoom) {
+    throw Object.assign(new Error("Le rôle Commercial n’a pas accès à la Deal Room."), { status: 403 });
+  }
 
-  return cleanIdentity(session.email) || String(session.displayName || "").trim() || "équipe Gando";
+  return cleanIdentity(access.email) || String(access.displayName || "").trim() || "équipe Gando";
 }

@@ -19,6 +19,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
+type CockpitRole = "admin" | "member" | "commercial";
+
 const nav = [
   { href: "/prospection", label: "Prospection", icon: PhoneCall },
   { href: "/sourcing", label: "Sourcing", icon: Search },
@@ -31,8 +33,13 @@ const nav = [
   { href: "/deal-room", label: "Deal Room", icon: Target },
 ];
 
-export function AppSidebar({ email }: { email?: string }) {
+function roleLabel(role: CockpitRole) {
+  return role === "admin" ? "Administrateur" : role === "commercial" ? "Commercial" : "Membre";
+}
+
+export function AppSidebar({ email, role = "member" }: { email?: string; role?: CockpitRole }) {
   const pathname = usePathname();
+  const visibleNav = role === "commercial" ? nav.filter(item => item.href !== "/deal-room") : nav;
 
   return (
     <aside className="flex h-screen w-[72px] flex-col border-r border-border bg-card px-2.5 py-4 lg:w-[216px] lg:px-3">
@@ -47,7 +54,7 @@ export function AppSidebar({ email }: { email?: string }) {
       <div className="my-4 border-t border-border" />
 
       <nav className="space-y-1" aria-label="Navigation principale">
-        {nav.map(({ href, label, icon: Icon }) => {
+        {visibleNav.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
           return (
             <Link
@@ -96,7 +103,7 @@ export function AppSidebar({ email }: { email?: string }) {
             <div className="hidden min-w-0 flex-1 lg:block">
               <div className="truncate text-[11px] font-semibold text-foreground">{email || "Compte Gando"}</div>
               <div className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-muted-foreground">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Session Gando active
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {roleLabel(role)}
               </div>
             </div>
             <div className="hidden lg:block"><ThemeToggle /></div>
