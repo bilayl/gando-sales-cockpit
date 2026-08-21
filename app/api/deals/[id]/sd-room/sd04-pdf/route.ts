@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
-import { getSDRoomBundle, requireSDInternalAccess } from "@/lib/sd-room";
+import { getSDRoomBundle } from "@/lib/sd-room";
+import { requireSDInternalAccess } from "@/lib/sd-room-access";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
