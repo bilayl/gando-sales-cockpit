@@ -57,9 +57,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!found) throw Object.assign(new Error("Lien de signature invalide."), { status: 404 });
     const input = await request.json().catch(() => ({}));
     const signatureName = typeof input.signatureName === "string" ? input.signatureName : "";
+    const signatureMode = input.signatureMode === "drawn" ? "drawn" : "typed";
+    const signatureDataUrl = typeof input.signatureDataUrl === "string" ? input.signatureDataUrl : null;
+    const initials = input.initials && typeof input.initials === "object" ? input.initials as Record<string, string> : null;
     const accepted = input.accepted === true;
     const context = technicalContext(request);
-    const row = await signSignatureRequest({ row: found, signatureName, accepted, ...context });
+    const row = await signSignatureRequest({ row: found, signatureName, signatureMode, signatureDataUrl, initials, accepted, ...context });
     return Response.json({
       ok: true,
       request: signatureRequestSummary(row),
@@ -67,6 +70,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         signatureId: row.id,
         contractHash: row.contract_hash,
         signedPayloadHash: row.signed_payload_hash,
+        signatureMode: row.signature_mode,
+        signatureDataHash: row.signature_data_hash,
+        initials: row.initials,
+        pageCount: row.document_page_count,
         signedAt: row.signed_at,
       },
     });
