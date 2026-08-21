@@ -90,13 +90,13 @@ export function AppSidebar({ email }: { email?: string }) {
           <div className="flex items-center justify-center gap-2.5 lg:justify-start">
             <Avatar className="h-7 w-7 shrink-0 border border-border">
               <AvatarFallback className="bg-card text-[11px] font-bold text-primary">
-                {(email || "H").slice(0, 1).toUpperCase()}
+                {(email || "G").slice(0, 1).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="hidden min-w-0 flex-1 lg:block">
-              <div className="truncate text-[11px] font-semibold text-foreground">{email || "HubSpot connecté"}</div>
+              <div className="truncate text-[11px] font-semibold text-foreground">{email || "Compte Gando"}</div>
               <div className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-muted-foreground">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Connecté avec HubSpot
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Session Gando active
               </div>
             </div>
             <div className="hidden lg:block"><ThemeToggle /></div>
