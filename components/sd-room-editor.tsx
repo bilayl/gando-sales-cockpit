@@ -54,6 +54,7 @@ type RoomResponse = {
 };
 
 const EMPTY_ANALYTICS: SDRoomAnalytics = { opens: 0, uniqueVisitors: 0, activeSeconds: 0, lastViewedAt: null, recentVisitors: [] };
+const ROOM_BASE_URL = (process.env.NEXT_PUBLIC_ROOM_BASE_URL || "https://room.gando.pro").replace(/\/$/, "");
 
 function lines(value: string) {
   return value.split("\n").map(item => item.trim()).filter(Boolean);
@@ -227,7 +228,7 @@ export function SDRoomEditor({ dealId }: { dealId: string }) {
   const room = data?.room;
   const currentDocument = data?.documents.find(document => document.code === activeStage);
   const sd01Document = data?.documents.find(document => document.code === "SD01");
-  const shareUrl = room && typeof window !== "undefined" ? `${window.location.origin}/r/${room.share_token}` : "";
+  const shareUrl = room ? `${ROOM_BASE_URL}/r/${room.share_token}` : "";
   const analytics = data?.analytics || EMPTY_ANALYTICS;
 
   const createRoom = async () => {
