@@ -1,0 +1,36 @@
+name: Apply room contract polish
+
+on:
+  push:
+    branches:
+      - feat/room-contract-pdf-polish
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-build:
+    if: github.actor != 'gando-ci'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply patch
+        run: python scripts/apply_room_contract_polish.py
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Commit generated changes
+        run: |
+          git config user.name "gando-ci"
+          git config user.email "gando-ci@users.noreply.github.com"
+          git add components app lib next.config.ts
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "feat: polish public room, PDFs and SD05 contract"
+          git push
