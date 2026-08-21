@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { normalizeSD05NativeContent, SD05_SIGNATURE_CONSENT } from "@/lib/sd05-contract";
+import { contractPageCount, normalizeSD05NativeContent, SD05_SIGNATURE_CONSENT } from "@/lib/sd05-contract";
 import type { SD05Content } from "@/lib/sd-stage-content";
 import type { SDDocumentRecord, SDRoomRecord } from "@/lib/sd-room-types";
 
@@ -23,6 +23,12 @@ export type SignatureRequestRow = {
   status: "pending" | "sent" | "viewed" | "signed" | "expired" | "revoked" | "failed";
   consent_text: string;
   signature_name: string | null;
+  signature_mode: "typed" | "drawn" | null;
+  signature_data: string | null;
+  signature_data_hash: string | null;
+  initials: Record<string, string> | null;
+  document_page_count: number | null;
+  initials_completed_at: string | null;
   signature_ip: string | null;
   signature_user_agent: string | null;
   smtp_provider_message_id: string | null;
@@ -111,12 +117,19 @@ export function signatureRequestSummary(row: SignatureRequestRow) {
     firstViewedAt: row.first_viewed_at,
     signedAt: row.signed_at,
     expiresAt: row.expires_at,
+    signatureMode: row.signature_mode || null,
+    signatureName: row.signature_name || null,
+    signatureDataUrl: row.signature_data || null,
+    signatureDataHash: row.signature_data_hash || null,
+    initials: row.initials || {},
+    documentPageCount: row.document_page_count || contractPageCount(row.contract_snapshot.content),
+    initialsCompletedAt: row.initials_completed_at || null,
   };
 }
 
 export async function recordSignatureEvent(input: {
   requestId: string;
-  eventType: "created" | "email_sent" | "email_failed" | "viewed" | "signed" | "revoked" | "expired";
+  eventType: "created" | "email_sent" | "email_failed" | "viewed" | "initialed" | "signed" | "revoked" | "expired";
   ipAddress?: string | null;
   userAgent?: string | null;
   metadata?: Record<string, unknown>;
@@ -209,9 +222,22 @@ async function updateDocumentAfterSignature(row: SignatureRequestRow) {
   return { allSigned, content: nextContent };
 }
 
+function normalizeInitials(value: unknown, pageCount: number) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const result: Record<string, string> = {};
+  for (let page = 1; page <= pageCount; page += 1) {
+    const current = String(source[String(page)] || "").trim().replace(/\s+/g, " ").slice(0, 12);
+    if (current) result[String(page)] = current;
+  }
+  return result;
+}
+
 export async function signSignatureRequest(input: {
   row: SignatureRequestRow;
   signatureName: string;
+  signatureMode: "typed" | "drawn";
+  signatureDataUrl?: string | null;
+  initials?: Record<string, string> | null;
   accepted: boolean;
   ipAddress?: string | null;
   userAgent?: string | null;
@@ -223,8 +249,31 @@ export async function signSignatureRequest(input: {
   if (row.status === "failed") throw Object.assign(new Error("Cette invitation n'est plus active."), { status: 410 });
   if (!input.accepted) throw Object.assign(new Error("Le consentement à la signature électronique est requis."), { status: 400 });
 
+  const content = normalizeSD05NativeContent(row.contract_snapshot.content);
+  // Legacy snapshots created before page initials existed must remain signable without initials.
+  content.requireInitialsEachPage = row.contract_snapshot.content.requireInitialsEachPage === true;
   const signatureName = input.signatureName.trim().replace(/\s+/g, " ").slice(0, 300);
   if (signatureName.length < 2) throw Object.assign(new Error("Saisissez votre nom complet pour signer."), { status: 400 });
+  if (input.signatureMode === "typed" && !content.allowTypedSignature) throw Object.assign(new Error("La signature écrite n'est pas autorisée pour ce document."), { status: 400 });
+  if (input.signatureMode === "drawn" && !content.allowDrawnSignature) throw Object.assign(new Error("La signature manuscrite n'est pas autorisée pour ce document."), { status: 400 });
+
+  let signatureData: string | null = null;
+  let signatureDataHash: string | null = null;
+  if (input.signatureMode === "drawn") {
+    const candidate = String(input.signatureDataUrl || "");
+    if (!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(candidate) || candidate.length < 200 || candidate.length > 350_000) {
+      throw Object.assign(new Error("Dessinez votre signature manuscrite avant de signer."), { status: 400 });
+    }
+    signatureData = candidate;
+    signatureDataHash = sha256Hex(candidate);
+  }
+
+  const pageCount = contractPageCount(content);
+  const initials = normalizeInitials(input.initials, pageCount);
+  if (content.requireInitialsEachPage) {
+    const missingPages = Array.from({ length: pageCount }, (_, index) => index + 1).filter(page => !initials[String(page)]);
+    if (missingPages.length) throw Object.assign(new Error(`Paraphez toutes les pages avant de signer (${missingPages.length} page(s) restante(s)).`), { status: 400 });
+  }
 
   const recomputedHash = hashSD05SigningSnapshot(row.contract_snapshot);
   if (recomputedHash !== row.contract_hash) {
@@ -233,12 +282,16 @@ export async function signSignatureRequest(input: {
 
   const signedAt = new Date().toISOString();
   const signedPayloadHash = sha256Hex(JSON.stringify(stable({
-    schemaVersion: "gando-sd05-proof-v1",
+    schemaVersion: "gando-sd05-proof-v2",
     requestId: row.id,
     contractHash: row.contract_hash,
     signerEmail: row.signer_email.toLowerCase(),
     signerName: row.signer_name,
     signatureName,
+    signatureMode: input.signatureMode,
+    signatureDataHash,
+    initials,
+    documentPageCount: pageCount,
     consentText: row.consent_text || SD05_SIGNATURE_CONSENT,
     signedAt,
     ipAddress: input.ipAddress || null,
@@ -250,6 +303,12 @@ export async function signSignatureRequest(input: {
     .update({
       status: "signed",
       signature_name: signatureName,
+      signature_mode: input.signatureMode,
+      signature_data: signatureData,
+      signature_data_hash: signatureDataHash,
+      initials,
+      document_page_count: pageCount,
+      initials_completed_at: Object.keys(initials).length ? signedAt : null,
       signature_ip: input.ipAddress || null,
       signature_user_agent: input.userAgent?.slice(0, 1000) || null,
       signed_payload_hash: signedPayloadHash,
@@ -262,12 +321,21 @@ export async function signSignatureRequest(input: {
   if (error) throw error;
   if (data) row = data as SignatureRequestRow;
 
+  if (Object.keys(initials).length) {
+    await recordSignatureEvent({
+      requestId: row.id,
+      eventType: "initialed",
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
+      metadata: { pages: Object.keys(initials), pageCount },
+    });
+  }
   await recordSignatureEvent({
     requestId: row.id,
     eventType: "signed",
     ipAddress: input.ipAddress,
     userAgent: input.userAgent,
-    metadata: { signedPayloadHash, contractHash: row.contract_hash, consentAccepted: true, consentText: row.consent_text },
+    metadata: { signedPayloadHash, contractHash: row.contract_hash, signatureMode: input.signatureMode, signatureDataHash, consentAccepted: true, consentText: row.consent_text },
   });
   await updateDocumentAfterSignature(row);
   return row;
@@ -275,7 +343,7 @@ export async function signSignatureRequest(input: {
 
 export function signatureEvidenceBundle(row: SignatureRequestRow, events: Array<Record<string, unknown>>) {
   return {
-    schemaVersion: "gando-sd05-evidence-v1",
+    schemaVersion: "gando-sd05-evidence-v2",
     generatedAt: new Date().toISOString(),
     signature: {
       id: row.id,
@@ -286,7 +354,13 @@ export function signatureEvidenceBundle(row: SignatureRequestRow, events: Array<
         role: row.signer_role,
         organization: row.signer_organization,
         signatureName: row.signature_name,
+        signatureMode: row.signature_mode,
+        signatureDataUrl: row.signature_data,
+        signatureDataHashSha256: row.signature_data_hash,
+        initials: row.initials || {},
       },
+      documentPageCount: row.document_page_count || contractPageCount(row.contract_snapshot.content),
+      initialsCompletedAt: row.initials_completed_at,
       sentAt: row.sent_at,
       firstViewedAt: row.first_viewed_at,
       signedAt: row.signed_at,
