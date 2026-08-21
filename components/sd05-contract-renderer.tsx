@@ -67,19 +67,45 @@ function weight(block: RenderBlock) {
   return Math.max(0.7, Math.ceil(block.text.length / 520) * 0.85);
 }
 
+function renderSegments(raw: string): RenderBlock[] {
+  const result: RenderBlock[] = [];
+  let paragraph: string[] = [];
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    result.push({ kind: "paragraph", text: paragraph.join("\n").trim() });
+    paragraph = [];
+  };
+  for (const line of raw.split(/\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) { flushParagraph(); continue; }
+    const kind = blockKind(trimmed);
+    if (kind === "paragraph") paragraph.push(trimmed);
+    else {
+      flushParagraph();
+      result.push({ kind, text: displayText(trimmed) });
+    }
+  }
+  flushParagraph();
+  return result;
+}
+
 function paginate(body: string): RenderBlock[][] {
-  const source = body.split(/\n{2,}/).map(item => item.trim()).filter(Boolean).map(raw => ({ kind: blockKind(raw), text: displayText(raw) }));
-  if (!source.length) return [[]];
-  const pages: RenderBlock[][] = [];
-  let page: RenderBlock[] = [];
+  // Preserve the legacy page grouping used by existing signing invitations,
+  // but render headings and their following paragraphs as separate visual blocks.
+  const rawBlocks = body.split(/\n{2,}/).map(item => item.trim()).filter(Boolean);
+  if (!rawBlocks.length) return [[]];
+  const pages: string[][] = [];
+  let page: string[] = [];
   let used = 0;
-  for (const block of source) {
-    const next = weight(block);
+  for (const raw of rawBlocks) {
+    const legacyBlock: RenderBlock = { kind: blockKind(raw), text: displayText(raw) };
+    const next = weight(legacyBlock);
     if (page.length && used + next > 6.2) { pages.push(page); page = []; used = 0; }
-    page.push(block); used += next;
+    page.push(raw);
+    used += next;
   }
   if (page.length) pages.push(page);
-  return pages;
+  return pages.map(items => items.flatMap(renderSegments));
 }
 
 function ContractBlock({ block, articleColor }: { block: RenderBlock; articleColor: string }) {
