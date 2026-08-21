@@ -1,0 +1,41 @@
+name: Apply editor heading fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/apply_editor_heading_fix.py
+      - .github/workflows/apply-editor-heading-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply SD editor fixes
+        run: python scripts/apply_editor_heading_fix.py
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Commit validated app changes
+        run: |
+          git config user.name "gando-ci"
+          git config user.email "gando-ci@users.noreply.github.com"
+          git add components
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git commit -m "fix: improve SD05 title hierarchy and remove SD01 stage cards"
+          git push origin HEAD:main
