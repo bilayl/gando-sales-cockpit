@@ -79,7 +79,7 @@ function ContractTextEditor({ value, onChange, disabled, onAddAnnex }: { value: 
       </Card>
 
       <Card className="space-y-4 p-5"><div><h2 className="font-semibold">Pied de page & confidentialité</h2>'''
-    text, count = pattern.subn(replacement, text, count=1)
+    text, count = pattern.subn(lambda _match: replacement, text, count=1)
     if count != 1:
         raise RuntimeError(f"Contract editor card replacement failed: {count}")
     path.write_text(text)
@@ -131,7 +131,7 @@ function paginate(body: string): RenderBlock[][] {
 }
 
 function ContractBlock'''
-    text, count = pattern.subn(replacement, text, count=1)
+    text, count = pattern.subn(lambda _match: replacement, text, count=1)
     if count != 1:
         raise RuntimeError(f"Renderer pagination replacement failed: {count}")
     path.write_text(text)
