@@ -36,11 +36,11 @@ function ContractTextEditor({ value, onChange, disabled, onAddAnnex }: { value: 
     if (!textarea) return;
     const cursorStart = textarea.selectionStart ?? value.length;
     const cursorEnd = textarea.selectionEnd ?? cursorStart;
-    const lineStart = value.lastIndexOf("\\n", Math.max(0, cursorStart - 1)) + 1;
-    const nextBreak = value.indexOf("\\n", cursorEnd);
+    const lineStart = value.lastIndexOf("\n", Math.max(0, cursorStart - 1)) + 1;
+    const nextBreak = value.indexOf("\n", cursorEnd);
     const lineEnd = nextBreak === -1 ? value.length : nextBreak;
     const currentLine = value.slice(lineStart, lineEnd);
-    const cleaned = currentLine.replace(/^\\s*(?:H[234]:\\s*|#{2,4}\\s+)/i, "").trimStart();
+    const cleaned = currentLine.replace(/^\s*(?:H[234]:\s*|#{2,4}\s+)/i, "").trimStart();
     const replacement = `${prefix}${cleaned}`;
     onChange(`${value.slice(0, lineStart)}${replacement}${value.slice(lineEnd)}`);
     requestAnimationFrame(() => {
@@ -65,7 +65,7 @@ function ContractTextEditor({ value, onChange, disabled, onAddAnnex }: { value: 
       onChange={event => onChange(event.target.value)}
       rows={34}
       disabled={disabled}
-      placeholder={"## ARTICLE 1 — OBJET\\nLe présent article définit…\\n\\n### 1.1 Périmètre\\nLe périmètre comprend…\\n\\n#### Modalités pratiques\\nLes modalités sont…"}
+      placeholder={"## ARTICLE 1 — OBJET\nLe présent article définit…\n\n### 1.1 Périmètre\nLe périmètre comprend…\n\n#### Modalités pratiques\nLes modalités sont…"}
       className="w-full resize-y border-0 bg-transparent px-4 py-4 font-mono text-[13px] leading-6 outline-none disabled:cursor-not-allowed disabled:opacity-60"
     />
     <div className="border-t border-border bg-muted/15 px-4 py-2 text-[11px] leading-5 text-muted-foreground">Place le curseur sur une ligne puis choisis son niveau. Les symboles de structure ne sont jamais affichés dans le contrat final. H2 = titre, H3 = sous-titre, H4 = sous-section.</div>
@@ -101,10 +101,10 @@ new_paginate = '''function renderSegments(raw: string): RenderBlock[] {
   let paragraph: string[] = [];
   const flushParagraph = () => {
     if (!paragraph.length) return;
-    result.push({ kind: "paragraph", text: paragraph.join("\\n").trim() });
+    result.push({ kind: "paragraph", text: paragraph.join("\n").trim() });
     paragraph = [];
   };
-  for (const line of raw.split(/\\n/)) {
+  for (const line of raw.split(/\n/)) {
     const trimmed = line.trim();
     if (!trimmed) { flushParagraph(); continue; }
     const kind = blockKind(trimmed);
@@ -121,7 +121,7 @@ new_paginate = '''function renderSegments(raw: string): RenderBlock[] {
 function paginate(body: string): RenderBlock[][] {
   // Keep legacy blank-block pagination stable for existing signing invitations,
   // while rendering H2/H3/H4 lines independently from their following text.
-  const rawBlocks = body.split(/\\n{2,}/).map(item => item.trim()).filter(Boolean);
+  const rawBlocks = body.split(/\n{2,}/).map(item => item.trim()).filter(Boolean);
   if (!rawBlocks.length) return [[]];
   const pages: string[][] = [];
   let page: string[] = [];
@@ -144,3 +144,4 @@ if count != 1:
 path.write_text(text)
 
 print("editor/title hierarchy fixes applied")
+# retrigger after workflow is present on main
