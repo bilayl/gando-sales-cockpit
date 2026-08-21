@@ -11,16 +11,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const eventTypes = ["room_opened", "stage_viewed", "section_viewed", "heartbeat"];
     if (!eventTypes.includes(body?.eventType)) return Response.json({ error: "Événement invalide." }, { status: 400 });
     const documentCode: SDCode | null = SD_CODES.includes(body?.documentCode) ? body.documentCode : null;
+    const metadata = body?.metadata && typeof body.metadata === "object" ? body.metadata : {};
     await recordSDRoomEventWithIdentity({
       token,
       email: body?.email,
-      firstName: body?.firstName,
-      lastName: body?.lastName,
+      firstName: body?.firstName ?? metadata.firstName,
+      lastName: body?.lastName ?? metadata.lastName,
       sessionId: body?.sessionId,
       eventType: body.eventType,
       documentCode,
       activeSeconds: body?.activeSeconds,
-      metadata: body?.metadata && typeof body.metadata === "object" ? body.metadata : {},
+      metadata,
     });
     return new Response(null, { status: 204 });
   } catch (error) {

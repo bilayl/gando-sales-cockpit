@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   BarChart3,
   CalendarCheck2,
@@ -28,21 +28,11 @@ const nav = [
   { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
   { href: "/analytics", label: "Statistiques", icon: BarChart3 },
-];
-
-const dealRoomLinks = [
-  { href: "/deal-room", label: "Vue d’ensemble", view: null },
-  { href: "/deal-room?view=hot", label: "Hot Deals", view: "hot" },
-  { href: "/deal-room?view=at_risk", label: "At Risk", view: "at_risk" },
-  { href: "/deal-room?view=closing_soon", label: "Closing Soon", view: "closing_soon" },
-  { href: "/deal-room?view=no_activity", label: "No Activity", view: "no_activity" },
+  { href: "/deal-room", label: "Deal Room", icon: Target },
 ];
 
 export function AppSidebar({ email }: { email?: string }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const dealRoomActive = pathname.startsWith("/deal-room");
-  const currentView = searchParams.get("view");
 
   return (
     <aside className="flex h-screen w-[72px] flex-col border-r border-border bg-card px-2.5 py-4 lg:w-[216px] lg:px-3">
@@ -79,41 +69,6 @@ export function AppSidebar({ email }: { email?: string }) {
             </Link>
           );
         })}
-
-        <div>
-          <Link
-            href="/deal-room"
-            title="Deal Room"
-            className={cn(
-              "group flex h-9 items-center justify-center gap-2.5 rounded-lg px-2.5 transition-colors lg:justify-start",
-              dealRoomActive ? "bg-accent" : "hover:bg-muted"
-            )}
-          >
-            <Target className={cn("h-[17px] w-[17px]", dealRoomActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-            <span className="hidden text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground lg:block">Deal Room</span>
-          </Link>
-          <div className="hidden space-y-0.5 pt-0.5 lg:ml-4 lg:block lg:border-l lg:border-border lg:pl-2">
-            {dealRoomLinks.map(link => {
-              const active = pathname === "/deal-room" && link.view === currentView;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "flex h-8 items-center gap-2 rounded-md px-2.5 text-xs font-semibold transition-colors",
-                    active
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <span className={cn("h-1 w-1 rounded-full", active ? "bg-primary" : "bg-border")} />
-                  <span className="truncate">{link.label}</span>
-                  {active ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" /> : null}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
       </nav>
 
       <div className="mt-auto space-y-2 border-t border-border pt-3">
@@ -135,13 +90,13 @@ export function AppSidebar({ email }: { email?: string }) {
           <div className="flex items-center justify-center gap-2.5 lg:justify-start">
             <Avatar className="h-7 w-7 shrink-0 border border-border">
               <AvatarFallback className="bg-card text-[11px] font-bold text-primary">
-                {(email || "H").slice(0, 1).toUpperCase()}
+                {(email || "G").slice(0, 1).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="hidden min-w-0 flex-1 lg:block">
-              <div className="truncate text-[11px] font-semibold text-foreground">{email || "HubSpot connecté"}</div>
+              <div className="truncate text-[11px] font-semibold text-foreground">{email || "Compte Gando"}</div>
               <div className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-muted-foreground">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Connecté avec HubSpot
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Session Gando active
               </div>
             </div>
             <div className="hidden lg:block"><ThemeToggle /></div>

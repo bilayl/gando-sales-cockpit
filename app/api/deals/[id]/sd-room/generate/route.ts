@@ -6,10 +6,10 @@ import { generateSD01 } from "@/lib/sd01-generator";
 import {
   getSDRoomBundle,
   loadAuthorizedOnoffCalls,
-  requireSDInternalAccess,
   saveSDDocument,
   snapshotConversation,
 } from "@/lib/sd-room";
+import { requireSDInternalAccess } from "@/lib/sd-room-access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
