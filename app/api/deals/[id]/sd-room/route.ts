@@ -7,11 +7,11 @@ import {
   createSDRoom,
   getSDRoomBundle,
   listLinkedConversations,
-  requireSDInternalAccess,
   resolveSDRoomComment,
   saveSDDocument,
   updateSDRoomSettings,
 } from "@/lib/sd-room";
+import { requireSDInternalAccess } from "@/lib/sd-room-access";
 import type { SDRoomBrandTheme, SDRoomRecord } from "@/lib/sd-room-types";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
