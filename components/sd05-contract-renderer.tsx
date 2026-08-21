@@ -62,9 +62,8 @@ function displayText(raw: string) {
 }
 
 function weight(block: RenderBlock) {
-  if (["major", "article", "h2"].includes(block.kind)) return 1.35 + Math.ceil(block.text.length / 520) * 0.25;
-  if (["h3", "subsection"].includes(block.kind)) return 0.9 + Math.ceil(block.text.length / 600) * 0.3;
-  if (block.kind === "h4") return 0.7 + Math.ceil(block.text.length / 650) * 0.22;
+  if (["major", "article"].includes(block.kind)) return 1.35 + Math.ceil(block.text.length / 520) * 0.25;
+  if (block.kind === "subsection") return 0.9 + Math.ceil(block.text.length / 600) * 0.3;
   return Math.max(0.7, Math.ceil(block.text.length / 520) * 0.85);
 }
 
