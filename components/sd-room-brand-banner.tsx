@@ -44,7 +44,7 @@ export function SDRoomBrandBanner({
 
   return (
     <section
-      className={cn("relative isolate w-full overflow-hidden bg-gradient-to-br px-6 pb-10 pt-10 shadow-[0_22px_60px_rgba(73,54,160,0.16)]", selected.preview, className)}
+      className={cn("relative isolate w-full overflow-hidden bg-gradient-to-br px-6 !pb-6 !pt-8 !min-h-[260px] sm:!pb-8 sm:!pt-10 sm:!min-h-[300px] shadow-[0_22px_60px_rgba(73,54,160,0.16)]", selected.preview, className)}
       style={bannerUrl ? { backgroundImage: `linear-gradient(110deg, rgba(87,64,211,.84), rgba(157,139,245,.74)), url(${bannerUrl})`, backgroundPosition: "center", backgroundSize: "cover" } : undefined}
     >
       <div className="pointer-events-none absolute -left-20 -top-24 h-52 w-[75%] rotate-[8deg] rounded-full bg-white/10" />
@@ -55,9 +55,9 @@ export function SDRoomBrandBanner({
           <span className={cn("text-4xl font-black", light ? "text-[#172a32]" : "text-white")}>×</span>
           <GandoMark className="h-20 w-20" />
         </div>
-        <div className={cn("mt-6 text-[9px] font-black uppercase tracking-[0.18em]", light ? "text-[#4d39b8]" : "text-white/70")}>Gando Deal Room</div>
-        <div className={cn("mt-2 text-xl font-black tracking-[-0.035em]", light ? "text-[#172a32]" : "text-white")}>{title || `${companyName || "Client"} × Gando`}</div>
-        <div className={cn("mt-2 max-w-xl text-xs leading-5", light ? "text-[#637278]" : "text-white/75")}>{subtitle || "Espace de collaboration stratégique"}</div>
+        <div className={cn("mt-4 text-[9px] font-black uppercase tracking-[0.18em]", light ? "text-[#4d39b8]" : "text-white/70")}>Gando Deal Room</div>
+        <div className={cn("mt-1.5 text-xl font-black tracking-[-0.035em]", light ? "text-[#172a32]" : "text-white")}>{title || `${companyName || "Client"} × Gando`}</div>
+        <div className={cn("mt-1.5 max-w-xl text-xs leading-5", light ? "text-[#637278]" : "text-white/75")}>{subtitle || "Espace de collaboration stratégique"}</div>
       </div>
     </section>
   );
