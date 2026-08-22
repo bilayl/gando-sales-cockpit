@@ -42,6 +42,8 @@ export type SendSmtp2goEmailInput = {
   body: string;
   htmlBody?: string;
   replyTo?: string;
+  fromEmail?: string;
+  fromName?: string;
 };
 
 export type SendSmtp2goEmailResult = {
@@ -64,10 +66,12 @@ type Smtp2goResponse = {
 
 export async function sendSmtp2goEmail(input: SendSmtp2goEmailInput): Promise<SendSmtp2goEmailResult> {
   const apiKey = await resolveApiKey();
-  const sender = smtp2goSender();
+  const defaultSender = smtp2goSender();
+  const senderEmail = input.fromEmail?.trim() || defaultSender.email;
+  const senderName = input.fromName?.trim() || defaultSender.name;
 
   const payload: Record<string, unknown> = {
-    sender: sender.formatted,
+    sender: `${senderName} <${senderEmail}>`,
     to: [input.to],
     subject: input.subject,
     text_body: input.body,
