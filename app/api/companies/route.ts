@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
-import { normalizeHubSpotIndustry } from "@/lib/hubspot-industry";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const COMPANY_PROSPECTION_PROPERTIES = [
@@ -116,18 +115,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Renseignez au moins un nom d’entreprise ou un domaine." }, { status: 400 });
     }
 
-    const warnings: string[] = [];
-    if (props.industry) {
-      const originalIndustry = props.industry;
-      const normalizedIndustry = normalizeHubSpotIndustry(originalIndustry);
-      if (normalizedIndustry) {
-        props.industry = normalizedIndustry;
-      } else {
-        delete props.industry;
-        warnings.push(`Le secteur « ${originalIndustry} » n’est pas une valeur HubSpot valide. L’entreprise a été créée sans secteur.`);
-      }
-    }
-
     const data = await hubspotJson("/crm/objects/2026-03/companies", {
       method: "POST",
       body: JSON.stringify({ properties: props }),
@@ -149,7 +136,7 @@ export async function POST(request: NextRequest) {
     const { error } = await getSupabaseAdmin().from("companies").upsert(row, { onConflict: "hubspot_id" });
     if (error) console.error("Supabase upsert company:", error.message);
 
-    return NextResponse.json({ ...data, ...(warnings.length ? { warnings } : {}) }, { status: 201 });
+    return NextResponse.json(data, { status: 201 });
   } catch (error) {
     const e = error as Error & { status?: number };
     return NextResponse.json({ error: e.message || "Erreur HubSpot", details: e }, { status: e.status || 500 });
