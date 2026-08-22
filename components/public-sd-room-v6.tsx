@@ -132,12 +132,20 @@ function SD04Document({ content, language }: { content: SD04Content; language: R
   </Section></div>;
 }
 
-function SD05Document({ content, token, visitorEmail, language }: { content: SD05Content; token: string; visitorEmail: string; language: RoomLanguage }) {
-  const signed = content.contractStatus === "signed";
+function SD05Document({ content, token, visitorEmail, language, documentStatus }: { content: SD05Content; token: string; visitorEmail: string; language: RoomLanguage; documentStatus: string }) {
+  const validated = documentStatus === "validated";
+  const signed = content.contractStatus === "signed" || validated;
   const ready = content.contractStatus === "ready_to_sign";
   return <div className="space-y-5 sm:space-y-6"><Section title={content.contractTitle || tr(language, "Contrat", "Contract")} kicker={tr(language, "SD05 · Contrat & signature", "SD05 · Contract & signature")}>
-    <div className="flex flex-col gap-5"><div className="flex flex-wrap items-center gap-3"><span className={`inline-flex rounded-full px-3 py-1.5 text-[12px] font-semibold ${signed ? "bg-[#edf7ef] text-[#376b43]" : ready ? "bg-[#f3f0ff] text-[#5c50ae]" : "bg-[#f1f3f4] text-[#60696e]"}`}>{signed ? tr(language, "Contrat signé", "Signed contract") : ready ? tr(language, "Prêt à signer", "Ready to sign") : tr(language, "Brouillon", "Draft")}</span>{content.signatureDeadline ? <span className="text-sm text-[#687277]">{tr(language, "Signature attendue avant le", "Signature due by")} {formatDate(content.signatureDeadline, language)}</span> : null}</div>{content.contractSummary ? <p className="text-[16px] leading-7 text-[#465157]">{content.contractSummary}</p> : null}{content.contractUrl ? <div className="flex flex-wrap gap-2"><a href={content.contractUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 w-fit items-center gap-2 rounded-xl bg-[#202a2f] px-5 text-[13px] font-semibold text-white"><FileSignature className="h-4 w-4" />{signed ? tr(language, "Voir le contrat signé", "View signed contract") : tr(language, "Ouvrir et signer le contrat", "Open and sign contract")}<ExternalLink className="h-4 w-4" /></a>{signed ? <a href={`/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(visitorEmail)}`} className="inline-flex h-11 w-fit items-center gap-2 rounded-xl border border-[#ccd2d5] bg-white px-5 text-[13px] font-semibold text-[#202a2f]"><Download className="h-4 w-4" />{tr(language, "Télécharger le PDF signé", "Download signed PDF")}</a> : null}</div> : <p className="italic text-[#81898e]">{tr(language, "Le lien du contrat sera ajouté ici.", "The contract link will appear here.")}</p>}</div>
-  </Section>{content.signatories?.length ? <Section title={tr(language, "Signataires", "Signatories")}>{content.signatories.map((person, index) => <div key={`${person.email}-${index}`} className="flex items-center justify-between gap-4 border-b border-[#eceeef] py-3 last:border-0"><div><div className="font-semibold text-[#202a2f]">{person.name}</div><div className="text-sm text-[#687277]">{person.role}{person.email ? ` · ${person.email}` : ""}</div></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${person.signatureStatus === "signed" ? "bg-[#edf7ef] text-[#376b43]" : "bg-[#f1f3f4] text-[#60696e]"}`}>{person.signatureStatus === "signed" ? tr(language, "Signé", "Signed") : person.signatureStatus === "sent" ? tr(language, "Envoyé", "Sent") : tr(language, "À signer", "To sign")}</span></div>)}</Section> : null}</div>;
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-3"><span className={`inline-flex rounded-full px-3 py-1.5 text-[12px] font-semibold ${signed ? "bg-[#edf7ef] text-[#376b43]" : ready ? "bg-[#f3f0ff] text-[#5c50ae]" : "bg-[#f1f3f4] text-[#60696e]"}`}>{validated ? tr(language, "Contrat validé", "Contract approved") : signed ? tr(language, "Contrat signé", "Contract signed") : ready ? tr(language, "Prêt à signer", "Ready to sign") : tr(language, "Brouillon", "Draft")}</span>{content.signatureDeadline && !validated ? <span className="text-sm text-[#687277]">{tr(language, "Signature attendue avant le", "Signature expected before")} {formatDate(content.signatureDeadline, language)}</span> : null}</div>
+      <p className="max-w-2xl text-[15px] leading-7 text-[#687277]">{tr(language, "Le contrat n’est pas affiché dans la Room. Il s’ouvre dans un espace sécurisé séparé pour la consultation et la signature.", "The contract is not displayed inside the Room. It opens in a separate secure space for review and signature.")}</p>
+      <div className="flex flex-wrap gap-2">
+        {content.contractUrl ? <a href={content.contractUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 w-fit items-center gap-2 rounded-xl bg-[#202a2f] px-5 text-[13px] font-semibold text-white"><FileSignature className="h-4 w-4" />{validated ? tr(language, "Ouvrir le contrat signé", "Open signed contract") : tr(language, "Ouvrir et signer le contrat", "Open and sign contract")}<ExternalLink className="h-4 w-4" /></a> : !validated ? <span className="text-sm italic text-[#81898e]">{tr(language, "Le lien de signature sera ajouté ici.", "The signature link will appear here.")}</span> : null}
+        {validated ? <a href={`/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(visitorEmail)}`} className="inline-flex h-11 w-fit items-center gap-2 rounded-xl border border-[#ccd2d5] bg-white px-5 text-[13px] font-semibold text-[#202a2f]"><Download className="h-4 w-4" />{tr(language, "Télécharger le contrat PDF", "Download contract PDF")}</a> : null}
+      </div>
+    </div>
+  </Section></div>;
 }
 
 function DocumentBody({ document, token, visitorEmail, language }: { document: PublicDocument; token: string; visitorEmail: string; language: RoomLanguage }) {
@@ -145,7 +153,7 @@ function DocumentBody({ document, token, visitorEmail, language }: { document: P
   if (document.code === "SD02") return <SD02Document content={document.content as unknown as SD02Content} language={language} />;
   if (document.code === "SD03") return <SD03Document content={document.content as unknown as SD03Content} language={language} />;
   if (document.code === "SD04") return <SD04Document content={document.content as unknown as SD04Content} language={language} />;
-  return <SD05Document content={document.content as unknown as SD05Content} token={token} visitorEmail={visitorEmail} language={language} />;
+  return <SD05Document content={document.content as unknown as SD05Content} token={token} visitorEmail={visitorEmail} language={language} documentStatus={document.status} />;
 }
 
 const inputStyle: React.CSSProperties = {

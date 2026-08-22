@@ -111,23 +111,30 @@ function emptyAnalytics(): SDRoomAnalytics {
 async function readAnalytics(roomId: string): Promise<SDRoomAnalytics> {
   const { data, error } = await getSupabaseAdmin()
     .from("deal_room_events")
-    .select("visitor_email,event_type,active_seconds,created_at")
+    .select("visitor_email,visitor_first_name,visitor_last_name,event_type,active_seconds,created_at")
     .eq("room_id", roomId)
     .order("created_at", { ascending: false })
     .limit(5000);
   if (error) throw error;
   if (!data?.length) return emptyAnalytics();
 
-  const visitors = new Map<string, { email: string; lastSeenAt: string; activeSeconds: number }>();
+  const visitors = new Map<string, { email: string; firstName: string; lastName: string; lastSeenAt: string; activeSeconds: number }>();
   let opens = 0;
   let activeSeconds = 0;
   for (const event of data) {
     const email = cleanEmail(event.visitor_email);
+    const firstName = String(event.visitor_first_name || "").trim();
+    const lastName = String(event.visitor_last_name || "").trim();
+    const visitorKey = email || [firstName, lastName].filter(Boolean).join("|").toLowerCase() || "anonymous";
     if (event.event_type === "room_opened") opens += 1;
     activeSeconds += Number(event.active_seconds) || 0;
-    const previous = visitors.get(email);
-    if (!previous) visitors.set(email, { email, lastSeenAt: event.created_at, activeSeconds: Number(event.active_seconds) || 0 });
-    else previous.activeSeconds += Number(event.active_seconds) || 0;
+    const previous = visitors.get(visitorKey);
+    if (!previous) visitors.set(visitorKey, { email, firstName, lastName, lastSeenAt: event.created_at, activeSeconds: Number(event.active_seconds) || 0 });
+    else {
+      previous.activeSeconds += Number(event.active_seconds) || 0;
+      if (!previous.firstName && firstName) previous.firstName = firstName;
+      if (!previous.lastName && lastName) previous.lastName = lastName;
+    }
   }
   return {
     opens,

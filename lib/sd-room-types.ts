@@ -132,7 +132,7 @@ export type SDRoomAnalytics = {
   uniqueVisitors: number;
   activeSeconds: number;
   lastViewedAt: string | null;
-  recentVisitors: Array<{ email: string; lastSeenAt: string; activeSeconds: number }>;
+  recentVisitors: Array<{ email: string; firstName: string; lastName: string; lastSeenAt: string; activeSeconds: number }>;
 };
 
 export type SDRoomComment = {
