@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, ListFilter, Loader2, MapPin, Play, RefreshCw, Search, SquareKanban, Table2, Users } from "lucide-react";
+import { Building2, ListFilter, Loader2, MapPin, Play, Plus, RefreshCw, Search, SquareKanban, Table2, Users } from "lucide-react";
 import { CallRecommendationStrip } from "@/components/call-recommendation-strip";
 import { CompanyDrawer } from "@/components/company-drawer";
+import { NewCompanyDialog } from "@/components/new-company-dialog";
+import { NewContactDialog } from "@/components/new-contact-dialog";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
 import { ProspectionSession } from "@/components/prospection-session";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -88,6 +90,8 @@ export function CompanyFirstProspectionView() {
   const [view, setView] = useState<ViewMode>("board");
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [sessionOpen, setSessionOpen] = useState(false);
+  const [newCompanyOpen, setNewCompanyOpen] = useState(false);
+  const [newContactOpen, setNewContactOpen] = useState(false);
 
   useEffect(() => {
     const initialPreferences = readProspectionSegmentPreferences();
@@ -261,8 +265,10 @@ export function CompanyFirstProspectionView() {
               <h1 className="font-display text-lg font-bold tracking-tight">{currentList?.name || "Prospection par entreprise"}</h1>
               <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-primary">{actionableCount} à traiter</strong> · {opportunities} RDV/deals · {snoozed} relances futures · {excluded} exclus · {total} comptes au total</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="hidden rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2 text-xs text-muted-foreground xl:block"><strong className="text-primary">File sécurisée</strong> · pas intéressé, hors cible, RDV pris et relances futures sont retirés de la session</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="hidden rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2 text-xs text-muted-foreground 2xl:block"><strong className="text-primary">File sécurisée</strong> · pas intéressé, hors cible, RDV pris et relances futures sont retirés de la session</div>
+              <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewContactOpen(true)}><Plus size={14} /> Contact</Button>
+              <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewCompanyOpen(true)}><Building2 size={14} /> Entreprise</Button>
               <Button disabled={loading || !actionableCompanies.length} onClick={() => setSessionOpen(true)} className="gap-2">
                 <Play size={15} className="fill-current" /> Démarrer la session
                 {actionableCompanies.length ? <Badge variant="secondary" className="ml-1 bg-background/80 text-foreground">{actionableCompanies.length}</Badge> : null}
@@ -371,6 +377,8 @@ export function CompanyFirstProspectionView() {
 
       <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={actionableCompanies} onOpenCompany={setDrawerId} />
       <CompanyDrawer companyId={drawerId} open={Boolean(drawerId)} onOpenChange={open => !open && setDrawerId(null)} />
+      <NewCompanyDialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen} onCreated={() => void load(true)} />
+      <NewContactDialog open={newContactOpen} onOpenChange={setNewContactOpen} onCreated={() => void load(true)} />
     </div>
   );
 }
