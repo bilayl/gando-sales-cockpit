@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
-import { getSupportTicket, updateSupportTicketStatus, type SupportTicketStatus } from "@/lib/support-tickets";
+import { getSupportTicket, replyToSupportTicket, updateSupportTicketStatus, type SupportTicketStatus } from "@/lib/support-tickets";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     const ticket = await updateSupportTicketStatus(id, status);
     return NextResponse.json({ ticket });
+  } catch (error) {
+    return responseError(error);
+  }
+}
+
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const access = await requireCockpitAccess();
+    const { id } = await params;
+    const body = await request.json();
+    await replyToSupportTicket(id, String(body?.message || ""), access.email);
+    return NextResponse.json(await getSupportTicket(id));
   } catch (error) {
     return responseError(error);
   }
