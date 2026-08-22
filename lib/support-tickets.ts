@@ -50,6 +50,13 @@ type TicketRow = {
 };
 
 const secretCache = new Map<string, { value: string; expiresAt: number }>();
+const HTML_REPLACEMENTS: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#039;",
+};
 
 function clean(value: unknown, max = 4000) {
   return String(value ?? "").trim().slice(0, max);
@@ -69,7 +76,7 @@ function cleanDomain(value: unknown) {
 }
 
 function htmlEscape(value: string) {
-  return value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char] || char));
+  return value.replace(/[&<>"']/g, char => HTML_REPLACEMENTS[char] || char);
 }
 
 async function serverSecret(name: string) {
@@ -111,7 +118,7 @@ async function notifyDiscord(ticket: TicketRow, event: string, message?: string)
     if (!webhookUrl) return;
     const typeLabel = ticket.type === "commercial" ? "Commercial" : "Support";
     const requester = personName(ticket);
-    const fields = [
+    const fields: Array<{ name: string; value: string; inline: boolean }> = [
       { name: "Demandeur", value: `${requester}${ticket.email ? `\n${ticket.email}` : ""}`.slice(0, 1024), inline: true },
       { name: "Entreprise", value: (ticket.company_name || ticket.company_domain || "—").slice(0, 1024), inline: true },
       { name: "Statut", value: ticket.status, inline: true },
