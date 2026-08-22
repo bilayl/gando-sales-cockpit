@@ -29,12 +29,31 @@ type ProfileEnrichmentResponse = {
   contactsCreated?: number;
   contactsReused?: number;
   contactsFailed?: number;
-  prospect?: {
-    contacts?: Array<unknown>;
-  };
+  prospect?: { contacts?: Array<unknown> };
   message?: string;
-  error?: string;
+  error?: unknown;
 };
+
+function readableError(value: unknown, fallback: string): string {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (value instanceof Error && value.message) return value.message;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    for (const key of ["message", "error", "detail", "details", "code"]) {
+      const nested = record[key];
+      if (typeof nested === "string" && nested.trim()) return nested.trim();
+      if (nested && typeof nested === "object") {
+        const message = readableError(nested, "");
+        if (message) return message;
+      }
+    }
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized && serialized !== "{}") return serialized;
+    } catch {}
+  }
+  return fallback;
+}
 
 function delay(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms));
@@ -50,7 +69,7 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
       body: JSON.stringify({ entityType, entityId, apifyRunRefs, waitSeconds: apifyRunRefs?.length ? 0 : undefined }),
     });
     const payload = await response.json().catch(() => ({})) as ProfileEnrichmentResponse;
-    if (!response.ok) throw new Error(payload.error || "L’enrichissement de la fiche a échoué.");
+    if (!response.ok) throw new Error(readableError(payload.error, "L’enrichissement de la fiche a échoué."));
     return payload;
   }
 
@@ -94,7 +113,7 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
       if (failed) toast.warning(`${failed} contact(s) n’ont pas pu être importés.`);
       await onCompleted?.();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Enrichissement impossible");
+      toast.error(readableError(cause, "Enrichissement impossible"));
     } finally {
       setBusy(false);
     }
