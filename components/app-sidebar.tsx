@@ -6,6 +6,7 @@ import {
   BarChart3,
   CalendarCheck2,
   CalendarDays,
+  LifeBuoy,
   ListFilter,
   ListTodo,
   LogOut,
@@ -30,6 +31,7 @@ const nav = [
   { href: "/agenda", label: "Agenda", icon: CalendarDays },
   { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
   { href: "/analytics", label: "Statistiques", icon: BarChart3 },
+  { href: "/support", label: "Support", icon: LifeBuoy },
   { href: "/deal-room", label: "Deal Room", icon: Target },
 ];
 
