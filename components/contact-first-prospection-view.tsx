@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { ContactDrawer } from "@/components/contact-drawer";
+import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { NewContactDialog } from "@/components/new-contact-dialog";
 import { ProspectionBoard } from "@/components/prospection-board";
 import { SalesCallDecisionControls } from "@/components/sales-call-decision-controls";
@@ -115,6 +116,7 @@ export function ContactFirstProspectionView() {
   const [view, setView] = useState<ViewMode>("table");
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [newContactOpen, setNewContactOpen] = useState(false);
+  const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [recommendationSummary, setRecommendationSummary] = useState<RecommendationSummary>(EMPTY_SUMMARY);
   const [recommendationEvaluatedAt, setRecommendationEvaluatedAt] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -358,6 +360,7 @@ export function ContactFirstProspectionView() {
                 </Button>
               ) : null}
               {activeSessionId ? <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={leaveSession}><X size={14} /> Quitter la session</Button> : null}
+              <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewCompanyOpen(true)}><Building2 size={14} /> Entreprise</Button>
               <Button size="sm" className="h-9 gap-1.5" onClick={() => setNewContactOpen(true)}><Plus size={14} /> Nouveau contact</Button>
             </div>
           </div>
@@ -500,6 +503,7 @@ export function ContactFirstProspectionView() {
       </div>
 
       <ContactDrawer contactId={drawerId} open={Boolean(drawerId)} onOpenChange={open => !open && setDrawerId(null)} onUpdated={() => void load(true, isRecommendationSegment)} />
+      <NewCompanyDialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen} onCreated={() => void load(true, isRecommendationSegment)} />
       <NewContactDialog open={newContactOpen} onOpenChange={setNewContactOpen} onCreated={() => void load(true, isRecommendationSegment)} />
     </div>
   );

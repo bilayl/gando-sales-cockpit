@@ -7,10 +7,17 @@ const PAGE_SIZE = 100;
 type SearchBody = { limit: number; properties: string[]; filterGroups: { filters: { propertyName: string; operator: string; value: string }[] }[]; after?: string };
 
 function rangeFilters(property: string, start: string, end: string) {
-  return [
-    { filters: [{ propertyName: property, operator: "GTE", value: start }] },
-    { filters: [{ propertyName: property, operator: "LTE", value: end }] },
-  ];
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs > endMs) {
+    throw Object.assign(new Error("Période de statistiques invalide."), { status: 400 });
+  }
+  return [{
+    filters: [
+      { propertyName: property, operator: "GTE", value: String(startMs) },
+      { propertyName: property, operator: "LTE", value: String(endMs) },
+    ],
+  }];
 }
 
 async function searchTotal(body: SearchBody, path: string) {

@@ -98,3 +98,47 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: e.message || "Erreur Supabase", details: e }, { status: 500 });
   }
 }
+
+
+const COMPANY_CREATE_ALLOWED = [
+  "name", "domain", "phone", "website", "address", "address2", "city", "zip", "state", "country", "industry", "description", "hubspot_owner_id",
+];
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const props = Object.fromEntries(
+      Object.entries(body.properties ?? {})
+        .filter(([key, value]) => COMPANY_CREATE_ALLOWED.includes(key) && value !== undefined && value !== null && String(value).trim() !== "")
+        .map(([key, value]) => [key, String(value).trim()]),
+    );
+    if (!props.name && !props.domain) {
+      return NextResponse.json({ error: "Renseignez au moins un nom d’entreprise ou un domaine." }, { status: 400 });
+    }
+
+    const data = await hubspotJson("/crm/objects/2026-03/companies", {
+      method: "POST",
+      body: JSON.stringify({ properties: props }),
+    });
+
+    const row = {
+      hubspot_id: String(data.id),
+      name: props.name || props.domain || "Sans nom",
+      domain: props.domain ?? null,
+      phone: props.phone ?? null,
+      website: props.website ?? null,
+      city: props.city ?? null,
+      postal_code: props.zip ?? null,
+      country: props.country ?? null,
+      owner_hubspot_id: props.hubspot_owner_id ?? null,
+      raw_data: data,
+      hubspot_updated_at: data.updatedAt || new Date().toISOString(),
+    };
+    const { error } = await getSupabaseAdmin().from("companies").upsert(row, { onConflict: "hubspot_id" });
+    if (error) console.error("Supabase upsert company:", error.message);
+    return NextResponse.json(data, { status: 201 });
+  } catch (error) {
+    const e = error as Error & { status?: number };
+    return NextResponse.json({ error: e.message || "Erreur HubSpot", details: e }, { status: e.status || 500 });
+  }
+}
