@@ -10,6 +10,7 @@ import {
   Clock,
   FileText,
   Globe,
+  Link2,
   ListTodo,
   Loader2,
   Mail,
@@ -19,6 +20,7 @@ import {
   PhoneCall,
   PhoneOutgoing,
   Plus,
+  Search,
   SlidersHorizontal,
   UserRound,
   X,
@@ -246,6 +248,12 @@ export function ContactDrawer({ contactId, open, onOpenChange, onUpdated }: Prop
   const [actDate, setActDate] = useState("");
   const [actStatus, setActStatus] = useState("");
   const [savingAct, setSavingAct] = useState(false);
+  const [associateCompanyOpen, setAssociateCompanyOpen] = useState(false);
+  const [companyQuery, setCompanyQuery] = useState("");
+  const [companyResults, setCompanyResults] = useState<any[]>([]);
+  const [associatedCompanies, setAssociatedCompanies] = useState<any[]>([]);
+  const [searchingCompanies, setSearchingCompanies] = useState(false);
+  const [associatingCompanyId, setAssociatingCompanyId] = useState<string | null>(null);
 
   const load = useCallback(async (id: string) => {
     setLoading(true);
@@ -262,9 +270,25 @@ export function ContactDrawer({ contactId, open, onOpenChange, onUpdated }: Prop
     }
   }, []);
 
+  const loadAssociatedCompanies = useCallback(async (id: string) => {
+    try {
+      const response = await fetch(`/api/contacts/${id}/companies`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Impossible de charger les entreprises associées");
+      setAssociatedCompanies(payload.results || []);
+    } catch (cause) {
+      console.error(cause);
+      setAssociatedCompanies([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (!open || !contactId) return;
     setData(null);
+    setAssociateCompanyOpen(false);
+    setCompanyQuery("");
+    setCompanyResults([]);
+    setAssociatedCompanies([]);
     fetch("/api/owners")
       .then(response => response.json())
       .then((payload: any) => {
@@ -275,25 +299,79 @@ export function ContactDrawer({ contactId, open, onOpenChange, onUpdated }: Prop
       })
       .catch(() => {});
     void load(contactId);
-  }, [open, contactId, load]);
+    void loadAssociatedCompanies(contactId);
+  }, [open, contactId, load, loadAssociatedCompanies]);
 
   useEffect(() => {
     if (!open) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onOpenChange(false);
+      if (event.key !== "Escape") return;
+      if (associateCompanyOpen) setAssociateCompanyOpen(false);
+      else onOpenChange(false);
     };
     window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = previous;
       window.removeEventListener("keydown", onKey);
     };
-  }, [open, onOpenChange]);
+  }, [open, onOpenChange, associateCompanyOpen]);
+
+  useEffect(() => {
+    if (!associateCompanyOpen || !contactId || companyQuery.trim().length < 2) {
+      setCompanyResults([]);
+      setSearchingCompanies(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearchingCompanies(true);
+      try {
+        const response = await fetch(`/api/contacts/${contactId}/companies?q=${encodeURIComponent(companyQuery.trim())}`, { signal: controller.signal, cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Recherche HubSpot impossible");
+        setCompanyResults(payload.results || []);
+      } catch (cause) {
+        if ((cause as Error).name !== "AbortError") toast.error(cause instanceof Error ? cause.message : "Recherche HubSpot impossible");
+      } finally {
+        if (!controller.signal.aborted) setSearchingCompanies(false);
+      }
+    }, 280);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [associateCompanyOpen, contactId, companyQuery]);
+
+  async function associateCompany(targetCompanyId: string) {
+    if (!contactId) return;
+    setAssociatingCompanyId(targetCompanyId);
+    try {
+      const response = await fetch(`/api/contacts/${contactId}/companies`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ companyId: targetCompanyId }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "HubSpot a refusé l’association");
+      toast.success("Entreprise associée au contact dans HubSpot.");
+      setAssociateCompanyOpen(false);
+      setCompanyQuery("");
+      setCompanyResults([]);
+      await Promise.all([loadAssociatedCompanies(contactId), load(contactId)]);
+      onUpdated?.();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Impossible d’associer cette entreprise");
+    } finally {
+      setAssociatingCompanyId(null);
+    }
+  }
 
   const p = data?.contact?.properties || {};
   const name = [p.firstname, p.lastname].filter(Boolean).join(" ") || "Contact";
-  const company = data?.companies?.[0]?.properties || (p.company ? { name: p.company } : {});
+  const companies = associatedCompanies.length ? associatedCompanies : (data?.companies || []);
+  const company = companies[0]?.properties || (p.company ? { name: p.company } : {});
   const ownerName = owners[p.hubspot_owner_id] || "";
 
   const notes = useMemo(
@@ -583,19 +661,50 @@ export function ContactDrawer({ contactId, open, onOpenChange, onUpdated }: Prop
 
                 <QualificationProperties kind="contact" properties={p} />
 
-                {company?.name ? (
-                  <section>
-                    <SectionTitle icon={Building2} title="Entreprise" />
-                    <div className="mt-3 rounded-lg border border-border bg-card p-4">
-                      <div className="font-semibold text-foreground">{company.name}</div>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
-                        {company.domain ? <span className="flex items-center gap-1.5 text-muted-foreground"><Globe size={12} /> {company.domain}</span> : null}
-                        {company.phone ? <span className="flex items-center gap-1.5 text-muted-foreground"><PhoneCall size={12} /> {company.phone}</span> : null}
-                        {[company.city, company.state].filter(Boolean).length ? <span className="flex items-center gap-1.5 text-muted-foreground"><MapPin size={12} /> {[company.city, company.state].filter(Boolean).join(", ")}</span> : null}
+                <section>
+                  <SectionTitle
+                    icon={Building2}
+                    title="Entreprises associées"
+                    count={companies.length}
+                    action={<Button size="sm" variant="outline" onClick={() => setAssociateCompanyOpen(value => !value)}><Plus size={13} /> Associer une entreprise</Button>}
+                  />
+
+                  {associateCompanyOpen ? (
+                    <div className="mt-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-foreground"><Link2 size={13} className="text-primary" /> Rechercher une entreprise existante dans HubSpot</div>
+                      <div className="relative mt-2">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Input autoFocus value={companyQuery} onChange={event => setCompanyQuery(event.target.value)} placeholder="Nom, domaine, ville…" className="pl-9" />
+                        {searchingCompanies ? <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-primary" /> : null}
                       </div>
+                      {companyQuery.trim().length >= 2 ? (
+                        <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-border bg-card">
+                          {companyResults.length ? companyResults.map((result: any) => {
+                            const props = result.properties || {};
+                            return <div key={result.id} className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-2.5 last:border-b-0">
+                              <div className="min-w-0"><div className="truncate text-sm font-semibold">{result.label || props.name || props.domain}</div><div className="truncate text-xs text-muted-foreground">{[props.domain, props.city].filter(Boolean).join(" · ") || "Entreprise HubSpot"}</div></div>
+                              {result.alreadyAssociated ? <Badge variant="secondary" className="shrink-0 text-[10px]">Déjà associée</Badge> : <Button size="sm" variant="ghost" disabled={associatingCompanyId === result.id} onClick={() => void associateCompany(result.id)}>{associatingCompanyId === result.id ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Associer</Button>}
+                            </div>;
+                          }) : !searchingCompanies ? <div className="px-3 py-4 text-center text-xs text-muted-foreground">Aucune entreprise trouvée.</div> : null}
+                        </div>
+                      ) : null}
                     </div>
-                  </section>
-                ) : null}
+                  ) : null}
+
+                  <div className="mt-3 grid gap-2">
+                    {companies.length ? companies.map((item: any) => {
+                      const props = item.properties || {};
+                      return <div key={item.id || props.name} className="rounded-lg border border-border bg-card p-4">
+                        <div className="font-semibold text-foreground">{props.name || props.domain || "Entreprise"}</div>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
+                          {props.domain ? <span className="flex items-center gap-1.5 text-muted-foreground"><Globe size={12} /> {props.domain}</span> : null}
+                          {props.phone ? <span className="flex items-center gap-1.5 text-muted-foreground"><PhoneCall size={12} /> {props.phone}</span> : null}
+                          {[props.city, props.state].filter(Boolean).length ? <span className="flex items-center gap-1.5 text-muted-foreground"><MapPin size={12} /> {[props.city, props.state].filter(Boolean).join(", ")}</span> : null}
+                        </div>
+                      </div>;
+                    }) : <div className="rounded-lg border border-dashed border-border bg-card/60 px-4 py-5 text-center text-xs text-muted-foreground">Aucune entreprise associée à ce contact.</div>}
+                  </div>
+                </section>
 
                 <section>
                   <SectionTitle
