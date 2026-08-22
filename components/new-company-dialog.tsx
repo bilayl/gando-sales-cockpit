@@ -7,17 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { HUBSPOT_INDUSTRY_OPTIONS } from "@/lib/hubspot-industry";
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void };
 type ContactOption = { id: string; label: string; properties: Record<string, string | null | undefined> };
 
 const EMPTY = { name: "", domain: "", phone: "", website: "", industry: "", city: "", zip: "", state: "", country: "", description: "" };
-const FIELDS: Array<{ key: keyof typeof EMPTY; label: string; placeholder?: string }> = [
+const FIELDS: Array<{ key: Exclude<keyof typeof EMPTY, "industry" | "description">; label: string; placeholder?: string }> = [
   { key: "name", label: "Nom de l’entreprise", placeholder: "ACME Location" },
   { key: "domain", label: "Domaine", placeholder: "acme.fr" },
   { key: "phone", label: "Téléphone" },
   { key: "website", label: "Site web", placeholder: "https://…" },
-  { key: "industry", label: "Secteur" },
   { key: "city", label: "Ville" },
   { key: "zip", label: "Code postal" },
   { key: "state", label: "Région" },
@@ -107,6 +108,7 @@ export function NewCompanyDialog({ open, onOpenChange, onCreated }: Props) {
       onOpenChange(false);
       onCreated();
       toast.success(selectedContacts.length ? "Entreprise créée et contacts associés dans HubSpot." : "Entreprise créée dans HubSpot.");
+      if (Array.isArray(payload.warnings)) payload.warnings.forEach((warning: string) => toast.warning(warning));
       if (failedAssociations) toast.warning(`${failedAssociations} association${failedAssociations > 1 ? "s" : ""} n’a pas pu être enregistrée.`);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Impossible de créer l’entreprise.";
@@ -121,7 +123,21 @@ export function NewCompanyDialog({ open, onOpenChange, onCreated }: Props) {
     <DialogContent className="max-w-2xl">
       <DialogHeader><DialogTitle className="flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" /> Nouvelle entreprise</DialogTitle><DialogDescription>Crée l’entreprise dans HubSpot et associe immédiatement les contacts concernés.</DialogDescription></DialogHeader>
       <form onSubmit={submit} className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">{FIELDS.map(field => <div key={field.key} className="space-y-1.5"><Label className="text-xs text-muted-foreground">{field.label}</Label><Input value={form[field.key]} onChange={event => set(field.key, event.target.value)} placeholder={field.placeholder || field.label} /></div>)}</div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {FIELDS.slice(0, 4).map(field => <div key={field.key} className="space-y-1.5"><Label className="text-xs text-muted-foreground">{field.label}</Label><Input value={form[field.key]} onChange={event => set(field.key, event.target.value)} placeholder={field.placeholder || field.label} /></div>)}
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label className="text-xs text-muted-foreground">Secteur HubSpot</Label>
+            <Select value={form.industry || "none"} onValueChange={value => set("industry", value === "none" ? "" : value)}>
+              <SelectTrigger><SelectValue placeholder="Sélectionner un secteur" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Ne pas renseigner</SelectItem>
+                {HUBSPOT_INDUSTRY_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] leading-4 text-muted-foreground">HubSpot n’accepte pas de texte libre pour ce champ. Par exemple « réseau d’hébergements » correspond à « Hébergement / hôtellerie ».</p>
+          </div>
+          {FIELDS.slice(4).map(field => <div key={field.key} className="space-y-1.5"><Label className="text-xs text-muted-foreground">{field.label}</Label><Input value={form[field.key]} onChange={event => set(field.key, event.target.value)} placeholder={field.placeholder || field.label} /></div>)}
+        </div>
         <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">Description</Label><textarea value={form.description} onChange={event => set("description", event.target.value)} rows={3} className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" placeholder="Contexte ou description de l’entreprise" /></div>
 
         <div className="rounded-xl border border-border bg-muted/30 p-3">
