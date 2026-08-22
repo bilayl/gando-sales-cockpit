@@ -53,11 +53,16 @@ export async function getCockpitAccess(): Promise<CockpitAccess | null> {
   };
 }
 
-export async function requireCockpitAdmin() {
+export async function requireCockpitAccess() {
   const access = await getCockpitAccess();
   if (!access) {
     throw Object.assign(new Error("Reconnectez-vous au Sales Cockpit pour continuer."), { status: 401 });
   }
+  return access;
+}
+
+export async function requireCockpitAdmin() {
+  const access = await requireCockpitAccess();
   if (!access.canManageTeam) {
     throw Object.assign(new Error("Seuls les administrateurs peuvent gérer l’équipe."), { status: 403 });
   }
