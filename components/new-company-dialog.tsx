@@ -8,10 +8,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { HUBSPOT_INDUSTRY_OPTIONS } from "@/lib/hubspot-industry";
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void };
 type ContactOption = { id: string; label: string; properties: Record<string, string | null | undefined> };
+type IndustryOption = { value: string; label: string; displayOrder?: number };
 
 const EMPTY = { name: "", domain: "", phone: "", website: "", industry: "", city: "", zip: "", state: "", country: "", description: "" };
 const FIELDS: Array<{ key: Exclude<keyof typeof EMPTY, "industry" | "description">; label: string; placeholder?: string }> = [
@@ -37,8 +37,29 @@ export function NewCompanyDialog({ open, onOpenChange, onCreated }: Props) {
   const [contactResults, setContactResults] = useState<ContactOption[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<ContactOption[]>([]);
   const [searchingContacts, setSearchingContacts] = useState(false);
+  const [industryOptions, setIndustryOptions] = useState<IndustryOption[]>([]);
+  const [loadingIndustries, setLoadingIndustries] = useState(false);
 
   function set(key: keyof typeof EMPTY, value: string) { setForm(current => ({ ...current, [key]: value })); }
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setLoadingIndustries(true);
+    fetch("/api/companies/industry-options", { signal: controller.signal, cache: "no-store" })
+      .then(async response => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Impossible de charger les secteurs HubSpot");
+        setIndustryOptions(payload.options || []);
+      })
+      .catch(cause => {
+        if ((cause as Error).name !== "AbortError") setError(cause instanceof Error ? cause.message : "Impossible de charger les secteurs HubSpot");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingIndustries(false);
+      });
+    return () => controller.abort();
+  }, [open]);
 
   useEffect(() => {
     if (!open || contactQuery.trim().length < 2) {
@@ -108,7 +129,6 @@ export function NewCompanyDialog({ open, onOpenChange, onCreated }: Props) {
       onOpenChange(false);
       onCreated();
       toast.success(selectedContacts.length ? "Entreprise créée et contacts associés dans HubSpot." : "Entreprise créée dans HubSpot.");
-      if (Array.isArray(payload.warnings)) payload.warnings.forEach((warning: string) => toast.warning(warning));
       if (failedAssociations) toast.warning(`${failedAssociations} association${failedAssociations > 1 ? "s" : ""} n’a pas pu être enregistrée.`);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Impossible de créer l’entreprise.";
@@ -127,14 +147,14 @@ export function NewCompanyDialog({ open, onOpenChange, onCreated }: Props) {
           {FIELDS.slice(0, 4).map(field => <div key={field.key} className="space-y-1.5"><Label className="text-xs text-muted-foreground">{field.label}</Label><Input value={form[field.key]} onChange={event => set(field.key, event.target.value)} placeholder={field.placeholder || field.label} /></div>)}
           <div className="space-y-1.5 sm:col-span-2">
             <Label className="text-xs text-muted-foreground">Secteur HubSpot</Label>
-            <Select value={form.industry || "none"} onValueChange={value => set("industry", value === "none" ? "" : value)}>
-              <SelectTrigger><SelectValue placeholder="Sélectionner un secteur" /></SelectTrigger>
-              <SelectContent>
+            <Select value={form.industry || "none"} onValueChange={value => set("industry", value === "none" ? "" : value)} disabled={loadingIndustries || !industryOptions.length}>
+              <SelectTrigger><SelectValue placeholder={loadingIndustries ? "Chargement des secteurs HubSpot…" : "Sélectionner un secteur HubSpot"} /></SelectTrigger>
+              <SelectContent className="max-h-80">
                 <SelectItem value="none">Ne pas renseigner</SelectItem>
-                {HUBSPOT_INDUSTRY_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                {industryOptions.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
               </SelectContent>
             </Select>
-            <p className="text-[11px] leading-4 text-muted-foreground">HubSpot n’accepte pas de texte libre pour ce champ. Par exemple « réseau d’hébergements » correspond à « Hébergement / hôtellerie ».</p>
+            <p className="text-[11px] leading-4 text-muted-foreground">Cette liste reprend directement les options du champ « Secteur » configuré dans HubSpot.</p>
           </div>
           {FIELDS.slice(4).map(field => <div key={field.key} className="space-y-1.5"><Label className="text-xs text-muted-foreground">{field.label}</Label><Input value={form[field.key]} onChange={event => set(field.key, event.target.value)} placeholder={field.placeholder || field.label} /></div>)}
         </div>
