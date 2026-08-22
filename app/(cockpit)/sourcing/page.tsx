@@ -1,5 +1,5 @@
-import { SourcingView } from "@/components/sourcing-view";
+import { SourcingViewV2 } from "@/components/sourcing-view-v2";
 
 export default function SourcingPage() {
-  return <SourcingView />;
+  return <SourcingViewV2 />;
 }
