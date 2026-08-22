@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enrichmentAuthHeaders, enrichmentBackendUrl } from "@/lib/enrichment-auth";
 import { apiError, hubspotJson } from "@/lib/hubspot";
+import { searchRentalCompaniesWithApifyDirect, type DirectApifyProspect, type DirectApifyRunRef } from "@/lib/apify-direct";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -20,15 +20,15 @@ type EnrichedContact = {
 
 type Prospect = {
   companyName?: string;
-  legalName?: string;
-  domain?: string;
-  website?: string;
-  phone?: string;
-  publicBusinessEmail?: string;
-  city?: string;
-  postalCode?: string;
-  country?: string;
-  address?: string;
+  legalName?: string | null;
+  domain?: string | null;
+  website?: string | null;
+  phone?: string | null;
+  publicBusinessEmail?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  address?: string | null;
   contacts?: EnrichedContact[];
   sourceProviders?: string[];
   confidence?: number;
@@ -37,6 +37,16 @@ type Prospect = {
 
 function normalizeText(value = "") {
   return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeDomain(value = "") {
+  if (!value) return "";
+  try {
+    const url = value.includes("://") ? new URL(value) : new URL(`https://${value}`);
+    return url.hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return value.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+  }
 }
 
 function similarity(a = "", b = "") {
@@ -67,26 +77,81 @@ function cleanProperties(properties: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(properties).filter(([, value]) => typeof value === "string" && value.trim()));
 }
 
-async function callTargetBackend(body: Record<string, unknown>) {
-  const authHeaders = await enrichmentAuthHeaders();
-  if (!Object.keys(authHeaders).length) throw new Error("Authentification du backend d'enrichissement absente");
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
 
-  const response = await fetch(`${enrichmentBackendUrl()}/api/enrich/target`, {
-    method: "POST",
-    headers: { ...authHeaders, "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify(body),
-    cache: "no-store",
-    signal: AbortSignal.timeout(110_000),
+function targetScore(prospect: DirectApifyProspect, target: Record<string, unknown>) {
+  let score = 0;
+  const targetDomain = normalizeDomain(stringValue(target.domain) || stringValue(target.website));
+  const prospectDomain = normalizeDomain(prospect.domain || prospect.website || "");
+  if (targetDomain && prospectDomain && targetDomain === prospectDomain) score += 140;
+
+  score += similarity(stringValue(target.companyName), prospect.companyName || prospect.legalName || "") * 90;
+
+  const targetCity = normalizeText(stringValue(target.city));
+  const prospectCity = normalizeText(prospect.city || "");
+  if (targetCity && prospectCity && targetCity === prospectCity) score += 20;
+
+  const targetPhone = stringValue(target.phone).replace(/\D/g, "");
+  const prospectPhone = String(prospect.phone || "").replace(/\D/g, "");
+  if (targetPhone.length >= 8 && prospectPhone.length >= 8 && targetPhone === prospectPhone) score += 80;
+  if (prospect.contacts?.length) score += 10;
+  return score;
+}
+
+function chooseBestProspect(prospects: DirectApifyProspect[], target: Record<string, unknown>) {
+  const ranked = prospects
+    .map(prospect => ({ prospect, score: targetScore(prospect, target) }))
+    .sort((a, b) => b.score - a.score);
+  const best = ranked[0];
+  return best && best.score >= 70 ? best.prospect : null;
+}
+
+async function callTargetBackend(body: Record<string, unknown>) {
+  const runRefs = Array.isArray(body.apifyRunRefs)
+    ? body.apifyRunRefs.filter((run: any) => run?.runId).slice(0, 8).map((run: any): DirectApifyRunRef => ({
+      runId: String(run.runId),
+      datasetId: run.datasetId ? String(run.datasetId) : undefined,
+      territory: run.territory ? String(run.territory) : undefined,
+      status: run.status ? String(run.status) : undefined,
+      pending: Boolean(run.pending),
+    }))
+    : [];
+
+  const companyName = stringValue(body.companyName);
+  const domain = normalizeDomain(stringValue(body.domain) || stringValue(body.website));
+  const city = stringValue(body.city);
+  const country = stringValue(body.country) || "France";
+  const contactName = stringValue(body.contactName);
+  const query = [companyName, domain ? `site:${domain}` : "", contactName].filter(Boolean).join(" ").slice(0, 500);
+  const territory = [city, country].filter(Boolean).join(", ") || "France métropolitaine";
+
+  const apify = await searchRentalCompaniesWithApifyDirect({
+    query,
+    territories: [territory],
+    limit: 8,
+    apifyLimit: Math.min(Math.max(Number(body.apifyLimit) || 100, 50), 300),
+    apifyContactsPerCompany: 5,
+    apifyRunRefs: runRefs.length ? runRefs : undefined,
+    apifyPollWaitSeconds: Math.min(Math.max(Number(body.waitSeconds) || 0, 0), 20),
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Backend d'enrichissement HTTP ${response.status}`);
-  return payload as {
-    prospect?: Prospect | null;
-    pending?: boolean;
-    runs?: Array<{ runId: string; datasetId?: string; territory?: string; pending?: boolean; status?: string }>;
-    candidatesFound?: number;
-    apify?: { configured?: boolean; errors?: string[] };
-    inpi?: unknown;
+
+  const prospect = chooseBestProspect(apify.prospects, {
+    companyName,
+    domain,
+    website: stringValue(body.website),
+    phone: stringValue(body.phone),
+    city,
+  });
+
+  return {
+    prospect: prospect as Prospect | null,
+    pending: apify.runs.some(run => run.pending),
+    runs: apify.runs,
+    candidatesFound: apify.prospects.length,
+    apify: { configured: apify.configured, errors: apify.errors },
+    inpi: null,
   };
 }
 
@@ -100,7 +165,7 @@ async function loadContact(contactId: string) {
 
 function companyPatch(existing: Record<string, string>, prospect: Prospect) {
   const patch: Record<string, string> = {};
-  const candidates: Record<string, string | undefined> = {
+  const candidates: Record<string, string | null | undefined> = {
     phone: prospect.phone,
     domain: prospect.domain,
     website: prospect.website,
@@ -234,11 +299,15 @@ export async function POST(request: NextRequest) {
 
     const cp = (company?.properties || {}) as Record<string, string>;
     const tp = (contact?.properties || {}) as Record<string, string>;
-    const companyName = cp.name || tp.company || [tp.firstname, tp.lastname].filter(Boolean).join(" ");
+    const companyName = cp.name || tp.company || "";
     const domain = cp.domain || cp.website || tp.website || domainFromEmail(tp.email);
     const city = cp.city || tp.city || "";
     const country = cp.country || tp.country || "France";
     const contactName = entityType === "contact" ? [tp.firstname, tp.lastname].filter(Boolean).join(" ") : "";
+
+    if (!companyName && !domain) {
+      return NextResponse.json({ error: "La fiche ne contient pas assez d'informations pour identifier son entreprise (nom ou domaine requis)." }, { status: 400 });
+    }
 
     const backend = await callTargetBackend({
       companyName,
@@ -249,7 +318,7 @@ export async function POST(request: NextRequest) {
       country,
       contactName,
       apifyContactsPerCompany: 5,
-      apifyLimit: 24,
+      apifyLimit: 100,
       apifyRunRefs: Array.isArray(input.apifyRunRefs) ? input.apifyRunRefs : undefined,
       waitSeconds: Number(input.waitSeconds) || 0,
     });
@@ -265,6 +334,7 @@ export async function POST(request: NextRequest) {
         message: backend.pending
           ? "Apify poursuit l’enrichissement de cette fiche."
           : "Aucun résultat suffisamment fiable n’a été trouvé pour cette fiche.",
+        sourceErrors: backend.apify?.errors || [],
       });
     }
 
@@ -322,9 +392,9 @@ export async function POST(request: NextRequest) {
         sourceProviders: prospect.sourceProviders || [],
         confidence: prospect.confidence,
       },
-      message: "Enrichissement appliqué à la fiche HubSpot.",
+      message: "Enrichissement Apify appliqué à la fiche HubSpot.",
     });
   } catch (error) {
-    return apiError(error);
+    return apiError(error instanceof Error ? error : new Error(String(error)));
   }
 }
