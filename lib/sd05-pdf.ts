@@ -1,5 +1,4 @@
-import "server-only";
-import type { SD05Content } from "@/lib/sd-stage-content";
+import type { SD05Content } from "./sd-stage-content";
 
 export type SD05PdfSignature = {
   signerName: string;
@@ -144,7 +143,7 @@ export function buildBrandedSD05Pdf(input: { content: SD05Content; companyName: 
   const pages: Page[] = [];
   const legal = content.contractTemplate === "legal_convention";
   const band = legal ? "0.196 0.196 0.196" : PURPLE;
-  let current: Page;
+  let current: Page = { commands: [] };
   let y = 0;
 
   const newPage = () => {
