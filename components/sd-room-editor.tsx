@@ -428,11 +428,23 @@ export function SDRoomEditor({ dealId }: { dealId: string }) {
                 <div className="flex items-center gap-2"><MessageSquare className="h-4 w-4 text-primary" /><h3 className="font-bold">Remarques du board</h3><Badge variant="outline">{data.comments.filter(comment => comment.status === "open").length}</Badge></div>
                 <div className="mt-3 space-y-2">{data.comments.slice(0, 8).map(comment => <article key={comment.id} className={cn("rounded-lg border p-3 text-xs", comment.status === "open" ? "border-primary/25 bg-primary/[0.04]" : "border-border bg-muted/25 opacity-65")}><div className="flex items-center justify-between gap-2"><span className="truncate font-semibold">{comment.author_email}</span><Badge variant="outline" className="shrink-0">{comment.document_code}</Badge></div><p className="mt-2 whitespace-pre-line leading-5 text-muted-foreground">{comment.body}</p><div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground"><span>{formatDate(comment.created_at)}</span>{comment.status === "open" ? <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px]" disabled={working === `comment:${comment.id}`} onClick={() => void resolveComment(comment.id)}>{working === `comment:${comment.id}` ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />} Marquer traité</Button> : <span className="text-emerald-300">Traitée</span>}</div></article>)}{!data.comments.length ? <p className="text-xs text-muted-foreground">Les suggestions envoyées depuis la room apparaîtront ici.</p> : null}</div>
               </Card>
-
               <Card className="p-5">
                 <div className="flex items-center gap-2"><Eye className="h-4 w-4 text-primary" /><h3 className="font-bold">Dernières consultations</h3></div>
                 <p className="mt-1 text-xs text-muted-foreground">Dernière activité : {formatDate(analytics.lastViewedAt)}</p>
-                <div className="mt-3 space-y-2">{analytics.recentVisitors.map(visitor => <div key={visitor.email} className="flex items-center justify-between gap-3 rounded-lg bg-muted/35 p-3 text-xs"><div className="min-w-0"><div className="truncate font-semibold">{visitor.email}</div><div className="text-muted-foreground">{formatDate(visitor.lastSeenAt)}</div></div><Badge variant="outline"><Clock3 className="mr-1 h-3 w-3" />{formatDuration(visitor.activeSeconds)}</Badge></div>)}{!analytics.recentVisitors.length ? <p className="text-xs text-muted-foreground">Aucune consultation pour le moment.</p> : null}</div>
+                <div className="mt-3 space-y-2">
+                  {analytics.recentVisitors.map(visitor => {
+                    const fullName = [visitor.firstName, visitor.lastName].filter(Boolean).join(" ");
+                    return <div key={`${visitor.email}-${visitor.lastSeenAt}`} className="flex items-center justify-between gap-3 rounded-lg bg-muted/35 p-3 text-xs">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold">{fullName || visitor.email || "Visiteur"}</div>
+                        {fullName && visitor.email ? <div className="truncate text-[11px] text-muted-foreground">{visitor.email}</div> : null}
+                        <div className="text-muted-foreground">{formatDate(visitor.lastSeenAt)}</div>
+                      </div>
+                      <Badge variant="outline"><Clock3 className="mr-1 h-3 w-3" />{formatDuration(visitor.activeSeconds)}</Badge>
+                    </div>;
+                  })}
+                  {!analytics.recentVisitors.length ? <p className="text-xs text-muted-foreground">Aucune consultation pour le moment.</p> : null}
+                </div>
               </Card>
             </aside>
           </div>
