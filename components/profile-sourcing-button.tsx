@@ -34,6 +34,15 @@ type ProfileEnrichmentResponse = {
   error?: unknown;
 };
 
+type CompanyWebsiteResponse = {
+  ok?: boolean;
+  website?: string | null;
+  domain?: string | null;
+  source?: string;
+  updatedFields?: string[];
+  error?: unknown;
+};
+
 function readableError(value: unknown, fallback: string): string {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (value instanceof Error && value.message) return value.message;
@@ -62,6 +71,19 @@ function delay(ms: number) {
 export function ProfileSourcingButton({ entityType, entityId, onCompleted, className, label = "Enrichir cette fiche" }: Props) {
   const [busy, setBusy] = useState(false);
 
+  async function ensureCompanyWebsite() {
+    if (entityType !== "company") return null;
+    const response = await fetch("/api/enrichment/company-website", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ companyId: entityId }),
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({})) as CompanyWebsiteResponse;
+    if (!response.ok) throw new Error(readableError(payload.error, "Impossible de récupérer le site web de l’entreprise."));
+    return payload;
+  }
+
   async function requestEnrichment(apifyRunRefs?: RunRef[]) {
     const response = await fetch("/api/enrichment/profile", {
       method: "POST",
@@ -77,6 +99,12 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
     if (busy) return;
     setBusy(true);
     try {
+      const website = await ensureCompanyWebsite();
+      if (website?.website) {
+        const label = website.domain || website.website;
+        if ((website.updatedFields || []).length) toast.info(`Site web récupéré : ${label}`);
+      }
+
       let payload = await requestEnrichment();
       let runs = (payload.runs || []).filter(run => run.runId);
 
