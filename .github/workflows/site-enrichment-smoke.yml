@@ -1,0 +1,57 @@
+name: Website-only enrichment smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lib/website-contact-discovery.ts"
+      - ".github/workflows/site-enrichment-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  live-site-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Compile website discovery in isolation
+        run: npx tsc lib/website-contact-discovery.ts --outDir .smoke --module commonjs --target es2022 --moduleResolution node --skipLibCheck --esModuleInterop
+      - name: Test phones that exist only on company websites
+        run: |
+          node <<'NODE'
+          const { discoverPublicWebsiteContacts } = require('./.smoke/website-contact-discovery.js');
+
+          const cases = [
+            { name: 'BlgCloud', website: 'https://www.blgcloud.fr', expectedDigits: '0344408344' },
+            { name: 'Locaway', website: 'https://locaway.com', expectedAnyDigits: ['0534612723','0561246051','0556058484','0556728597','0467556147'] },
+          ];
+
+          (async () => {
+            for (const test of cases) {
+              const result = await discoverPublicWebsiteContacts({ website: test.website });
+              const digits = String(result.phone || '').replace(/\D/g, '');
+              console.log(JSON.stringify({
+                name: test.name,
+                phone: result.phone,
+                pagesVisited: result.pagesVisited,
+                errors: result.errors,
+              }));
+
+              const ok = test.expectedDigits
+                ? digits.endsWith(test.expectedDigits.replace(/^0/, '')) || digits === test.expectedDigits
+                : test.expectedAnyDigits.some(expected => digits.endsWith(expected.replace(/^0/, '')) || digits === expected);
+
+              if (!ok) {
+                throw new Error(`${test.name}: expected a phone visible on the website, got ${result.phone || 'none'}`);
+              }
+            }
+          })().catch(error => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
