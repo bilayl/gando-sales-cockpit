@@ -37,6 +37,12 @@ import {
 } from "@/lib/contact-prospection-priority";
 import type { ProspectionBucket } from "@/lib/company-prospection-priority";
 import { fetchAllPagedResults } from "@/lib/fetch-all-paged-results";
+import {
+  PROSPECTION_SEGMENT_PREFS_EVENT,
+  orderVisibleContactSegments,
+  readProspectionSegmentPreferences,
+  type ProspectionSegmentPreferences,
+} from "@/lib/prospection-segment-preferences";
 import { formatDate, initials } from "@/lib/utils";
 
 type Contact = { id: string; properties: Record<string, string | null | undefined> };
@@ -99,6 +105,7 @@ function databaseDecision(contact: Contact): ContactProspectionDecision {
 
 export function ContactFirstProspectionView() {
   const [lists, setLists] = useState<List[]>([]);
+  const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
   const [owners, setOwners] = useState<Owner[]>([]);
   const [segmentId, setSegmentId] = useState(CALL_RECOMMENDATIONS_SEGMENT);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -125,6 +132,9 @@ export function ContactFirstProspectionView() {
   const isRecommendationSegment = segmentId === CALL_RECOMMENDATIONS_SEGMENT;
 
   useEffect(() => {
+    const initialPreferences = readProspectionSegmentPreferences();
+    setSegmentPreferences(initialPreferences);
+
     Promise.all([
       fetch("/api/segments", { cache: "no-store" }).then(response => response.json()),
       fetch("/api/owners", { cache: "no-store" }).then(response => response.json()),
@@ -135,7 +145,29 @@ export function ContactFirstProspectionView() {
         setOwners(ownerData.results || []);
       })
       .catch(cause => setError(cause instanceof Error ? cause.message : "Impossible de charger la prospection contacts"));
+
+    const refreshPreferences = () => setSegmentPreferences(readProspectionSegmentPreferences());
+    window.addEventListener(PROSPECTION_SEGMENT_PREFS_EVENT, refreshPreferences);
+    window.addEventListener("storage", refreshPreferences);
+    return () => {
+      window.removeEventListener(PROSPECTION_SEGMENT_PREFS_EVENT, refreshPreferences);
+      window.removeEventListener("storage", refreshPreferences);
+    };
   }, []);
+
+  const visibleLists = useMemo(
+    () => orderVisibleContactSegments(lists, segmentPreferences),
+    [lists, segmentPreferences],
+  );
+
+  useEffect(() => {
+    if (!segmentId || segmentId === CALL_RECOMMENDATIONS_SEGMENT) return;
+    if (!visibleLists.some(item => item.listId === segmentId)) {
+      setSegmentId(CALL_RECOMMENDATIONS_SEGMENT);
+      setActiveSessionId(null);
+      setSessionMeta(null);
+    }
+  }, [visibleLists, segmentId]);
 
   const ownerNames = useMemo(() => Object.fromEntries(owners.map(item => [
     item.id,
@@ -243,7 +275,7 @@ export function ContactFirstProspectionView() {
   const excluded = isRecommendationSegment
     ? recommendationSummary.EXCLUDED
     : classified.filter(item => item.decision.bucket === "EXCLUDED").length;
-  const currentList = lists.find(item => item.listId === segmentId);
+  const currentList = visibleLists.find(item => item.listId === segmentId);
   const pageTitle = activeSessionId && sessionMeta ? sessionMeta.name : isRecommendationSegment ? "Suggestions d’appels" : currentList?.name || "Prospection par contact";
 
   async function sync() {
@@ -331,7 +363,7 @@ export function ContactFirstProspectionView() {
             <Badge variant="secondary" className="text-[10px]">{recommendationSummary.ACTIONABLE}</Badge>
           </button>
           <button onClick={() => { leaveSession(); setSegmentId(""); }} className={`relative flex h-11 shrink-0 items-center rounded-t-xl border border-b-0 px-4 text-sm ${!segmentId ? "border-border bg-background font-semibold" : "border-transparent text-muted-foreground hover:bg-muted/60"}`}>Tous les contacts</button>
-          {lists.map(list => (
+          {visibleLists.map(list => (
             <button key={list.listId} onClick={() => { leaveSession(); setSegmentId(list.listId); }} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-t-xl border border-b-0 px-4 text-sm ${segmentId === list.listId ? "border-border bg-background font-semibold text-foreground before:absolute before:inset-x-3 before:top-0 before:h-[2px] before:bg-primary" : "border-transparent text-muted-foreground hover:bg-muted/60"}`}>
               <span className="max-w-[150px] truncate">{list.name}</span>
               {list.size !== undefined ? <Badge variant="secondary" className="text-[10px]">{list.size}</Badge> : null}
