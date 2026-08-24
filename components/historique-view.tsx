@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Loader2, PhoneCall, RefreshCw, Timer } from "lucide-react";
+import { CalendarDays, ChevronDown, Loader2, MessageSquareText, PhoneCall, RefreshCw, Sparkles, Timer } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,10 @@ type HistoryItem = {
   outcome?: string;
   ownerId?: string;
   toNumber?: string;
+  fromNumber?: string;
+  onoffTranscript?: string;
+  hubspotTranscriptAvailable?: boolean;
+  hubspotSummary?: string;
 };
 
 type ApiResponse = { items?: HistoryItem[]; error?: string };
@@ -26,6 +30,57 @@ function durationLabel(seconds?: string) {
   if (!Number.isFinite(s) || s <= 0) return null;
   if (s >= 60) return `${Math.floor(s / 60)} min ${s % 60 > 0 ? `${s % 60} s` : ""}`.trim();
   return `${s} s`;
+}
+
+function TranscriptBlock({
+  title,
+  badge,
+  icon,
+  children,
+}: {
+  title: string;
+  badge: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group overflow-hidden rounded-lg border border-border bg-background/60">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-left [&::-webkit-details-marker]:hidden">
+        <span className="text-primary">{icon}</span>
+        <span className="min-w-0 flex-1 text-xs font-semibold">{title}</span>
+        <Badge variant="outline" className="text-[9px] font-semibold">{badge}</Badge>
+        <ChevronDown size={14} className="shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-border px-3 py-3 text-xs leading-5 text-foreground/85">{children}</div>
+    </details>
+  );
+}
+
+function CallTranscripts({ item }: { item: HistoryItem }) {
+  const onoffTranscript = item.onoffTranscript?.trim();
+  const hubspotSummary = item.hubspotSummary?.trim();
+  const hasHubSpot = Boolean(hubspotSummary || item.hubspotTranscriptAvailable);
+  if (!onoffTranscript && !hasHubSpot) return null;
+
+  return (
+    <div className="mt-3 grid gap-2 border-t border-border pt-3">
+      {onoffTranscript ? (
+        <TranscriptBlock title="Transcription de l’appel" badge="Onoff" icon={<MessageSquareText size={14} />}>
+          <div className="max-h-[420px] overflow-y-auto whitespace-pre-wrap font-mono text-[11px] leading-5">{onoffTranscript}</div>
+        </TranscriptBlock>
+      ) : null}
+
+      {hasHubSpot ? (
+        <TranscriptBlock title="Synthèse HubSpot issue de la transcription" badge="HubSpot CI" icon={<Sparkles size={14} />}>
+          {hubspotSummary ? (
+            <div className="max-h-[420px] overflow-y-auto whitespace-pre-wrap">{hubspotSummary}</div>
+          ) : (
+            <p className="text-muted-foreground">HubSpot indique qu’une transcription est disponible pour cet appel. Sa synthèse n’est pas encore exposée sur cette fiche.</p>
+          )}
+        </TranscriptBlock>
+      ) : null}
+    </div>
+  );
 }
 
 export function HistoriqueView() {
@@ -121,28 +176,31 @@ export function HistoriqueView() {
                         <CalendarDays size={9} className="text-primary" />
                       )}
                     </span>
-                    <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/35">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="truncate font-semibold">{item.title}</span>
-                          <Badge variant="outline" className={cn("text-[10px] font-semibold", item.type === "call" ? "border-border bg-accent text-primary" : "border-sky-200 bg-sky-50 text-sky-700")}>
-                            {item.type === "call" ? "Appel" : "Rendez-vous"}
-                          </Badge>
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1 font-mono">{formatDate(item.at)}</span>
-                          {item.type === "call" && item.duration ? (
-                            <span className="inline-flex items-center gap-1"><Timer size={12} /> {durationLabel(item.duration)}</span>
-                          ) : null}
-                          {item.type === "call" && item.status ? (
-                            <span className="capitalize">{item.status.toLowerCase()}</span>
-                          ) : null}
-                          {item.type === "meeting" && item.outcome ? (
-                            <span className="capitalize">Issue : {item.outcome.toLowerCase()}</span>
-                          ) : null}
-                          {item.toNumber ? <span className="font-mono">{item.toNumber}</span> : null}
+                    <div className="rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-muted/35">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate font-semibold">{item.title}</span>
+                            <Badge variant="outline" className={cn("text-[10px] font-semibold", item.type === "call" ? "border-border bg-accent text-primary" : "border-sky-200 bg-sky-50 text-sky-700")}>
+                              {item.type === "call" ? "Appel" : "Rendez-vous"}
+                            </Badge>
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1 font-mono">{formatDate(item.at)}</span>
+                            {item.type === "call" && item.duration ? (
+                              <span className="inline-flex items-center gap-1"><Timer size={12} /> {durationLabel(item.duration)}</span>
+                            ) : null}
+                            {item.type === "call" && item.status ? (
+                              <span className="capitalize">{item.status.toLowerCase()}</span>
+                            ) : null}
+                            {item.type === "meeting" && item.outcome ? (
+                              <span className="capitalize">Issue : {item.outcome.toLowerCase()}</span>
+                            ) : null}
+                            {item.toNumber ? <span className="font-mono">{item.toNumber}</span> : item.fromNumber ? <span className="font-mono">{item.fromNumber}</span> : null}
+                          </div>
                         </div>
                       </div>
+                      {item.type === "call" ? <CallTranscripts item={item} /> : null}
                     </div>
                   </div>
                 ))}
