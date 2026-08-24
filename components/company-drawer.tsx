@@ -26,11 +26,33 @@ function CompanyPhoneEditor({
 }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [phone, setPhone] = useState("");
+  const [loadingPhone, setLoadingPhone] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setEditorOpen(false);
     setPhone("");
+    if (!open || !companyId) return;
+
+    const controller = new AbortController();
+    setLoadingPhone(true);
+    fetch(`/api/companies/${encodeURIComponent(companyId)}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async response => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Impossible de charger le téléphone");
+        setPhone(String(payload?.company?.properties?.phone || ""));
+      })
+      .catch(cause => {
+        if ((cause as Error).name !== "AbortError") console.error("Company phone preload:", cause);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingPhone(false);
+      });
+
+    return () => controller.abort();
   }, [companyId, open]);
 
   if (!open || !companyId || typeof document === "undefined") return null;
@@ -47,9 +69,8 @@ function CompanyPhoneEditor({
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Impossible d’enregistrer le téléphone");
-      toast.success("Numéro de téléphone entreprise enregistré dans HubSpot.");
+      toast.success("Numéro de téléphone entreprise mis à jour dans HubSpot.");
       setEditorOpen(false);
-      setPhone("");
       onSaved();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Impossible d’enregistrer le téléphone");
@@ -60,14 +81,15 @@ function CompanyPhoneEditor({
 
   return createPortal(
     <>
-      <div className="fixed bottom-5 right-5 z-[96] sm:bottom-7 sm:right-7">
-        <Button className="gap-2 shadow-lg" onClick={() => setEditorOpen(true)}>
-          <Phone size={15} /> Ajouter / modifier le téléphone
+      <div className="fixed bottom-5 left-5 z-[130] sm:bottom-8 sm:left-8">
+        <Button className="gap-2 shadow-xl" onClick={() => setEditorOpen(true)} disabled={loadingPhone}>
+          {loadingPhone ? <Loader2 size={15} className="animate-spin" /> : <Phone size={15} />}
+          {phone ? "Modifier le téléphone" : "Ajouter le téléphone"}
         </Button>
       </div>
 
       {editorOpen ? (
-        <div className="fixed inset-0 z-[110] grid place-items-center p-4">
+        <div className="fixed inset-0 z-[140] grid place-items-center p-4">
           <button
             type="button"
             aria-label="Fermer"
@@ -80,7 +102,7 @@ function CompanyPhoneEditor({
               <h3 className="font-semibold">Téléphone de l’entreprise</h3>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Le numéro sera enregistré sur la fiche entreprise HubSpot et synchronisé dans le Sales Cockpit.
+              Modifie le numéro ci-dessous. Il sera enregistré sur la fiche entreprise HubSpot et dans le Sales Cockpit.
             </p>
             <Input
               autoFocus
@@ -99,7 +121,7 @@ function CompanyPhoneEditor({
               </Button>
               <Button disabled={!phone.trim() || saving} onClick={() => void savePhone()}>
                 {saving ? <Loader2 size={15} className="mr-2 animate-spin" /> : null}
-                Enregistrer
+                Enregistrer la modification
               </Button>
             </div>
           </div>
