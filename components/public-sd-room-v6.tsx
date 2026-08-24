@@ -65,6 +65,21 @@ function Section({ title, children, kicker }: { title: string; children: React.R
   </section>;
 }
 
+function AccordionSection({ title, children, kicker }: { title: string; children: React.ReactNode; kicker?: string }) {
+  return <details className="group overflow-hidden rounded-[18px] border border-[#e0e4e6] bg-white shadow-[0_1px_2px_rgba(20,30,35,0.025)]">
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-5 transition hover:bg-[#fafbfb] sm:px-8 sm:py-6 [&::-webkit-details-marker]:hidden">
+      <div className="min-w-0">
+        {kicker ? <Eyebrow>{kicker}</Eyebrow> : null}
+        <h2 className="mt-1 text-[21px] font-semibold tracking-[-0.025em] text-[#172126] sm:text-[23px]">{title}</h2>
+      </div>
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#e0e4e6] bg-[#f7f8f8] text-[#687277] transition-transform group-open:rotate-90">
+        <ChevronRight className="h-4 w-4" />
+      </span>
+    </summary>
+    <div className="border-t border-[#eceeef] px-5 py-5 text-[15px] leading-7 text-[#465157] sm:px-8 sm:py-6">{children}</div>
+  </details>;
+}
+
 function BulletList({ items, empty = "À confirmer" }: { items?: string[]; empty?: string }) {
   if (!items?.length) return <p className="italic text-[#81898e]">{empty}</p>;
   return <ul className="space-y-3">{items.map((item, index) => <li key={`${index}-${item.slice(0, 24)}`} className="flex gap-3"><span className="mt-[10px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#7166c7]" /><span>{item}</span></li>)}</ul>;
@@ -85,11 +100,11 @@ function stageStatus(status: string, language: RoomLanguage) {
 
 function SD01Document({ content, language }: { content: SD01Content; language: RoomLanguage }) {
   return <div className="space-y-5 sm:space-y-6">
-    <Section title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")}><p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.executiveSummary || tr(language, "Synthèse en cours de validation.", "Summary pending approval.")}</p></Section>
+    <AccordionSection title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")}><p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.executiveSummary || tr(language, "Synthèse en cours de validation.", "Summary pending approval.")}</p></AccordionSection>
     {content.stakeholders?.length ? <SD01KeyPeoplePublic stakeholders={content.stakeholders} language={language} /> : null}
-    <Section title={tr(language, "Contexte", "Context")}><div className="grid gap-5 sm:grid-cols-[170px_1fr]"><div><Eyebrow>{tr(language, "Secteur", "Industry")}</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.companyProfile?.sector || "À confirmer"}</div></div><div><Eyebrow>{tr(language, "Entreprise", "Company")}</Eyebrow><p className="mt-2">{content.companyProfile?.description || "À compléter"}</p></div></div>{content.companyProfile?.context ? <p className="mt-5 border-t border-[#eceeef] pt-5">{content.companyProfile.context}</p> : null}</Section>
+    <AccordionSection title={tr(language, "Contexte", "Context")}><div className="grid gap-5 sm:grid-cols-[170px_1fr]"><div><Eyebrow>{tr(language, "Secteur", "Industry")}</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.companyProfile?.sector || "À confirmer"}</div></div><div><Eyebrow>{tr(language, "Entreprise", "Company")}</Eyebrow><p className="mt-2">{content.companyProfile?.description || "À compléter"}</p></div></div>{content.companyProfile?.context ? <p className="mt-5 border-t border-[#eceeef] pt-5">{content.companyProfile.context}</p> : null}</AccordionSection>
     <Section title={tr(language, "Enjeux prioritaires", "Top priorities")}>{content.painPoints?.length ? <div className="space-y-5">{content.painPoints.map((pain, index) => <div key={index} className="border-b border-[#eceeef] pb-5 last:border-0 last:pb-0"><div className="font-semibold text-[#202a2f]">{pain.title}</div><div className="mt-2"><BulletList items={pain.details} /></div></div>)}</div> : <p className="italic text-[#81898e]">Enjeux à préciser.</p>}</Section>
-    <Section title={tr(language, "Réponse envisagée", "Proposed response")}>{content.solutionFit?.length ? <div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div> : <p className="italic text-[#81898e]">Réponse à préciser.</p>}</Section>
+    <AccordionSection title={tr(language, "Réponse envisagée", "Proposed response")}>{content.solutionFit?.length ? <div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div> : <p className="italic text-[#81898e]">Réponse à préciser.</p>}</AccordionSection>
     <Section title={tr(language, "Décisions et prochaines étapes", "Decisions & next steps")}><PairGrid leftTitle={tr(language, "Décisions", "Decisions")} left={<BulletList items={content.decisions} />} rightTitle={tr(language, "Prochaines actions", "Next actions")} right={<BulletList items={(content.nextSteps || []).map(step => `${step.owner || tr(language, "À définir", "TBD")} — ${step.action}${step.dueDate ? ` · ${formatDate(step.dueDate, language)}` : ""}`)} />} /></Section>
   </div>;
 }
