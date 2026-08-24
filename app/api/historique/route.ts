@@ -13,6 +13,7 @@ const CALL_PROPS = [
   "hs_call_from_number",
   "hs_call_has_transcript",
   "hs_call_summary",
+  "hs_call_body",
 ];
 const MEETING_PROPS = ["hs_meeting_title", "hs_meeting_start_time", "hs_meeting_end_time", "hs_meeting_outcome", "hubspot_owner_id", "hs_timestamp"];
 
@@ -39,6 +40,7 @@ type HistoryItem = {
   onoffTranscript?: string;
   hubspotTranscriptAvailable?: boolean;
   hubspotSummary?: string;
+  hubspotNotes?: string;
 };
 
 function normalizePhone(value?: string | null) {
@@ -109,6 +111,7 @@ function callItem(row: Row, onoffRows: OnoffTranscriptRow[]): HistoryItem | null
   if (!p.hs_timestamp) return null;
   const duration = Number(p.hs_call_duration);
   const hubspotSummary = htmlToText(p.hs_call_summary);
+  const hubspotNotes = htmlToText(p.hs_call_body);
   return {
     type: "call",
     id: row.id,
@@ -123,6 +126,7 @@ function callItem(row: Row, onoffRows: OnoffTranscriptRow[]): HistoryItem | null
     onoffTranscript: findOnoffTranscript(row, onoffRows),
     hubspotTranscriptAvailable: p.hs_call_has_transcript === "true",
     hubspotSummary: hubspotSummary || undefined,
+    hubspotNotes: hubspotNotes || undefined,
   };
 }
 
