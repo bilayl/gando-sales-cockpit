@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronDown, Loader2, MessageSquareText, PhoneCall, RefreshCw, Sparkles, Timer } from "lucide-react";
+import { CalendarDays, ChevronDown, Loader2, MessageSquareText, NotebookText, PhoneCall, RefreshCw, Sparkles, Timer } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +21,7 @@ type HistoryItem = {
   onoffTranscript?: string;
   hubspotTranscriptAvailable?: boolean;
   hubspotSummary?: string;
+  hubspotNotes?: string;
 };
 
 type ApiResponse = { items?: HistoryItem[]; error?: string };
@@ -57,13 +58,20 @@ function TranscriptBlock({
 }
 
 function CallTranscripts({ item }: { item: HistoryItem }) {
+  const hubspotNotes = item.hubspotNotes?.trim();
   const onoffTranscript = item.onoffTranscript?.trim();
   const hubspotSummary = item.hubspotSummary?.trim();
   const hasHubSpot = Boolean(hubspotSummary || item.hubspotTranscriptAvailable);
-  if (!onoffTranscript && !hasHubSpot) return null;
+  if (!hubspotNotes && !onoffTranscript && !hasHubSpot) return null;
 
   return (
     <div className="mt-3 grid gap-2 border-t border-border pt-3">
+      {hubspotNotes ? (
+        <TranscriptBlock title="Notes du call" badge="HubSpot" icon={<NotebookText size={14} />}>
+          <div className="max-h-[420px] overflow-y-auto whitespace-pre-wrap">{hubspotNotes}</div>
+        </TranscriptBlock>
+      ) : null}
+
       {onoffTranscript ? (
         <TranscriptBlock title="Transcription de l’appel" badge="Onoff" icon={<MessageSquareText size={14} />}>
           <div className="max-h-[420px] overflow-y-auto whitespace-pre-wrap font-mono text-[11px] leading-5">{onoffTranscript}</div>
