@@ -73,6 +73,7 @@ export type SDRoomRecord = {
   brand_theme: SDRoomBrandTheme;
   brand_title: string | null;
   brand_subtitle: string | null;
+  meeting_booking_url: string | null;
   share_token: string;
   access_mode: SDRoomAccessMode;
   allowed_emails: string[];
