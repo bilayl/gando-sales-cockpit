@@ -33,8 +33,7 @@ export async function GET(request: Request) {
 
   try {
     const existingCockpitSession = await getCockpitSession();
-    const callbackUrl = new URL("/api/auth/hubspot/callback", request.url).toString();
-    await exchangeHubSpotCode(code, callbackUrl);
+    await exchangeHubSpotCode(code);
 
     if (!existingCockpitSession) {
       const identity = await getHubSpotIdentity();
