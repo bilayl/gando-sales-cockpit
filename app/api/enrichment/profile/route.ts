@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError, hubspotJson } from "@/lib/hubspot";
 import { searchRentalCompaniesWithApifyDirect, type DirectApifyProspect, type DirectApifyRunRef } from "@/lib/apify-direct";
+import { discoverPublicWebsiteContacts } from "@/lib/website-contact-discovery";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -304,26 +305,56 @@ export async function POST(request: NextRequest) {
     const city = cp.city || tp.city || "";
     const country = cp.country || tp.country || "France";
     const contactName = entityType === "contact" ? [tp.firstname, tp.lastname].filter(Boolean).join(" ") : "";
+    const website = cp.website || tp.website || (domain ? `https://${normalizeDomain(domain)}` : "");
 
-    if (!companyName && !domain) {
-      return NextResponse.json({ error: "La fiche ne contient pas assez d'informations pour identifier son entreprise (nom ou domaine requis)." }, { status: 400 });
+    if (!companyName && !domain && !website) {
+      return NextResponse.json({ error: "La fiche ne contient pas assez d'informations pour identifier son entreprise (nom, domaine ou site requis)." }, { status: 400 });
     }
 
-    const backend = await callTargetBackend({
-      companyName,
-      domain,
-      website: cp.website || tp.website,
-      phone: cp.phone,
-      city,
-      country,
-      contactName,
-      apifyContactsPerCompany: 5,
-      apifyLimit: 100,
-      apifyRunRefs: Array.isArray(input.apifyRunRefs) ? input.apifyRunRefs : undefined,
-      waitSeconds: Number(input.waitSeconds) || 0,
-    });
+    const [backend, websiteDiscovery] = await Promise.all([
+      callTargetBackend({
+        companyName,
+        domain,
+        website,
+        phone: cp.phone,
+        city,
+        country,
+        contactName,
+        apifyContactsPerCompany: 5,
+        apifyLimit: 100,
+        apifyRunRefs: Array.isArray(input.apifyRunRefs) ? input.apifyRunRefs : undefined,
+        waitSeconds: Number(input.waitSeconds) || 0,
+      }),
+      discoverPublicWebsiteContacts({ website, domain, contactName }),
+    ]);
 
-    const prospect = backend.prospect || null;
+    const websiteHasUsefulData = Boolean(websiteDiscovery.phone || websiteDiscovery.email || websiteDiscovery.contactPhone || websiteDiscovery.contactEmail);
+    let prospect = backend.prospect ? { ...backend.prospect } as Prospect : null;
+
+    if (!prospect && websiteHasUsefulData) {
+      prospect = {
+        companyName,
+        domain: normalizeDomain(domain || websiteDiscovery.website || "") || null,
+        website: websiteDiscovery.website,
+        phone: websiteDiscovery.phone,
+        publicBusinessEmail: websiteDiscovery.email,
+        city: city || null,
+        country: country || null,
+        contacts: [],
+        sourceProviders: ["website"],
+        confidence: websiteDiscovery.contactPhone ? 0.9 : 0.82,
+      };
+    } else if (prospect) {
+      prospect.website = prospect.website || websiteDiscovery.website;
+      prospect.domain = prospect.domain || normalizeDomain(websiteDiscovery.website || domain || "") || null;
+      prospect.phone = prospect.phone || websiteDiscovery.phone;
+      prospect.publicBusinessEmail = prospect.publicBusinessEmail || websiteDiscovery.email;
+      prospect.sourceProviders = [...new Set([
+        ...(prospect.sourceProviders || []),
+        ...(websiteHasUsefulData ? ["website"] : []),
+      ])];
+    }
+
     if (!prospect) {
       return NextResponse.json({
         ok: true,
@@ -332,9 +363,14 @@ export async function POST(request: NextRequest) {
         runs: backend.runs || [],
         candidatesFound: Number(backend.candidatesFound) || 0,
         message: backend.pending
-          ? "Apify poursuit l’enrichissement de cette fiche."
-          : "Aucun résultat suffisamment fiable n’a été trouvé pour cette fiche.",
-        sourceErrors: backend.apify?.errors || [],
+          ? "Apify poursuit l’enrichissement de cette fiche. Le site public n’a pas encore fourni de numéro exploitable."
+          : "Aucun résultat suffisamment fiable n’a été trouvé sur Apify ou le site public de l’entreprise.",
+        sourceErrors: [...(backend.apify?.errors || []), ...websiteDiscovery.errors],
+        websiteDiscovery: {
+          pagesVisited: websiteDiscovery.pagesVisited,
+          phoneFound: false,
+          contactPhoneFound: false,
+        },
       });
     }
 
@@ -358,8 +394,27 @@ export async function POST(request: NextRequest) {
 
     const updatedContactFields: string[] = [];
     let matchedContact: EnrichedContact | null = null;
+    let phoneSource: "apify" | "website_contact" | "website_company" | null = null;
+
     if (entityType === "contact" && contact) {
       matchedContact = bestContactMatch(tp, Array.isArray(prospect.contacts) ? prospect.contacts : []);
+      if (matchedContact?.phone) phoneSource = "apify";
+
+      const websitePhone = websiteDiscovery.contactPhone || websiteDiscovery.phone;
+      const websiteEmail = websiteDiscovery.contactEmail || undefined;
+      if (websitePhone || websiteEmail) {
+        matchedContact = {
+          ...(matchedContact || {}),
+          fullName: matchedContact?.fullName || contactName || undefined,
+          phone: matchedContact?.phone || websitePhone || undefined,
+          email: matchedContact?.email || websiteEmail,
+          confidence: Math.max(matchedContact?.confidence || 0, websiteDiscovery.contactPhone ? 0.9 : 0.72),
+        };
+        if (!phoneSource && websitePhone) {
+          phoneSource = websiteDiscovery.contactPhone ? "website_contact" : "website_company";
+        }
+      }
+
       const patch = contactPatch(tp, matchedContact);
       if (Object.keys(patch).length) {
         await hubspotJson(`/crm/v3/objects/contacts/${encodeURIComponent(entityId)}`, {
@@ -369,6 +424,9 @@ export async function POST(request: NextRequest) {
         updatedContactFields.push(...Object.keys(patch));
       }
     }
+
+    const providers = [...new Set(prospect.sourceProviders || [])];
+    const usedWebsite = providers.includes("website") || websiteHasUsefulData;
 
     return NextResponse.json({
       ok: true,
@@ -382,6 +440,16 @@ export async function POST(request: NextRequest) {
       contactsFailed: contactSummary.failed,
       contacts: contactSummary.processed,
       matchedContact,
+      phoneSource,
+      websiteDiscovery: {
+        website: websiteDiscovery.website,
+        phone: websiteDiscovery.phone,
+        contactPhone: websiteDiscovery.contactPhone,
+        email: websiteDiscovery.email,
+        contactEmail: websiteDiscovery.contactEmail,
+        pagesVisited: websiteDiscovery.pagesVisited,
+        errors: websiteDiscovery.errors,
+      },
       prospect: {
         companyName: prospect.companyName,
         phone: prospect.phone,
@@ -389,10 +457,12 @@ export async function POST(request: NextRequest) {
         domain: prospect.domain,
         city: prospect.city,
         contacts: Array.isArray(prospect.contacts) ? prospect.contacts : [],
-        sourceProviders: prospect.sourceProviders || [],
+        sourceProviders: providers,
         confidence: prospect.confidence,
       },
-      message: "Enrichissement Apify appliqué à la fiche HubSpot.",
+      message: usedWebsite
+        ? "Enrichissement appliqué depuis le site public de l’entreprise et les sources Apify disponibles."
+        : "Enrichissement Apify appliqué à la fiche HubSpot.",
     });
   } catch (error) {
     return apiError(error instanceof Error ? error : new Error(String(error)));
