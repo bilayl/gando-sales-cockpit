@@ -45,6 +45,19 @@ function stageTitle(code: SDCode, language: RoomLanguage = "fr") {
   return code === "SD04" ? "PDF commercial" : SD_STAGE_META[code].title;
 }
 
+function preferredOpeningStage(documents: PublicDocument[]): SDCode {
+  const sd01 = documents.find(document => document.code === "SD01");
+  if (sd01?.status === "published") return "SD01";
+
+  const pendingValidation = SD_CODES
+    .map(code => documents.find(document => document.code === code))
+    .find(document => document?.status === "published");
+  if (pendingValidation) return pendingValidation.code;
+
+  if (sd01) return "SD01";
+  return documents[0]?.code || "SD01";
+}
+
 function formatDate(value?: string | null, language: RoomLanguage = "fr") {
   if (!value) return "";
   try {
@@ -254,9 +267,9 @@ export function PublicSDRoomV6({ token }: { token: string }) {
       const response = await fetch(`/api/public/deal-room/${encodeURIComponent(token)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim() }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Accès impossible");
+      const documents = payload.documents as PublicDocument[];
       setData(payload);
-      const available = (payload.documents as PublicDocument[]).map(item => item.code);
-      setActiveStage(available.includes(payload.room.currentStage) ? payload.room.currentStage : available[0] || "SD01");
+      setActiveStage(preferredOpeningStage(documents));
       sessionStorage.setItem(`gando-room-first:${token}`, firstName.trim());
       sessionStorage.setItem(`gando-room-last:${token}`, lastName.trim());
       sessionStorage.setItem(`gando-room-email:${token}`, payload.visitorEmail || email.trim());
