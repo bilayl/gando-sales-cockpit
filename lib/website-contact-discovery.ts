@@ -161,14 +161,28 @@ function pageMatchesContact(text: string, contactName?: string | null) {
   return words.every(word => normalized.includes(` ${word} `));
 }
 
+function formatFrenchLocalPhone(digits: string) {
+  return digits.match(/.{1,2}/g)?.join(" ") || digits;
+}
+
 function normalizePhone(raw: string) {
   let value = decodeHtml(raw).trim();
   try { value = decodeURIComponent(value); } catch {}
   value = value.replace(/^tel:/i, "").split(/[?#;]/)[0].trim();
   const hasPlus = value.includes("+") || /^00/.test(value);
-  const digits = value.replace(/\D/g, "");
+  let digits = value.replace(/\D/g, "");
   if (digits.length < 9 || digits.length > 15) return "";
   if (/^(\d)\1+$/.test(digits)) return "";
+
+  // French public websites often render a local phone immediately before a street
+  // number (e.g. "05 34 61 27 23 22 Chemin..."). The generic text matcher can
+  // therefore swallow the first digits of the address. A French local number that
+  // starts with 0 is exactly 10 digits, so trim the candidate before persisting it.
+  if (!hasPlus && /^0[1-9]/.test(digits) && digits.length >= 10) {
+    digits = digits.slice(0, 10);
+    return formatFrenchLocalPhone(digits);
+  }
+
   if (digits.length === 14 && !hasPlus && !/[().\s-]/.test(value)) return "";
   if (/^00/.test(value)) return `+${digits.slice(2)}`;
   if (value.includes("+")) return `+${digits}`;
