@@ -5,6 +5,8 @@ export type ProspectionSegmentPreference = {
 
 export type ProspectionSegmentPreferences = Record<string, ProspectionSegmentPreference>;
 
+// Keep the existing storage key so current company-segment preferences are preserved.
+// The same record now stores preferences for both HubSpot Contacts and Companies lists.
 export const PROSPECTION_SEGMENT_PREFS_KEY = "gando.prospection.companySegments.v1";
 export const PROSPECTION_SEGMENT_PREFS_EVENT = "gando:prospection-segments-changed";
 
@@ -26,13 +28,31 @@ export function writeProspectionSegmentPreferences(preferences: ProspectionSegme
   window.dispatchEvent(new CustomEvent(PROSPECTION_SEGMENT_PREFS_EVENT));
 }
 
-export function orderVisibleCompanySegments<T extends { listId: string; objectTypeId: string }>(segments: T[], preferences: ProspectionSegmentPreferences) {
+export function orderVisibleSegments<T extends { listId: string; objectTypeId: string }>(
+  segments: T[],
+  preferences: ProspectionSegmentPreferences,
+  objectTypeId: "0-1" | "0-2",
+) {
   return segments
-    .filter(segment => segment.objectTypeId === "0-2" && preferences[segment.listId]?.visible !== false)
+    .filter(segment => segment.objectTypeId === objectTypeId && preferences[segment.listId]?.visible !== false)
     .map((segment, sourceIndex) => ({
       segment,
       order: preferences[segment.listId]?.order ?? 10_000 + sourceIndex,
     }))
     .sort((a, b) => a.order - b.order)
     .map(item => item.segment);
+}
+
+export function orderVisibleCompanySegments<T extends { listId: string; objectTypeId: string }>(
+  segments: T[],
+  preferences: ProspectionSegmentPreferences,
+) {
+  return orderVisibleSegments(segments, preferences, "0-2");
+}
+
+export function orderVisibleContactSegments<T extends { listId: string; objectTypeId: string }>(
+  segments: T[],
+  preferences: ProspectionSegmentPreferences,
+) {
+  return orderVisibleSegments(segments, preferences, "0-1");
 }
