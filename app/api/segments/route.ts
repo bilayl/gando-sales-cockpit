@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiError, hubspotJson } from "@/lib/hubspot";
+import { apiError } from "@/lib/hubspot";
+import { hubspotJsonWithServiceFallback } from "@/lib/hubspot-service-fallback";
 
 type SupportedObjectTypeId = "0-1" | "0-2";
 type HubSpotList = {
@@ -11,7 +12,7 @@ type HubSpotList = {
 };
 
 async function loadSegmentsByObjectType(objectTypeId: SupportedObjectTypeId): Promise<HubSpotList[]> {
-  const data = await hubspotJson("/crm/lists/2026-03/search", {
+  const data = await hubspotJsonWithServiceFallback("/crm/lists/2026-03/search", {
     method: "POST",
     body: JSON.stringify({ count: 500, offset: 0, objectTypeId }),
   });
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     const name = String(body.name || "").trim();
     const objectTypeId = body.objectTypeId === "0-2" ? "0-2" : "0-1";
     if (!name) return NextResponse.json({ error: "Nom obligatoire" }, { status: 400 });
-    const data = await hubspotJson("/crm/lists/2026-03", {
+    const data = await hubspotJsonWithServiceFallback("/crm/lists/2026-03", {
       method: "POST",
       body: JSON.stringify({ name, objectTypeId, processingType: "MANUAL" }),
     });
