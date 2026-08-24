@@ -3,8 +3,62 @@ import { syncActivities, syncCompanies, syncContacts, syncDeals, syncTasks } fro
 import { refreshCompanyQualifications, syncCompanyContactLinks } from "@/lib/company-qualification-sync";
 import { refreshCallRecommendations } from "@/lib/call-recommendations";
 import { apiError, isHubSpotAuthenticated } from "@/lib/hubspot";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const maxDuration = 300;
+
+type SkippedSync = {
+  resource: string;
+  skipped: true;
+  reason: "already_running";
+};
+
+async function runWithSyncLease<T>(resource: string, task: () => Promise<T>): Promise<T | SkippedSync> {
+  const admin = getSupabaseAdmin();
+  const lockResource = `lock:${resource}`;
+  const { data: claimed, error: claimError } = await admin.rpc("claim_hubspot_sync", {
+    p_resource: lockResource,
+    p_stale_after_seconds: 600,
+  });
+  if (claimError) throw claimError;
+
+  if (!claimed) {
+    return { resource, skipped: true, reason: "already_running" };
+  }
+
+  try {
+    const result = await task();
+    await admin.from("hubspot_sync_state").upsert({
+      resource: lockResource,
+      last_synced_at: new Date().toISOString(),
+      after_cursor: null,
+      status: "complete",
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "resource" });
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await admin.from("hubspot_sync_state").upsert({
+      resource: lockResource,
+      last_synced_at: new Date().toISOString(),
+      after_cursor: null,
+      status: "error",
+      last_error: message.slice(0, 2_000),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "resource" });
+    throw error;
+  }
+}
+
+async function refreshDerivedData() {
+  return runWithSyncLease("derived", async () => {
+    const associations = await syncCompanyContactLinks();
+    const qualification = await refreshCompanyQualifications();
+    const recommendations = await refreshCallRecommendations();
+    return { associations, qualification, recommendations };
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,43 +78,41 @@ export async function GET(request: NextRequest) {
 
     switch (resource) {
       case "companies":
-        results = { companies: await syncCompanies(), qualification: await refreshCompanyQualifications() };
+        results = { companies: await runWithSyncLease("companies", () => syncCompanies()) };
         break;
       case "contacts":
-        results = {
-          contacts: await syncContacts(),
-          associations: await syncCompanyContactLinks(),
-          qualification: await refreshCompanyQualifications(),
-        };
+        results = { contacts: await runWithSyncLease("contacts", () => syncContacts()) };
         break;
       case "deals":
-        results = { deals: await syncDeals(), qualification: await refreshCompanyQualifications() };
+        results = { deals: await runWithSyncLease("deals", () => syncDeals()) };
         break;
       case "tasks":
-        results = { tasks: await syncTasks(), qualification: await refreshCompanyQualifications() };
+        results = { tasks: await runWithSyncLease("tasks", () => syncTasks()) };
         break;
       case "activities":
-        results = { activities: await syncActivities(), qualification: await refreshCompanyQualifications() };
+        results = { activities: await runWithSyncLease("activities", () => syncActivities()) };
         break;
-      case "qualification":
-        results = { associations: await syncCompanyContactLinks(), qualification: await refreshCompanyQualifications() };
+      case "qualification": {
+        const derived = await refreshDerivedData();
+        results = "skipped" in derived ? { derived } : derived;
         break;
+      }
       case "all": {
-        const companies = await syncCompanies();
-        const contacts = await syncContacts();
-        const associations = await syncCompanyContactLinks();
-        const deals = await syncDeals();
-        const tasks = await syncTasks();
-        const activities = await syncActivities();
-        const qualification = await refreshCompanyQualifications();
-        results = { companies, contacts, associations, deals, tasks, activities, qualification };
+        const companies = await runWithSyncLease("companies", () => syncCompanies());
+        const contacts = await runWithSyncLease("contacts", () => syncContacts());
+        const deals = await runWithSyncLease("deals", () => syncDeals());
+        const tasks = await runWithSyncLease("tasks", () => syncTasks());
+        const activities = await runWithSyncLease("activities", () => syncActivities());
+        const derived = await refreshDerivedData();
+        results = { companies, contacts, deals, tasks, activities, derived };
         break;
       }
       default:
         return NextResponse.json({ error: `Ressource inconnue: ${resource}` }, { status: 400 });
     }
 
-    const recommendations = await refreshCallRecommendations();
-    return NextResponse.json({ ok: true, results: { ...results, recommendations } });
-  } catch (error) { return apiError(error); }
+    return NextResponse.json({ ok: true, results });
+  } catch (error) {
+    return apiError(error);
+  }
 }
