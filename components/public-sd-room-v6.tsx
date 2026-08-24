@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, Check, CheckCircle2, ChevronRight, Download, ExternalLink, FileSignature, FileText, Languages, Loader2, LockKeyhole, MessageSquare, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Check, CheckCircle2, ChevronRight, Download, ExternalLink, FileSignature, FileText, Languages, Loader2, LockKeyhole, MessageSquare, ShieldCheck } from "lucide-react";
 import { GandoMark } from "@/components/gando-mark";
 import { SD01KeyPeoplePublic } from "@/components/sd01-key-people-public";
 import { SDRoomBrandBanner } from "@/components/sd-room-brand-banner";
@@ -24,6 +24,7 @@ type PublicRoomData = {
     theme: SDRoomBrandTheme;
     displayTitle: string;
     displaySubtitle: string;
+    meetingBookingUrl: string | null;
     currentStage: SDCode;
     updatedAt: string;
   };
@@ -107,6 +108,21 @@ function SD01Document({ content, language }: { content: SD01Content; language: R
     <AccordionSection title={tr(language, "Réponse envisagée", "Proposed response")}>{content.solutionFit?.length ? <div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div> : <p className="italic text-[#81898e]">Réponse à préciser.</p>}</AccordionSection>
     <Section title={tr(language, "Décisions et prochaines étapes", "Decisions & next steps")}><PairGrid leftTitle={tr(language, "Décisions", "Decisions")} left={<BulletList items={content.decisions} />} rightTitle={tr(language, "Prochaines actions", "Next actions")} right={<BulletList items={(content.nextSteps || []).map(step => `${step.owner || tr(language, "À définir", "TBD")} — ${step.action}${step.dueDate ? ` · ${formatDate(step.dueDate, language)}` : ""}`)} />} /></Section>
   </div>;
+}
+
+function MeetingBookingCTA({ url, language }: { url: string; language: RoomLanguage }) {
+  return <section className="mt-6 overflow-hidden rounded-[18px] border border-[#d8dce0] bg-[#202a2f] p-5 text-white shadow-[0_10px_30px_rgba(20,30,35,0.08)] sm:p-7">
+    <div className="grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center">
+      <div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.15em] text-white/55">{tr(language, "Prise de rendez-vous", "Schedule a meeting")}</div>
+        <h3 className="mt-1 text-[22px] font-semibold tracking-[-0.025em]">{tr(language, "Vous souhaitez prendre rendez-vous avec nous ?", "Would you like to schedule a meeting with us?")}</h3>
+        <p className="mt-2 max-w-xl text-[14px] leading-6 text-white/65">{tr(language, "Cliquez ici pour choisir et réserver directement le créneau qui vous convient.", "Choose and book the time slot that works best for you.")}</p>
+      </div>
+      <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-5 text-[13px] font-semibold text-[#202a2f] transition hover:bg-[#f2f3f4]">
+        <CalendarDays className="h-4 w-4" /> {tr(language, "Réserver un créneau", "Book a meeting")} <ArrowUpRight className="h-4 w-4" />
+      </a>
+    </div>
+  </section>;
 }
 
 function SD02Document({ content, language }: { content: SD02Content; language: RoomLanguage }) {
@@ -307,6 +323,7 @@ export function PublicSDRoomV6({ token }: { token: string }) {
 
       <article className="min-w-0"><div className="mb-7 flex items-center justify-between gap-4 border-b border-[#dfe3e5] pb-5"><div><Eyebrow>{currentDocument.code}{OPTIONAL_CODES.includes(currentDocument.code) ? tr(language, " · Facultatif", " · Optional") : tr(language, " · Obligatoire", " · Required")}</Eyebrow><h2 className="mt-1 text-[30px] font-semibold tracking-[-0.035em] text-[#182227]">{stageTitle(currentDocument.code, language)}</h2></div><span className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold ${currentDocument.status === "validated" ? "bg-[#edf7ef] text-[#366844]" : "bg-white text-[#666f74] ring-1 ring-[#dfe3e5]"}`}>{currentDocument.status === "validated" ? tr(language, "Validé", "Approved") : tr(language, "À valider", "To approve")}</span></div>
         <DocumentBody document={currentDocument} token={token} visitorEmail={data.visitorEmail} language={language} />
+        {currentDocument.code === "SD01" && data.room.meetingBookingUrl ? <MeetingBookingCTA url={data.room.meetingBookingUrl} language={language} /> : null}
 
         <section className="mt-7 rounded-[18px] border border-[#dfe3e5] bg-white p-5 sm:p-7">{currentDocument.status === "validated" ? <div className="flex gap-4"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e8f2ea] text-[#3d7049]"><Check className="h-5 w-5" /></div><div><div className="font-semibold text-[#24302c]">{tr(language, "Cette étape est validée", "This step is approved")}</div><p className="mt-1 text-[14px] leading-6 text-[#687277]">{validatedBy ? `Validée par ${validatedBy}` : "Validation enregistrée"}{currentDocument.validated_at ? ` · ${formatDate(currentDocument.validated_at)}` : ""}.</p></div></div> : <div className="grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center"><div><Eyebrow>{tr(language, "Validation", "Approval")}</Eyebrow><h3 className="mt-1 text-[21px] font-semibold tracking-[-0.02em] text-[#202a2f]">{tr(language, "Confirmez-vous le contenu de cette étape ?", "Do you approve the content of this step?")}</h3><p className="mt-2 text-[14px] leading-6 text-[#6b757a]">{tr(language, "La validation enregistre votre accord sur cette version.", "Approval records your agreement with this version.")}</p></div><button type="button" onClick={() => void validateStage()} disabled={validating || currentDocument.status !== "published"} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#202a2f] px-5 text-[13px] font-semibold text-white disabled:opacity-45">{validating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {tr(language, "Valider", "Approve")} {currentDocument.code}</button></div>}</section>
 
