@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, ImageIcon, Loader2, RefreshCw, Save, Sparkles } from "lucide-react";
+import { CalendarDays, Check, Copy, ImageIcon, Loader2, RefreshCw, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,6 +24,7 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
   const [theme, setTheme] = useState<SDRoomBrandTheme>("gando");
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [meetingBookingUrl, setMeetingBookingUrl] = useState("");
 
   const apply = useCallback((next: SDRoomRecord) => {
     setRoom(next);
@@ -33,6 +34,7 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
     setTheme(next.brand_theme || "gando");
     setTitle(next.brand_title || next.title || "");
     setSubtitle(next.brand_subtitle || "Espace de collaboration");
+    setMeetingBookingUrl(next.meeting_booking_url || "");
   }, []);
 
   const load = useCallback(async () => {
@@ -56,6 +58,11 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
   const save = async () => {
     if (!room) return;
     if (!companyName.trim()) { toast.error("Le nom de l’entreprise est obligatoire."); return; }
+    const bookingUrl = meetingBookingUrl.trim();
+    if (bookingUrl && !/^https?:\/\/\S+$/i.test(bookingUrl)) {
+      toast.error("Le lien de rendez-vous doit commencer par http:// ou https://.");
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, {
@@ -71,6 +78,7 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
           brandTheme: theme,
           brandTitle: title.trim(),
           brandSubtitle: subtitle.trim(),
+          meetingBookingUrl: bookingUrl,
         }),
       });
       const payload = await response.json();
@@ -114,6 +122,13 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
             <Card className="p-5">
               <h2 className="font-bold">Contenu de la hero</h2>
               <div className="mt-4 space-y-4"><div><Label>Titre affiché</Label><Input className="mt-2" value={title} onChange={event => setTitle(event.target.value)} placeholder={`${companyName || "Client"} × Gando`} /></div><div><Label>Sous-titre de la bannière</Label><textarea value={subtitle} onChange={event => setSubtitle(event.target.value)} rows={3} className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" placeholder="Espace de collaboration" /></div></div>
+            </Card>
+
+            <Card className="p-5">
+              <div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /><h2 className="font-bold">Prise de rendez-vous</h2></div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">Ce lien affiche un CTA juste après le SD01 sur le site public. Tu peux utiliser un lien HubSpot Meetings, Calendly ou tout autre outil de réservation.</p>
+              <div className="mt-4"><Label>Lien de réservation</Label><Input type="url" className="mt-2" value={meetingBookingUrl} onChange={event => setMeetingBookingUrl(event.target.value)} placeholder="https://meetings.hubspot.com/..." /></div>
+              {meetingBookingUrl.trim() ? <div className="mt-4 rounded-xl border border-border bg-muted/30 p-3"><div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Aperçu du CTA</div><div className="mt-1 text-sm font-bold">Vous souhaitez prendre rendez-vous avec nous ?</div><div className="mt-1 text-xs text-muted-foreground">Le visiteur pourra cliquer pour choisir directement un créneau.</div></div> : null}
             </Card>
 
             <Card className="p-5">
