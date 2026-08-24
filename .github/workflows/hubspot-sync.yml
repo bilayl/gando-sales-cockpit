@@ -5,14 +5,19 @@ on:
     - cron: "*/30 * * * *"
   workflow_dispatch:
 
+concurrency:
+  group: hubspot-sync
+  cancel-in-progress: false
+
 env:
   SYNC_URL: https://gando-sales-cockpit-web.vercel.app/api/sync
 
 jobs:
-  sync:
+  sync-primary:
     name: Sync ${{ matrix.resource }}
     runs-on: ubuntu-latest
     strategy:
+      max-parallel: 2
       matrix:
         resource: [companies, contacts, deals, tasks, activities]
     steps:
@@ -22,6 +27,24 @@ jobs:
           code=$(curl -sS --max-time 300 -o "$body" -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             "$SYNC_URL?resource=${{ matrix.resource }}")
+          echo "HTTP $code"
+          cat "$body"
+          rm "$body"
+          if [ "$code" != "200" ]; then
+            exit 1
+          fi
+
+  refresh-derived:
+    name: Refresh associations and recommendations
+    runs-on: ubuntu-latest
+    needs: sync-primary
+    steps:
+      - name: Refresh derived sales data once
+        run: |
+          body=$(mktemp)
+          code=$(curl -sS --max-time 300 -o "$body" -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "$SYNC_URL?resource=qualification")
           echo "HTTP $code"
           cat "$body"
           rm "$body"
