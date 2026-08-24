@@ -1,11 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError, hubspotJson } from "@/lib/hubspot";
 
+type SupportedObjectTypeId = "0-1" | "0-2";
+type HubSpotList = {
+  listId: string;
+  name?: string;
+  objectTypeId?: string;
+  processingType?: string;
+  size?: number;
+};
+
+async function loadSegmentsByObjectType(objectTypeId: SupportedObjectTypeId): Promise<HubSpotList[]> {
+  const data = await hubspotJson("/crm/lists/2026-03/search", {
+    method: "POST",
+    body: JSON.stringify({ count: 500, offset: 0, objectTypeId }),
+  });
+  return Array.isArray(data.lists) ? data.lists : [];
+}
+
 export async function GET() {
   try {
-    const data = await hubspotJson("/crm/lists/2026-03/search", { method: "POST", body: JSON.stringify({ count: 500, offset: 0 }) });
-    return NextResponse.json({ lists: data.lists ?? [] });
-  } catch (error) { return apiError(error); }
+    // HubSpot supports filtering segment searches by object type. Fetch both explicitly
+    // so contact segments cannot disappear when the account contains many company lists
+    // (or when HubSpot changes the ordering of the unfiltered search response).
+    const [companyLists, contactLists] = await Promise.all([
+      loadSegmentsByObjectType("0-2"),
+      loadSegmentsByObjectType("0-1"),
+    ]);
+
+    const lists = Array.from(
+      new Map(
+        [...companyLists, ...contactLists]
+          .filter(list => list?.listId)
+          .map(list => [String(list.listId), list]),
+      ).values(),
+    );
+
+    return NextResponse.json({
+      lists,
+      counts: {
+        companies: lists.filter(list => list.objectTypeId === "0-2").length,
+        contacts: lists.filter(list => list.objectTypeId === "0-1").length,
+      },
+    });
+  } catch (error) {
+    return apiError(error);
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -19,5 +59,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({ name, objectTypeId, processingType: "MANUAL" }),
     });
     return NextResponse.json(data, { status: 201 });
-  } catch (error) { return apiError(error); }
+  } catch (error) {
+    return apiError(error);
+  }
 }
