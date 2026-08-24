@@ -125,6 +125,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const roomBrandTheme = brandTheme(body.brandTheme);
     const brandTitle = String(body.brandTitle || title || created.title).trim().slice(0, 240) || null;
     const brandSubtitle = String(body.brandSubtitle || "Espace de collaboration").trim().slice(0, 500) || null;
+    const meetingBookingUrl = String(body.meetingBookingUrl || "").trim().slice(0, 2000) || null;
 
     const updates: Record<string, unknown> = {
       brand_theme: roomBrandTheme,
@@ -136,6 +137,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (crmLink) updates.crm_link = crmLink;
     if (prospectLogoUrl) updates.prospect_logo_url = prospectLogoUrl;
     if (brandBannerImageUrl) updates.brand_banner_image_url = brandBannerImageUrl;
+    if (meetingBookingUrl) updates.meeting_booking_url = meetingBookingUrl;
     const { error: updateError } = await getSupabaseAdmin().from("deal_rooms").update(updates).eq("id", created.id);
     if (updateError) throw updateError;
 
@@ -167,6 +169,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         brandTheme: body.brandTheme === undefined ? undefined : brandTheme(body.brandTheme),
         brandTitle: body.brandTitle === undefined ? undefined : String(body.brandTitle || ""),
         brandSubtitle: body.brandSubtitle === undefined ? undefined : String(body.brandSubtitle || ""),
+        meetingBookingUrl: body.meetingBookingUrl === undefined ? undefined : String(body.meetingBookingUrl || ""),
       });
       return Response.json({ room });
     }
