@@ -53,6 +53,14 @@ function cleanBrandTheme(value: unknown): SDRoomBrandTheme {
   return value === "gradient" || value === "dark" || value === "light" ? value : "gando";
 }
 
+function cleanBookingUrl(value: unknown) {
+  const url = cleanOptionalText(value, 2000);
+  if (url && !/^https?:\/\/\S+$/i.test(url)) {
+    throw Object.assign(new Error("Le lien de rendez-vous doit commencer par http:// ou https://."), { status: 400 });
+  }
+  return url;
+}
+
 export async function requireSDInternalAccess() {
   if (!isAuthBypassEnabled() && !(await isHubSpotAuthenticated())) {
     throw Object.assign(new Error("UNAUTHORIZED"), { status: 401 });
@@ -371,6 +379,7 @@ export async function updateSDRoomSettings(input: {
   brandTheme?: SDRoomBrandTheme;
   brandTitle?: string | null;
   brandSubtitle?: string | null;
+  meetingBookingUrl?: string | null;
 }) {
   const allowedEmails = [...new Set(input.allowedEmails.map(cleanEmail).filter(Boolean))].slice(0, 100);
   const updates: Record<string, unknown> = {
@@ -387,6 +396,7 @@ export async function updateSDRoomSettings(input: {
   if (input.brandTheme !== undefined) updates.brand_theme = cleanBrandTheme(input.brandTheme);
   if (input.brandTitle !== undefined) updates.brand_title = cleanOptionalText(input.brandTitle, 240);
   if (input.brandSubtitle !== undefined) updates.brand_subtitle = cleanOptionalText(input.brandSubtitle, 500);
+  if (input.meetingBookingUrl !== undefined) updates.meeting_booking_url = cleanBookingUrl(input.meetingBookingUrl);
 
   const { data, error } = await getSupabaseAdmin()
     .from("deal_rooms")
@@ -450,6 +460,7 @@ export async function getPublicSDRoom(token: string, email: string) {
       theme: cleanBrandTheme(room.brand_theme),
       displayTitle: room.brand_title || room.title,
       displaySubtitle: room.brand_subtitle || "Espace de collaboration avec Gando",
+      meetingBookingUrl: room.meeting_booking_url,
       currentStage: room.current_stage,
       updatedAt: room.updated_at,
     },
