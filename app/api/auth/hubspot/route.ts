@@ -35,7 +35,6 @@ export async function GET(request: Request) {
     jar.delete(RETURN_TO_COOKIE);
   }
 
-  const callbackUrl = new URL("/api/auth/hubspot/callback", request.url).toString();
   const state = await createHubSpotState();
-  return NextResponse.redirect(buildHubSpotAuthUrl(state, callbackUrl));
+  return NextResponse.redirect(buildHubSpotAuthUrl(state));
 }
