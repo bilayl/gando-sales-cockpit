@@ -99,10 +99,11 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
     if (busy) return;
     setBusy(true);
     try {
-      const website = await ensureCompanyWebsite();
-      if (website?.website) {
-        const label = website.domain || website.website;
-        if ((website.updatedFields || []).length) toast.info(`Site web récupéré : ${label}`);
+      const websiteBefore = await ensureCompanyWebsite();
+      const websiteUpdatedBefore = Boolean(websiteBefore?.updatedFields?.length);
+      if (websiteBefore?.website && websiteUpdatedBefore) {
+        const siteLabel = websiteBefore.domain || websiteBefore.website;
+        toast.info(`Site web récupéré : ${siteLabel}`);
       }
 
       let payload = await requestEnrichment();
@@ -119,10 +120,18 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
       }
 
       if (!payload.found) {
+        if (websiteUpdatedBefore) await onCompleted?.();
         toast.info(payload.pending
           ? "L’enrichissement Apify continue, mais aucun résultat fiable n’est encore disponible."
           : payload.message || "Aucune donnée suffisamment fiable n’a été trouvée.");
         return;
+      }
+
+      const websiteAfter = await ensureCompanyWebsite();
+      const websiteUpdatedAfter = Boolean(websiteAfter?.updatedFields?.length);
+      if (websiteAfter?.website && websiteUpdatedAfter) {
+        const siteLabel = websiteAfter.domain || websiteAfter.website;
+        toast.info(`Site web ajouté : ${siteLabel}`);
       }
 
       const companyFields = payload.updatedCompanyFields?.length || 0;
@@ -133,6 +142,7 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
       const pieces = [
         companyFields ? `${companyFields} champ(s) entreprise complété(s)` : "",
         contactFields ? `${contactFields} champ(s) contact complété(s)` : "",
+        websiteUpdatedAfter ? "site web ajouté" : "",
         created ? `${created} contact(s) créé(s)` : "",
         reused ? `${reused} contact(s) associé(s)` : "",
       ].filter(Boolean);
