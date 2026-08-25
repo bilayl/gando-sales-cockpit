@@ -33,6 +33,30 @@ function qualificationProperties(row: any) {
   };
 }
 
+function freshProspectionStatus(properties: Record<string, unknown>) {
+  const explicit = String(properties?.statut_prospection || "").trim();
+  if (explicit) return explicit;
+  if (String(properties?.lifecyclestage || "").toLowerCase() === "customer") return "Gagné";
+
+  const leadStatus = String(properties?.hs_lead_status || "");
+  if (leadStatus === "UNQUALIFIED") return "Perdu";
+  if (leadStatus === "OPEN_DEAL") return "Opportunité";
+  if (leadStatus === "CONNECTED") return "Contact établi";
+  if (leadStatus === "ATTEMPTED_TO_CONTACT") return "Tentative";
+  if (leadStatus === "BAD_TIMING") {
+    return properties?.statut_de_lappel === "a_une_date_ulterieure" ? "Ultérieur" : "À relancer";
+  }
+  if (leadStatus === "OPEN" || leadStatus === "NEW") return "À contacter";
+
+  const callStatus = String(properties?.statut_de_lappel || "").toLowerCase();
+  if (callStatus === "nrp") return "Tentative";
+  if (["a_rappeler", "occupe", "interesse_mais", "en_attente_decision"].includes(callStatus)) return "À relancer";
+  if (callStatus === "a_une_date_ulterieure") return "Ultérieur";
+  if (callStatus === "interesse") return "Contact établi";
+  if (["pas_interesse", "hors_cible", "numero_invalide"].includes(callStatus)) return "Perdu";
+  return undefined;
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ listId: string }> }) {
   try {
     const { listId } = await params;
@@ -63,12 +87,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (objectTypeId === "0-2") {
       const results = ids.map((id: string) => {
         const local: any = byId.get(id);
+        const freshProperties = (freshById.get(id) ?? {}) as Record<string, unknown>;
+        const localQualification = qualificationProperties(local);
+        const freshStatus = freshProspectionStatus(freshProperties);
         return {
           id,
           properties: {
             ...(local?.raw_data?.properties ?? {}),
-            ...(freshById.get(id) ?? {}),
-            ...qualificationProperties(local),
+            ...localQualification,
+            ...freshProperties,
+            qualification_status: freshStatus || localQualification.qualification_status,
+            prospecting_status: freshStatus || localQualification.qualification_status,
+            qualification_last_call_status: freshProperties.statut_de_lappel
+              ? String(freshProperties.statut_de_lappel)
+              : localQualification.qualification_last_call_status,
           },
         };
       });
