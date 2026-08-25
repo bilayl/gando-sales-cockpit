@@ -1,0 +1,44 @@
+name: One-off OpenRouter Vault patch
+
+on:
+  push:
+    paths:
+      - '.github/patch-triggers/openrouter-vault-patch.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch OpenRouter key resolution
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('lib/openrouter-sales.ts')
+          s = p.read_text()
+          anchor = 'import { getSupabaseAdmin } from "@/lib/supabase-admin";\n'
+          imp = 'import { resolveOpenRouterApiKey } from "@/lib/openrouter-key";\n'
+          if imp not in s:
+              if anchor not in s:
+                  raise SystemExit('Supabase import anchor not found')
+              s = s.replace(anchor, anchor + imp, 1)
+          old = '  const apiKey = process.env.OPENROUTER_API_KEY?.trim();\n'
+          new = '  const { apiKey } = await resolveOpenRouterApiKey();\n'
+          if old not in s:
+              raise SystemExit('OpenRouter API key line not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "gando-bot"
+          git config user.email "bot@gando.app"
+          git add lib/openrouter-sales.ts
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix: use Supabase Vault for OpenRouter"
+          git push origin HEAD:main
