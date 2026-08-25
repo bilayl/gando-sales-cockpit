@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
-import { askInkeepSales, buildSalesSnapshot } from "@/lib/inkeep-sales";
+import { askOpenRouterSales, buildSalesSnapshot } from "@/lib/openrouter-sales";
 
 function scopeFrom(value: unknown) {
   return value === "recent" ? "recent" as const : "today" as const;
@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
     const scope = scopeFrom(new URL(request.url).searchParams.get("scope"));
     const snapshot = await buildSalesSnapshot("brief commercial", scope);
     return NextResponse.json({
-      configured: Boolean(process.env.INKEEP_API_KEY?.trim()),
+      configured: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
+      model: process.env.OPENROUTER_MODEL?.trim() || "~openai/gpt-latest",
       snapshot,
     });
   } catch (error) {
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     const scope = scopeFrom(body.scope);
     const snapshot = await buildSalesSnapshot(question, scope);
-    const result = await askInkeepSales(question, snapshot);
+    const result = await askOpenRouterSales(question, snapshot);
 
     return NextResponse.json({
       ...result,
@@ -39,6 +40,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const e = error as Error & { status?: number };
-    return NextResponse.json({ error: e.message || "Erreur assistant Inkeep" }, { status: e.status || 500 });
+    return NextResponse.json({ error: e.message || "Erreur assistant OpenRouter" }, { status: e.status || 500 });
   }
 }
