@@ -1,0 +1,20 @@
+name: One-off OpenRouter probe
+
+on:
+  push:
+    paths:
+      - '.github/patch-triggers/openrouter-probe.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe production runtime
+        run: |
+          set -euxo pipefail
+          curl --fail-with-body --silent --show-error --max-time 30 \
+            https://room.gando.pro/api/diagnostics/openrouter
+          echo
