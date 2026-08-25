@@ -450,7 +450,7 @@ export function CompanyDrawer({ companyId, open, onOpenChange }: Props) {
                 <SectionTitle icon={History} title="Historique centralisé HubSpot" count={timeline.length} />
                 <p className="mt-1.5 text-[11px] text-muted-foreground">Notes, appels, tâches et rendez-vous de l’entreprise et de tous ses contacts associés sont regroupés ici.</p>
                 <div className="mt-3 space-y-2">
-                  {timeline.slice(0, 60).map((item: any) => (
+                  {timeline.map((item: any) => (
                     <div key={item.id} className="flex gap-3 rounded-lg border border-border bg-card p-3">
                       <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-primary/[0.08] text-primary">{timelineIcon(item.type)}</span>
                       <div className="min-w-0 flex-1">
@@ -465,7 +465,7 @@ export function CompanyDrawer({ companyId, open, onOpenChange }: Props) {
                           <div className="shrink-0 text-xs text-muted-foreground">{item.date ? formatDate(item.date) : "Date inconnue"}</div>
                         </div>
                         {item.status ? <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground"><Check size={12} className="text-primary" /> {MEETING_LABELS[item.status] || item.status}</div> : null}
-                        {plainText(item.body) ? <p className="mt-2 line-clamp-4 text-xs leading-5 text-muted-foreground">{plainText(item.body)}</p> : null}
+                        {plainText(item.body) ? <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">{plainText(item.body)}</p> : null}
                       </div>
                     </div>
                   ))}

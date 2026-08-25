@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   CheckCircle2,
@@ -18,7 +19,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { ContactDrawer } from "@/components/contact-drawer";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { NewContactDialog } from "@/components/new-contact-dialog";
 import { ProspectionBoard } from "@/components/prospection-board";
@@ -56,7 +56,7 @@ type SessionMeta = { id: string; name: string; remaining: number; totalItems: nu
 
 const CALL_RECOMMENDATIONS_SEGMENT = "__database_call_recommendations__";
 const EMPTY_SUMMARY: RecommendationSummary = { ACTIONABLE: 0, OPPORTUNITY: 0, SNOOZED: 0, EXCLUDED: 0 };
-const PROSPECTION_OPTIONS = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Perdu"];
+const PROSPECTION_OPTIONS = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Pas intéressé", "Perdu"];
 const CALL_LABELS: Record<string, string> = {
   interesse: "Intéressé",
   "intéressé": "Intéressé",
@@ -104,6 +104,7 @@ function databaseDecision(contact: Contact): ContactProspectionDecision {
 }
 
 export function ContactFirstProspectionView() {
+  const router = useRouter();
   const [lists, setLists] = useState<List[]>([]);
   const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
   const [owners, setOwners] = useState<Owner[]>([]);
@@ -121,7 +122,6 @@ export function ContactFirstProspectionView() {
   const [workFilter, setWorkFilter] = useState<WorkFilter>("ACTIONABLE");
   const [recommendationBucket, setRecommendationBucket] = useState<RecommendationBucket>("ACTIONABLE");
   const [view, setView] = useState<ViewMode>("table");
-  const [drawerId, setDrawerId] = useState<string | null>(null);
   const [newContactOpen, setNewContactOpen] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [recommendationSummary, setRecommendationSummary] = useState<RecommendationSummary>(EMPTY_SUMMARY);
@@ -450,7 +450,7 @@ export function ContactFirstProspectionView() {
               contacts={filteredContacts}
               segmentId={segmentId}
               loading={loading}
-              onOpenContact={setDrawerId}
+              onOpenContact={id => router.push(`/contacts/${id}`)}
               onStatusChange={handleBoardStatusChange}
               onError={setError}
             />
@@ -481,7 +481,7 @@ export function ContactFirstProspectionView() {
                     const fullName = [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Sans nom";
                     const score = Number(p.db_call_score || 0);
                     return (
-                      <TableRow key={contact.id} className="cursor-pointer" onClick={() => setDrawerId(contact.id)}>
+                      <TableRow key={contact.id} className="cursor-pointer" onClick={() => router.push(`/contacts/${contact.id}`)}>
                         <TableCell>
                           <div className="min-w-[210px]">
                             <div className="flex flex-wrap items-center gap-1.5">
@@ -534,7 +534,6 @@ export function ContactFirstProspectionView() {
         </Card>
       </div>
 
-      <ContactDrawer contactId={drawerId} open={Boolean(drawerId)} onOpenChange={open => !open && setDrawerId(null)} onUpdated={() => void load(true, isRecommendationSegment)} />
       <NewCompanyDialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen} onCreated={() => void load(true, isRecommendationSegment)} />
       <NewContactDialog open={newContactOpen} onOpenChange={setNewContactOpen} onCreated={() => void load(true, isRecommendationSegment)} />
     </div>

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Building2, ListFilter, Loader2, MapPin, Play, Plus, RefreshCw, Search, SquareKanban, Table2, Users } from "lucide-react";
 import { CallRecommendationStrip } from "@/components/call-recommendation-strip";
-import { CompanyDrawer } from "@/components/company-drawer";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { NewContactDialog } from "@/components/new-contact-dialog";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
@@ -73,6 +73,7 @@ function companySuggestion(
 }
 
 export function CompanyFirstProspectionView() {
+  const router = useRouter();
   const [lists, setLists] = useState<List[]>([]);
   const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
   const [owners, setOwners] = useState<Owner[]>([]);
@@ -88,7 +89,6 @@ export function CompanyFirstProspectionView() {
   const [stageFilter, setStageFilter] = useState<CompanyStage | "">("");
   const [workFilter, setWorkFilter] = useState<WorkFilter>("ACTIONABLE");
   const [view, setView] = useState<ViewMode>("board");
-  const [drawerId, setDrawerId] = useState<string | null>(null);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [newContactOpen, setNewContactOpen] = useState(false);
@@ -276,7 +276,7 @@ export function CompanyFirstProspectionView() {
             </div>
           </div>
 
-          <CallRecommendationStrip items={recommendations} onOpen={setDrawerId} />
+          <CallRecommendationStrip items={recommendations} onOpen={id => router.push(`/companies/${id}`)} />
 
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-4 py-2.5">
             <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
@@ -314,7 +314,7 @@ export function CompanyFirstProspectionView() {
               companies={filtered}
               ownerNames={ownerNames}
               loading={loading}
-              onOpenCompany={setDrawerId}
+              onOpenCompany={id => router.push(`/companies/${id}`)}
               onStatusChange={handleStatusChange}
               onError={setError}
             />
@@ -343,7 +343,7 @@ export function CompanyFirstProspectionView() {
                     const stage = deriveCompanyStage(company);
                     const decision = getCompanyProspectionDecision(company, stage);
                     return (
-                      <TableRow key={company.id} className="cursor-pointer" onClick={() => setDrawerId(company.id)}>
+                      <TableRow key={company.id} className="cursor-pointer" onClick={() => router.push(`/companies/${company.id}`)}>
                         <TableCell>
                           <div className="min-w-[120px]">
                             <Badge variant={decision.bucket === "ACTIONABLE" ? "secondary" : "outline"}>{decision.priorityLabel}</Badge>
@@ -375,8 +375,7 @@ export function CompanyFirstProspectionView() {
         </Card>
       </div>
 
-      <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={actionableCompanies} onOpenCompany={setDrawerId} />
-      <CompanyDrawer companyId={drawerId} open={Boolean(drawerId)} onOpenChange={open => !open && setDrawerId(null)} />
+      <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={actionableCompanies} onOpenCompany={id => router.push(`/companies/${id}`)} />
       <NewCompanyDialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen} onCreated={() => void load(true)} />
       <NewContactDialog open={newContactOpen} onOpenChange={setNewContactOpen} onCreated={() => void load(true)} />
     </div>

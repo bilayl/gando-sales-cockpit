@@ -238,7 +238,7 @@ export function ContactDrawer({ contactId, open, onOpenChange, onUpdated }: Prop
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [owners, setOwners] = useState<Record<string, string>>({});
-  const [showAllNotes, setShowAllNotes] = useState(false);
+  const [showAllNotes, setShowAllNotes] = useState(true);
   const [noteDraft, setNoteDraft] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [actOpen, setActOpen] = useState(false);
