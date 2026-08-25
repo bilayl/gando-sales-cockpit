@@ -1,0 +1,44 @@
+name: One-off CRM task card patch
+
+on:
+  push:
+    paths:
+      - '.github/patch-triggers/crm-task-card.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch CRM record task cards
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('components/crm-record-page.tsx')
+          s = p.read_text()
+          anchor = 'import { Card } from "@/components/ui/card";\n'
+          imp = 'import { EditableCRMTaskCard } from "@/components/editable-crm-task-card";\n'
+          if imp not in s:
+              if anchor not in s:
+                  raise SystemExit('Card import anchor not found')
+              s = s.replace(anchor, anchor + imp, 1)
+          old = ': <TaskCard key={activity.id} task={activity} owners={owners} />)'
+          new = ': <EditableCRMTaskCard key={activity.id} task={activity} ownerName={ownerLabel(owners, activity.properties?.hubspot_owner_id)} onUpdated={load} />)'
+          if old not in s:
+              raise SystemExit('TaskCard usage not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "gando-bot"
+          git config user.email "bot@gando.app"
+          git add components/crm-record-page.tsx
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "feat: edit and complete tasks from CRM pages"
+          git push origin HEAD:main
