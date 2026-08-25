@@ -35,7 +35,8 @@ function qualificationProperties(row: any) {
 
 function freshProspectionStatus(properties: Record<string, unknown>) {
   const explicit = String(properties?.statut_prospection || "").trim();
-  if (explicit) return explicit;
+  const genericExplicit = ["À travailler", "À contacter", "À prospecter", "En prospection", ""].includes(explicit);
+
   if (String(properties?.lifecyclestage || "").toLowerCase() === "customer") return "Gagné";
 
   const leadStatus = String(properties?.hs_lead_status || "");
@@ -46,15 +47,17 @@ function freshProspectionStatus(properties: Record<string, unknown>) {
   if (leadStatus === "BAD_TIMING") {
     return properties?.statut_de_lappel === "a_une_date_ulterieure" ? "Ultérieur" : "À relancer";
   }
-  if (leadStatus === "OPEN" || leadStatus === "NEW") return "À contacter";
 
-  const callStatus = String(properties?.statut_de_lappel || "").toLowerCase();
+  const callStatus = String(properties?.statut_de_lappel || "").toLowerCase().split(";").map(item => item.trim()).filter(Boolean).at(-1) || "";
   if (callStatus === "nrp") return "Tentative";
   if (["a_rappeler", "occupe", "interesse_mais", "en_attente_decision"].includes(callStatus)) return "À relancer";
   if (callStatus === "a_une_date_ulterieure") return "Ultérieur";
   if (callStatus === "interesse") return "Contact établi";
   if (["pas_interesse", "hors_cible", "numero_invalide"].includes(callStatus)) return "Perdu";
-  return undefined;
+
+  if (!genericExplicit) return explicit;
+  if (leadStatus === "OPEN" || leadStatus === "NEW") return "À contacter";
+  return explicit || undefined;
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ listId: string }> }) {
