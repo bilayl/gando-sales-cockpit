@@ -1,8 +1,10 @@
 import { MeetingsView } from "@/components/meetings-view";
+import { SetterMeetingsPanel } from "@/components/setter-meetings-panel";
 
 export default function MeetingsPage() {
   return (
     <div className="meetings-without-gando-presentations">
+      <SetterMeetingsPanel />
       <MeetingsView />
       <style>{`
         .meetings-without-gando-presentations [role="tablist"][aria-label="Vues de rendez-vous"] > button:last-child {
