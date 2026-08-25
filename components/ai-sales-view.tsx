@@ -41,6 +41,7 @@ function fmt(value?: string | null) {
 export function AISalesView() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [configured, setConfigured] = useState(false);
+  const [model, setModel] = useState("");
   const [loading, setLoading] = useState(true);
   const [asking, setAsking] = useState(false);
   const [question, setQuestion] = useState("");
@@ -57,6 +58,7 @@ export function AISalesView() {
       if (!response.ok) throw new Error(payload.error || "Impossible de charger le brief");
       setSnapshot(payload.snapshot);
       setConfigured(Boolean(payload.configured));
+      setModel(String(payload.model || ""));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Erreur de chargement");
     } finally {
@@ -79,14 +81,15 @@ export function AISalesView() {
         body: JSON.stringify({ question: q, scope }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Inkeep n’a pas pu répondre");
+      if (!response.ok) throw new Error(payload.error || "OpenRouter n’a pas pu répondre");
       setSnapshot(payload.snapshot);
       setConfigured(Boolean(payload.configured));
+      setModel(String(payload.model || model));
       setAnswer(payload.configured
         ? payload.answer
-        : "Le moteur de recherche Sales est actif, mais Inkeep n’est pas encore authentifié. Ajoutez INKEEP_API_KEY dans les variables Vercel pour activer l’analyse IA.");
+        : "Le moteur de recherche Sales est actif, mais OpenRouter n’est pas encore authentifié. Ajoutez OPENROUTER_API_KEY dans les variables Vercel pour activer l’analyse IA.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Erreur Inkeep");
+      setError(cause instanceof Error ? cause.message : "Erreur OpenRouter");
     } finally {
       setAsking(false);
     }
@@ -97,9 +100,10 @@ export function AISalesView() {
       <div className="mx-auto max-w-[1500px] space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary"><Bot size={15} /> Inkeep × Gando</div>
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-primary"><Bot size={15} /> OpenRouter × Gando</div>
             <h1 className="mt-1 font-display text-2xl font-bold tracking-tight">IA Sales</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Recherche dans les prospects, statuts, tâches et transcriptions d’appels pour comprendre ce qui se passe réellement sur le terrain.</p>
+            {model ? <div className="mt-2"><Badge variant="outline" className="text-[10px]">Modèle : {model}</Badge></div> : null}
           </div>
           <div className="flex items-center gap-2">
             <div className="flex rounded-lg border border-border bg-card p-0.5">
@@ -112,7 +116,7 @@ export function AISalesView() {
 
         {!configured && !loading ? (
           <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-            <strong>Inkeep est intégré côté code.</strong> Il reste à ajouter <code className="rounded bg-background/70 px-1.5 py-0.5">INKEEP_API_KEY</code> dans Vercel pour activer les réponses IA.
+            <strong>OpenRouter est intégré côté code.</strong> Il reste à ajouter <code className="rounded bg-background/70 px-1.5 py-0.5">OPENROUTER_API_KEY</code> dans Vercel pour activer les réponses IA. Le modèle peut être changé avec <code className="rounded bg-background/70 px-1.5 py-0.5">OPENROUTER_MODEL</code>.
           </div>
         ) : null}
 
