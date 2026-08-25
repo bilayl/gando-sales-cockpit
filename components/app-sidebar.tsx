@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Bot,
   CalendarCheck2,
   CalendarDays,
   LifeBuoy,
@@ -24,6 +25,7 @@ type CockpitRole = "admin" | "member" | "commercial";
 
 const nav = [
   { href: "/prospection", label: "Prospection", icon: PhoneCall },
+  { href: "/ai-sales", label: "IA Sales", icon: Bot },
   { href: "/sourcing", label: "Sourcing", icon: Search },
   { href: "/segments", label: "Segments", icon: ListFilter },
   { href: "/tasks", label: "Tâches", icon: ListTodo },
