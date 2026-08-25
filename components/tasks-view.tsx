@@ -13,9 +13,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
+type TaskAssignee = {
+  email: string;
+  displayName: string;
+  role: string;
+  hubspotOwnerId?: string | null;
+};
+
 type Task = {
   id: string;
   properties: Record<string, string | null | undefined>;
+  cockpitAssignee?: TaskAssignee | null;
   associations?: {
     contact?: { id: string; properties?: Record<string, string | null | undefined> } | null;
     company?: { id: string; properties?: Record<string, string | null | undefined> } | null;
@@ -80,6 +88,7 @@ function priorityClass(priority?: string | null) {
 
 export function TasksView() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [assignees, setAssignees] = useState<TaskAssignee[]>([]);
   const [period, setPeriod] = useState<Period>("today");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
@@ -96,6 +105,20 @@ export function TasksView() {
   const [dueAt, setDueAt] = useState(() => toLocalInput(new Date(Date.now() + 60 * 60_000)));
   const [newType, setNewType] = useState("CALL");
   const [priority, setPriority] = useState("NONE");
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const [assigneeEmail, setAssigneeEmail] = useState("");
+
+  useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        const email = String(data?.email || "").trim().toLowerCase();
+        if (!email) return;
+        setCurrentUserEmail(email);
+        setAssigneeEmail(current => current || email);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const load = useCallback(async (after?: string) => {
     setLoading(true);
@@ -109,6 +132,7 @@ export function TasksView() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Impossible de charger les tâches HubSpot");
       setTasks(data.results || []);
+      setAssignees(data.assignees || []);
       setTotal(Number(data.total || 0));
       setNextAfter(data.paging?.next?.after || null);
     } catch (reason) {
@@ -149,12 +173,40 @@ export function TasksView() {
     }
   }
 
+  async function assignTask(task: Task, selected: string) {
+    const nextEmail = selected === "__none__" ? "" : selected;
+    setSavingId(task.id);
+    setError("");
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assigneeEmail: nextEmail }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Impossible d’assigner la tâche");
+      setTasks(current => current.map(row => row.id === task.id ? {
+        ...row,
+        properties: { ...row.properties, ...(data.properties || {}) },
+        cockpitAssignee: data.cockpitAssignee ?? null,
+      } : row));
+      toast.success(nextEmail ? "Tâche assignée." : "Assignation retirée.");
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Impossible d’assigner la tâche";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   function resetCreateForm() {
     setSubject("");
     setBody("");
     setDueAt(toLocalInput(new Date(Date.now() + 60 * 60_000)));
     setNewType("CALL");
     setPriority("NONE");
+    setAssigneeEmail(currentUserEmail);
     setCreateError("");
   }
 
@@ -165,14 +217,14 @@ export function TasksView() {
       const response = await fetch("/api/tasks", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ subject, body, timestamp: dueAt, type: newType, priority }),
+        body: JSON.stringify({ subject, body, timestamp: dueAt, type: newType, priority, assigneeEmail: assigneeEmail || null }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Impossible de créer la tâche HubSpot");
       setCreateOpen(false);
       resetCreateForm();
       await load();
-      toast.success("Tâche créée dans HubSpot.");
+      toast.success(data.cockpitAssignee ? `Tâche assignée à ${data.cockpitAssignee.displayName}.` : "Tâche créée dans HubSpot.");
     } catch (reason) {
       setCreateError(reason instanceof Error ? reason.message : "Impossible de créer la tâche HubSpot");
       toast.error(reason instanceof Error ? reason.message : "Impossible de créer la tâche HubSpot");
@@ -188,7 +240,7 @@ export function TasksView() {
       <div className="flex h-screen min-h-0 flex-col">
         <header className="shrink-0 px-5 pb-4 pt-5 lg:px-7 lg:pt-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div><h1 className="text-2xl font-bold tracking-[-0.035em]">Tâches</h1><p className="mt-1 text-sm text-muted-foreground">Toutes les actions HubSpot, synchronisées en temps réel.</p></div>
+            <div><h1 className="text-2xl font-bold tracking-[-0.035em]">Tâches</h1><p className="mt-1 text-sm text-muted-foreground">Toutes les actions HubSpot, assignables aux utilisateurs du Sales Cockpit.</p></div>
             <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => load()}><RefreshCw /> Actualiser</Button><Button size="sm" onClick={() => setCreateOpen(true)}><CirclePlus /> Nouvelle tâche</Button></div>
           </div>
 
@@ -208,9 +260,9 @@ export function TasksView() {
         <div className="minari-scrollbar min-h-0 flex-1 overflow-auto px-5 pb-5 lg:px-7">
           <Card className="overflow-hidden shadow-none">
             <Table>
-              <TableHeader><TableRow><TableHead className="w-28">Heure</TableHead><TableHead>Action</TableHead><TableHead>Prospect</TableHead><TableHead>Entreprise</TableHead><TableHead>Priorité</TableHead><TableHead>Statut</TableHead><TableHead className="w-36 text-right">Action</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead className="w-28">Heure</TableHead><TableHead>Action</TableHead><TableHead>Prospect</TableHead><TableHead>Entreprise</TableHead><TableHead>Priorité</TableHead><TableHead className="min-w-52">Assignée à</TableHead><TableHead>Statut</TableHead><TableHead className="w-36 text-right">Action</TableHead></TableRow></TableHeader>
               <TableBody>
-                {loading ? <TableRow><TableCell colSpan={7} className="h-56 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><span className="mt-2 block text-sm text-muted-foreground">Chargement depuis HubSpot…</span></TableCell></TableRow> : null}
+                {loading ? <TableRow><TableCell colSpan={8} className="h-56 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><span className="mt-2 block text-sm text-muted-foreground">Chargement depuis HubSpot…</span></TableCell></TableRow> : null}
                 {!loading && visibleTasks.map(task => {
                   const p = task.properties;
                   const due = formatTaskDate(p.hs_timestamp);
@@ -223,12 +275,21 @@ export function TasksView() {
                       <TableCell><span className="inline-flex items-center gap-1.5 text-sm"><UserRound className="h-3.5 w-3.5 text-muted-foreground" />{contactName(task)}</span></TableCell>
                       <TableCell>{task.associations?.company?.properties?.name || task.associations?.contact?.properties?.company || "—"}</TableCell>
                       <TableCell><Badge variant="outline" className={priorityClass(p.hs_task_priority)}>{p.hs_task_priority === "HIGH" ? "Haute" : p.hs_task_priority === "MEDIUM" ? "Moyenne" : p.hs_task_priority === "LOW" ? "Basse" : "Normale"}</Badge></TableCell>
+                      <TableCell>
+                        <Select value={task.cockpitAssignee?.email || "__none__"} onValueChange={value => void assignTask(task, value)} disabled={savingId === task.id || completed}>
+                          <SelectTrigger className="h-8 min-w-48"><SelectValue placeholder="Non assignée" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Non assignée</SelectItem>
+                            {assignees.map(member => <SelectItem key={member.email} value={member.email}>{member.displayName}{member.hubspotOwnerId ? " · HubSpot" : ""}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                       <TableCell><Badge variant="secondary">{STATUS_LABEL[p.hs_task_status || ""] || p.hs_task_status || "À faire"}</Badge></TableCell>
                       <TableCell className="text-right">{completed ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><Check className="h-3.5 w-3.5" /> Terminée</span> : <Button size="sm" variant="outline" disabled={savingId === task.id} onClick={() => complete(task)}>{savingId === task.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Terminer</Button>}</TableCell>
                     </TableRow>
                   );
                 })}
-                {!loading && !visibleTasks.length ? <TableRow><TableCell colSpan={7} className="h-56 text-center"><Check className="mx-auto h-7 w-7 text-emerald-300" /><div className="mt-3 font-medium">Aucune tâche dans cette vue</div><div className="mt-1 text-sm text-muted-foreground">Changez de période ou créez une nouvelle action.</div></TableCell></TableRow> : null}
+                {!loading && !visibleTasks.length ? <TableRow><TableCell colSpan={8} className="h-56 text-center"><Check className="mx-auto h-7 w-7 text-emerald-300" /><div className="mt-3 font-medium">Aucune tâche dans cette vue</div><div className="mt-1 text-sm text-muted-foreground">Changez de période ou créez une nouvelle action.</div></TableCell></TableRow> : null}
               </TableBody>
             </Table>
           </Card>
@@ -238,11 +299,21 @@ export function TasksView() {
 
       <Dialog open={createOpen} onOpenChange={open => { setCreateOpen(open); if (!open) resetCreateForm(); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Créer une tâche HubSpot</DialogTitle><DialogDescription>La tâche sera immédiatement créée dans HubSpot et apparaîtra dans le cockpit.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Créer une tâche HubSpot</DialogTitle><DialogDescription>La tâche sera créée dans HubSpot et assignée au membre Sales Cockpit choisi.</DialogDescription></DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-1.5"><Label htmlFor="task-subject">Titre</Label><Input id="task-subject" value={subject} onChange={event => setSubject(event.target.value)} placeholder="Rappeler le prospect…" /></div>
             <div className="grid gap-1.5"><Label htmlFor="task-body">Notes</Label><Input id="task-body" value={body} onChange={event => setBody(event.target.value)} placeholder="Contexte de l’action" /></div>
             <div className="grid gap-1.5"><Label htmlFor="task-due">Date et heure</Label><Input id="task-due" type="datetime-local" value={dueAt} onChange={event => setDueAt(event.target.value)} /></div>
+            <div className="grid gap-1.5">
+              <Label>Assignée à</Label>
+              <Select value={assigneeEmail || "__none__"} onValueChange={value => setAssigneeEmail(value === "__none__" ? "" : value)}>
+                <SelectTrigger><SelectValue placeholder="Choisir un utilisateur" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Non assignée</SelectItem>
+                  {assignees.map(member => <SelectItem key={member.email} value={member.email}>{member.displayName}{member.hubspotOwnerId ? " · synchronisé HubSpot" : " · Cockpit"}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5"><Label>Type</Label><Select value={newType} onValueChange={setNewType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{TYPES.filter(item => item.value !== "all").map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent></Select></div>
               <div className="grid gap-1.5"><Label>Priorité</Label><Select value={priority} onValueChange={setPriority}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NONE">Normale</SelectItem><SelectItem value="LOW">Basse</SelectItem><SelectItem value="MEDIUM">Moyenne</SelectItem><SelectItem value="HIGH">Haute</SelectItem></SelectContent></Select></div>
