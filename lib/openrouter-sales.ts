@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { resolveOpenRouterApiKey } from "@/lib/openrouter-key";
 
 type Scope = "today" | "recent";
 
@@ -143,7 +144,7 @@ export async function buildSalesSnapshot(question: string, scope: Scope = "today
 }
 
 export async function askOpenRouterSales(question: string, snapshot: Awaited<ReturnType<typeof buildSalesSnapshot>>) {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  const { apiKey } = await resolveOpenRouterApiKey();
   const configuredModel = process.env.OPENROUTER_MODEL?.trim() || "~openai/gpt-latest";
   if (!apiKey) return { configured: false as const, answer: "", model: configuredModel };
 
