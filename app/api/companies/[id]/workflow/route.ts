@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
-import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
+import { ensureCompanyQualificationProperties, ensureContactProspectionOptions } from "@/lib/hubspot/qualification-schema";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 type WorkflowAction =
@@ -13,6 +13,7 @@ type WorkflowAction =
   | "DEMO_SCHEDULED"
   | "OPEN_DEAL"
   | "WON"
+  | "NOT_INTERESTED"
   | "LOST";
 
 const HUBSPOT_LEAD_STATUS: Partial<Record<WorkflowAction, string>> = {
@@ -24,6 +25,7 @@ const HUBSPOT_LEAD_STATUS: Partial<Record<WorkflowAction, string>> = {
   LATER: "BAD_TIMING",
   DEMO_SCHEDULED: "CONNECTED",
   OPEN_DEAL: "OPEN_DEAL",
+  NOT_INTERESTED: "UNQUALIFIED",
   LOST: "UNQUALIFIED",
 };
 
@@ -37,6 +39,7 @@ const PROSPECTION_LABEL: Record<WorkflowAction, string> = {
   DEMO_SCHEDULED: "Démo prévue",
   OPEN_DEAL: "Opportunité",
   WON: "Gagné",
+  NOT_INTERESTED: "Pas intéressé",
   LOST: "Perdu",
 };
 
@@ -50,6 +53,7 @@ const QUALIFICATION_SCORE: Record<WorkflowAction, number> = {
   DEMO_SCHEDULED: 85,
   OPEN_DEAL: 90,
   WON: 100,
+  NOT_INTERESTED: 10,
   LOST: 5,
 };
 
@@ -126,6 +130,13 @@ function contactWorkflowProperties(action: WorkflowAction, reminderAt: Date | nu
         statut_de_lappel: "Intéressé",
         ...clearDates,
       };
+    case "NOT_INTERESTED":
+      return {
+        statut_prospection: "Pas intéressé",
+        resultat_prospection: "Pas intéressé",
+        statut_de_lappel: "pas intéressé",
+        ...clearDates,
+      };
     case "WON":
       return {
         statut_prospection: "Gagné",
@@ -186,7 +197,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     const body = await request.json();
     const action = String(body.action || "").trim() as WorkflowAction;
-    const allowed: WorkflowAction[] = ["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "FOLLOW_UP", "LATER", "DEMO_SCHEDULED", "OPEN_DEAL", "WON", "LOST"];
+    const allowed: WorkflowAction[] = ["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "FOLLOW_UP", "LATER", "DEMO_SCHEDULED", "OPEN_DEAL", "WON", "NOT_INTERESTED", "LOST"];
     if (!allowed.includes(action)) return NextResponse.json({ error: "Action de workflow invalide" }, { status: 400 });
 
     const reminderAt = parseReminder(body.reminderAt);
@@ -230,13 +241,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         properties.statut_de_lappel = "a_une_date_ulterieure";
         properties.date_de_rappel = reminderAt!.toISOString();
         break;
+      case "NOT_INTERESTED":
+        properties.statut_de_lappel = "pas_interesse";
+        properties.date_de_rappel = "";
+        break;
       case "WON":
         properties.lifecyclestage = "customer";
         properties.statut_de_lappel = "interesse";
         properties.date_de_rappel = "";
         break;
       case "LOST":
-        properties.statut_de_lappel = "pas_interesse";
         properties.date_de_rappel = "";
         break;
     }
@@ -252,6 +266,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
     let updatedContact = null;
     if (referenceContact) {
+      await ensureContactProspectionOptions();
       const contactProperties = contactWorkflowProperties(action, reminderAt);
       updatedContact = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(String(referenceContact.id))}`, {
         method: "PATCH",

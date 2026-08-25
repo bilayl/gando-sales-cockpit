@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { refreshCallRecommendations } from "@/lib/call-recommendations";
+import { ensureContactProspectionOptions } from "@/lib/hubspot/qualification-schema";
 
 const CONTACT_DETAIL_PROPERTIES = [
   "firstname","lastname","email","phone","mobilephone","jobtitle","city","state","country","company","hubspot_owner_id",
@@ -34,6 +35,7 @@ const COMPANY_STATUS_SCORE: Record<string, number> = {
   "Ultérieur": 60,
   "Opportunité": 90,
   "Gagné": 100,
+  "Pas intéressé": 10,
   "Perdu": 5,
 };
 
@@ -68,7 +70,7 @@ function contactStatusFromCall(value?: string | null) {
   if (["NRP", "Occupé", "A Rappeler", "À rappeler"].includes(call)) return "En prospection";
   if (["Intéressé", "Intéressé mais", "En attente décision"].includes(call)) return "Conversation";
   if (["A une date ultérieure", "À une date ultérieure"].includes(call)) return "À recycler";
-  if (["pas intéressé", "Pas intéressé"].includes(call)) return "Perdu";
+  if (["pas intéressé", "Pas intéressé"].includes(call)) return "Pas intéressé";
   if (["HORS CIBLE", "Hors cible", "Numéro invalide"].includes(call)) return "Non qualifié";
   return undefined;
 }
@@ -83,6 +85,7 @@ function companyWorkflowFromContact(properties: Record<string, string | null | u
     return { status: "Contact établi", leadStatus: "CONNECTED", callStatus: callStatus || "interesse" };
   }
   if (contactStatus === "À recycler") return { status: "Ultérieur", leadStatus: "BAD_TIMING", callStatus: callStatus || "a_une_date_ulterieure" };
+  if (contactStatus === "Pas intéressé") return { status: "Pas intéressé", leadStatus: "UNQUALIFIED", callStatus: callStatus || "pas_interesse" };
   if (contactStatus === "Non qualifié" || contactStatus === "Perdu") return { status: "Perdu", leadStatus: "UNQUALIFIED", callStatus };
   if (contactStatus === "À prospecter") return { status: "À contacter", leadStatus: "OPEN", callStatus };
 
@@ -90,7 +93,8 @@ function companyWorkflowFromContact(properties: Record<string, string | null | u
   if (["a_rappeler", "occupe", "interesse_mais", "en_attente_decision"].includes(callStatus)) return { status: "À relancer", leadStatus: "BAD_TIMING", callStatus };
   if (callStatus === "a_une_date_ulterieure") return { status: "Ultérieur", leadStatus: "BAD_TIMING", callStatus };
   if (callStatus === "interesse") return { status: "Contact établi", leadStatus: "CONNECTED", callStatus };
-  if (["pas_interesse", "hors_cible", "numero_invalide"].includes(callStatus)) return { status: "Perdu", leadStatus: "UNQUALIFIED", callStatus };
+  if (callStatus === "pas_interesse") return { status: "Pas intéressé", leadStatus: "UNQUALIFIED", callStatus };
+  if (["hors_cible", "numero_invalide"].includes(callStatus)) return { status: "Perdu", leadStatus: "UNQUALIFIED", callStatus };
   if (contactStatus === "Conversation") return { status: "Contact établi", leadStatus: "CONNECTED", callStatus };
   if (contactStatus === "En prospection") return { status: "Tentative", leadStatus: "ATTEMPTED_TO_CONTACT", callStatus };
   return { status: "À contacter", leadStatus: "OPEN", callStatus };
@@ -201,6 +205,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const body = await request.json();
     const properties = Object.fromEntries(Object.entries(body.properties ?? {}).filter(([key]) => editable.includes(key))) as Record<string, string>;
     if (!Object.keys(properties).length) return NextResponse.json({ error: "Aucune propriété modifiable fournie" }, { status: 400 });
+    if ("statut_prospection" in properties) await ensureContactProspectionOptions();
     const data = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ properties }) });
 
     const supabase = getSupabaseAdmin();

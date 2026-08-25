@@ -1,4 +1,5 @@
 import { hubspotJson } from "@/lib/hubspot";
+import { ensureCompanyProspectionOptions, ensureContactProspectionOptions } from "@/lib/hubspot/qualification-schema";
 
 export type HubSpotRecord = {
   id: string;
@@ -53,7 +54,7 @@ const OUTCOME_MAP: Record<string, OutcomeMapping> = {
   "A Rappeler": { callStatus: "A Rappeler", prospectionStatus: "En prospection", resultStatus: "À rappeler" },
   "Intéressé": { callStatus: "Intéressé", prospectionStatus: "Conversation", resultStatus: "Conversation" },
   "RDV pris": { callStatus: "Intéressé", prospectionStatus: "RDV booké", resultStatus: "RDV obtenu" },
-  "Pas intéressé": { callStatus: "pas intéressé", prospectionStatus: "Perdu", resultStatus: "Pas intéressé" },
+  "Pas intéressé": { callStatus: "pas intéressé", prospectionStatus: "Pas intéressé", resultStatus: "Pas intéressé" },
   "Hors cible": { callStatus: "HORS CIBLE", prospectionStatus: "Non qualifié", resultStatus: "" },
   "Numéro invalide": { callStatus: "Numéro invalide", prospectionStatus: "Non qualifié", resultStatus: "" },
   "A une date ultérieure": { callStatus: "A une date ultérieure", prospectionStatus: "À recycler", resultStatus: "", recycle: true },
@@ -67,7 +68,7 @@ const COMPANY_OUTCOME_MAP: Record<string, { callStatus: string; leadStatus?: str
   "A Rappeler": { callStatus: "a_rappeler", leadStatus: "BAD_TIMING", prospectionStatus: "À relancer" },
   "Intéressé": { callStatus: "interesse", leadStatus: "CONNECTED", prospectionStatus: "Contact établi" },
   "RDV pris": { callStatus: "interesse", leadStatus: "OPEN_DEAL", prospectionStatus: "Opportunité" },
-  "Pas intéressé": { callStatus: "pas_interesse", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },
+  "Pas intéressé": { callStatus: "pas_interesse", leadStatus: "UNQUALIFIED", prospectionStatus: "Pas intéressé" },
   "Hors cible": { callStatus: "hors_cible", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },
   "Numéro invalide": { callStatus: "numero_invalide", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },
   "A une date ultérieure": { callStatus: "a_une_date_ulterieure", leadStatus: "BAD_TIMING", prospectionStatus: "Ultérieur" },
@@ -98,6 +99,7 @@ export async function saveCallOutcome(contactId: string, outcome: string, remind
     date_recyclage: mapped.recycle && parsedReminder ? parsedReminder.toISOString() : "",
   };
 
+  await ensureContactProspectionOptions();
   const updatedContact = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(contactId)}`, {
     method: "PATCH",
     body: JSON.stringify({ properties }),
@@ -107,6 +109,7 @@ export async function saveCallOutcome(contactId: string, outcome: string, remind
   const companyId = contact.associations?.companies?.results?.[0]?.id;
   const companyOutcome = COMPANY_OUTCOME_MAP[outcome];
   if (companyId && companyOutcome) {
+    await ensureCompanyProspectionOptions();
     const companyProperties: Record<string, string> = {
       statut_de_lappel: companyOutcome.callStatus,
       date_de_rappel: parsedReminder ? parsedReminder.toISOString() : "",

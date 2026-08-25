@@ -38,6 +38,7 @@ function freshProspectionStatus(properties: Record<string, unknown>) {
   const genericExplicit = ["À travailler", "À contacter", "À prospecter", "En prospection", ""].includes(explicit);
 
   if (String(properties?.lifecyclestage || "").toLowerCase() === "customer") return "Gagné";
+  if (!genericExplicit) return explicit;
 
   const leadStatus = String(properties?.hs_lead_status || "");
   if (leadStatus === "UNQUALIFIED") return "Perdu";
@@ -53,9 +54,9 @@ function freshProspectionStatus(properties: Record<string, unknown>) {
   if (["a_rappeler", "occupe", "interesse_mais", "en_attente_decision"].includes(callStatus)) return "À relancer";
   if (callStatus === "a_une_date_ulterieure") return "Ultérieur";
   if (callStatus === "interesse") return "Contact établi";
-  if (["pas_interesse", "hors_cible", "numero_invalide"].includes(callStatus)) return "Perdu";
+  if (callStatus === "pas_interesse") return "Pas intéressé";
+  if (["hors_cible", "numero_invalide"].includes(callStatus)) return "Perdu";
 
-  if (!genericExplicit) return explicit;
   if (leadStatus === "OPEN" || leadStatus === "NEW") return "À contacter";
   return explicit || undefined;
 }

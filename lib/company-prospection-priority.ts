@@ -1,4 +1,4 @@
-export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "DEMO_SCHEDULED" | "OPEN_DEAL" | "WON" | "LOST";
+export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "DEMO_SCHEDULED" | "OPEN_DEAL" | "WON" | "NOT_INTERESTED" | "LOST";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
 
@@ -72,6 +72,10 @@ export function getCompanyProspectionDecision(
     || containsAny(statusText, ["gagne", "won"])
   ) {
     return { bucket: "EXCLUDED", priority: 99, priorityLabel: "Exclu", reason: "Compte déjà gagné / client" };
+  }
+
+  if (stage === "NOT_INTERESTED") {
+    return { bucket: "EXCLUDED", priority: 98, priorityLabel: "Pas intéressé", reason: "Prospect non intéressé" };
   }
 
   if (stage === "LOST" || containsAny(statusText, HARD_EXCLUSION_TERMS)) {

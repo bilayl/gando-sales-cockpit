@@ -59,7 +59,7 @@ const qualificationOptions = {
     ["Rodeeo", "Rodeeo"],
   ] as Array<[string, string]>,
   suite: ["INSCRIT", "Mail envoyer", "Whatsapp", "Linkedin", "Visio", "Caution créée", "Propal envoyée"],
-  prospection: ["À contacter", "Tentative", "Contact établi", "À relancer", "Ultérieur", "Démo prévue", "Opportunité", "Gagné", "Perdu"],
+  prospection: ["À contacter", "Tentative", "Contact établi", "À relancer", "Ultérieur", "Démo prévue", "Opportunité", "Gagné", "Pas intéressé", "Perdu"],
 };
 
 function options(values: string[]) {
@@ -110,6 +110,14 @@ export type QualificationSchemaResult = {
   unavailable: Array<{ name: string; error: string }>;
 };
 
+const CONTACT_PROSPECTION_SCHEMA: PropertySchema = {
+  name: "statut_prospection",
+  label: "Statut prospection",
+  type: "enumeration",
+  fieldType: "select",
+  options: options(["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Pas intéressé", "Perdu", "Gagné"]),
+};
+
 function mergedEnumerationOptions(schema: PropertySchema, current: any) {
   const desired = schema.options.map((option, index) => ({
     value: option.value,
@@ -127,6 +135,18 @@ function mergedEnumerationOptions(schema: PropertySchema, current: any) {
       hidden: schema.name === "statut_prospection" && String(option.value) === "À travailler" ? true : Boolean(option.hidden),
     }));
   return [...desired, ...legacy];
+}
+
+export async function ensureContactProspectionOptions() {
+  const current = await hubspotJson(`/crm/properties/2026-03/contacts/${encodeURIComponent(CONTACT_PROSPECTION_SCHEMA.name)}`);
+  await ensureExistingPropertyOptions(CONTACT_PROSPECTION_SCHEMA, current);
+}
+
+export async function ensureCompanyProspectionOptions() {
+  const schema = COMPANY_QUALIFICATION_SCHEMAS.find(property => property.name === "statut_prospection");
+  if (!schema) return;
+  const current = await hubspotJson(`/crm/properties/2026-03/companies/${encodeURIComponent(schema.name)}`);
+  await ensureExistingPropertyOptions(schema, current);
 }
 
 async function ensureExistingPropertyOptions(schema: PropertySchema, current: any) {

@@ -69,7 +69,7 @@ type GenericActivity = {
 
 type Activity = CallActivity | GenericActivity;
 
-const PROSPECTION_STATUSES = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Perdu"];
+const PROSPECTION_STATUSES = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Pas intéressé", "Perdu"];
 const CALL_STATUSES = ["Intéressé", "Intéressé mais", "A une date ultérieure", "A Rappeler", "pas intéressé", "Occupé", "NRP", "HORS CIBLE", "En attente décision", "Autres", "Numéro invalide"];
 const RESULT_STATUSES = ["", "Contact", "Intéressé", "Devis envoyé", "RDV", "Signé", "Perdu"];
 

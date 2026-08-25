@@ -31,6 +31,7 @@ export const COMPANY_PIPELINE: Array<{ value: CompanyStage; label: string; tone?
   { value: "LATER", label: "Ultérieur", tone: "later" },
   { value: "OPEN_DEAL", label: "Opportunité" },
   { value: "WON", label: "Gagné", tone: "won" },
+  { value: "NOT_INTERESTED", label: "Pas intéressé", tone: "lost" },
   { value: "LOST", label: "Perdu", tone: "lost" },
 ];
 
@@ -44,6 +45,7 @@ const QUALIFICATION_STAGE: Record<string, CompanyStage> = {
   "Démo prévue": "DEMO_SCHEDULED",
   "Opportunité": "OPEN_DEAL",
   "Gagné": "WON",
+  "Pas intéressé": "NOT_INTERESTED",
   "Perdu": "LOST",
 };
 
@@ -60,6 +62,7 @@ export function deriveCompanyStage(company: Company, now = Date.now()): CompanyS
 
   const consolidated = p.qualification_status || p.prospecting_status || p.statut_prospection;
   if (consolidated && QUALIFICATION_STAGE[consolidated]) return QUALIFICATION_STAGE[consolidated];
+  if (p.statut_de_lappel === "pas_interesse") return "NOT_INTERESTED";
   if (p.hs_lead_status === "UNQUALIFIED") return "LOST";
   if (p.hs_lead_status === "BAD_TIMING") {
     const reminder = dateMs(p.date_de_rappel || p.notes_next_activity_date);
@@ -217,7 +220,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
 
                         {p.qualification_reason ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{p.qualification_reason}</p> : null}
 
-                        {reminder && stage !== "WON" && stage !== "LOST" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"><CalendarClock size={12} /> {stage === "LATER" ? "Reprise" : "Action"} {formatDate(reminder)}</div> : null}
+                        {reminder && stage !== "WON" && stage !== "NOT_INTERESTED" && stage !== "LOST" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-700 dark:text-amber-300"><CalendarClock size={12} /> {stage === "LATER" ? "Reprise" : "Action"} {formatDate(reminder)}</div> : null}
                         {stage === "WON" ? <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-300"><CheckCircle2 size={12} /> Client gagné</div> : null}
 
                         <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-2 text-[11px] text-muted-foreground">

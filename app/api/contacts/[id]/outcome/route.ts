@@ -12,6 +12,7 @@ const COMPANY_STATUS_SCORE: Record<string, number> = {
   "Démo prévue": 85,
   "Opportunité": 90,
   "Gagné": 100,
+  "Pas intéressé": 10,
   "Perdu": 5,
 };
 
@@ -33,7 +34,8 @@ function companyProspectionStatus(properties: Record<string, string | null | und
   if (["a_rappeler", "occupe", "interesse_mais", "en_attente_decision"].includes(String(properties.statut_de_lappel || ""))) return "À relancer";
   if (properties.statut_de_lappel === "a_une_date_ulterieure") return "Ultérieur";
   if (properties.statut_de_lappel === "interesse") return "Contact établi";
-  if (["pas_interesse", "hors_cible", "numero_invalide"].includes(String(properties.statut_de_lappel || ""))) return "Perdu";
+  if (properties.statut_de_lappel === "pas_interesse") return "Pas intéressé";
+  if (["hors_cible", "numero_invalide"].includes(String(properties.statut_de_lappel || ""))) return "Perdu";
   return "À contacter";
 }
 
