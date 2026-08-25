@@ -25,6 +25,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { EditableCRMTaskCard } from "@/components/editable-crm-task-card";
 import { formatDate, initials } from "@/lib/utils";
 
 type Kind = "contact" | "company";
@@ -230,7 +231,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
                   <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="font-semibold">Historique complet</div><div className="mt-0.5 text-xs text-muted-foreground">Les notes sont affichées intégralement, sans résumé ni troncature.</div></div><div className="flex flex-wrap rounded-lg border border-border bg-muted/30 p-0.5">{TAB_LABELS.map(item => <button key={item.value} onClick={() => setTab(item.value)} className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${tab === item.value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{item.label} <span className="ml-1 opacity-60">{counts[item.value] || 0}</span></button>)}</div></div>
                 </div>
                 <div className="space-y-3 p-4 sm:p-5">
-                  {activities.length ? activities.map((activity: any) => tab === "notes" ? <NoteCard key={activity.id} note={activity} owners={owners} /> : tab === "calls" ? <CallCard key={activity.id} call={activity} owners={owners} /> : tab === "meetings" ? <MeetingCard key={activity.id} meeting={activity} /> : <TaskCard key={activity.id} task={activity} owners={owners} />) : <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">Aucun élément dans cette catégorie.</div>}
+                  {activities.length ? activities.map((activity: any) => tab === "notes" ? <NoteCard key={activity.id} note={activity} owners={owners} /> : tab === "calls" ? <CallCard key={activity.id} call={activity} owners={owners} /> : tab === "meetings" ? <MeetingCard key={activity.id} meeting={activity} /> : <EditableCRMTaskCard key={activity.id} task={activity} ownerName={ownerLabel(owners, activity.properties?.hubspot_owner_id)} onUpdated={load} />) : <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">Aucun élément dans cette catégorie.</div>}
                 </div>
               </Card>
             </div>
