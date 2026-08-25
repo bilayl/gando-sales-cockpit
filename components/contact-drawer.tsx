@@ -11,18 +11,34 @@ type Props = {
   onUpdated?: () => void;
 };
 
+const PROSPECTION_DIRTY_KEY = "gando:prospection-company-dirty";
+
 export function ContactDrawer(props: Props) {
   const { contactId, open, onUpdated } = props;
   const [refreshKey, setRefreshKey] = useState(0);
 
+  function flagProspectionRefresh() {
+    if (typeof window !== "undefined") window.sessionStorage.setItem(PROSPECTION_DIRTY_KEY, "1");
+  }
+
   async function handleCompleted() {
     setRefreshKey(value => value + 1);
+    flagProspectionRefresh();
+    onUpdated?.();
+  }
+
+  function handleUpdated() {
+    flagProspectionRefresh();
     onUpdated?.();
   }
 
   return (
     <>
-      <ContactDrawerBase key={`${contactId || "none"}-${refreshKey}`} {...props} />
+      <ContactDrawerBase
+        key={`${contactId || "none"}-${refreshKey}`}
+        {...props}
+        onUpdated={handleUpdated}
+      />
       <ProfileSourcingOverlay
         open={open}
         entityType="contact"
