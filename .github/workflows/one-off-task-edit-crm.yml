@@ -15,173 +15,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Patch CRM task cards
+      - name: Wire editable task component
         run: |
           python - <<'PY'
           from pathlib import Path
-
           path = Path('components/crm-record-page.tsx')
           text = path.read_text()
-
-          old = r'''function TaskCard({ task, owners }: { task: any; owners: Record<string, string> }) {
-  const p = task.properties || {};
-  const body = plainText(p.hs_task_body);
-  return (
-    <article className="rounded-xl border border-border bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div className="font-semibold">{p.hs_task_subject || "Tâche"}</div><div className="text-xs text-muted-foreground">{p.hs_timestamp ? formatDate(p.hs_timestamp) : "—"}</div></div>
-      <div className="mt-2 flex flex-wrap gap-1.5"><Badge variant="outline">{p.hs_task_status || "À faire"}</Badge><Badge variant="outline">{ownerLabel(owners, p.hubspot_owner_id)}</Badge></div>
-      {body ? <div className="mt-3 whitespace-pre-wrap text-sm leading-6">{body}</div> : null}
-    </article>
-  );
-}'''
-
-          new = r'''function taskDateInput(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (number: number) => String(number).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function TaskCard({ task, owners, onUpdated }: { task: any; owners: Record<string, string>; onUpdated: () => void }) {
-  const p = task.properties || {};
-  const body = plainText(p.hs_task_body);
-  const completed = p.hs_task_status === "COMPLETED";
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [taskError, setTaskError] = useState("");
-  const [subject, setSubject] = useState(p.hs_task_subject || "");
-  const [description, setDescription] = useState(body);
-  const [timestamp, setTimestamp] = useState(taskDateInput(p.hs_timestamp));
-  const [priority, setPriority] = useState(p.hs_task_priority || "NONE");
-  const [status, setStatus] = useState(p.hs_task_status || "NOT_STARTED");
-
-  useEffect(() => {
-    setSubject(p.hs_task_subject || "");
-    setDescription(plainText(p.hs_task_body));
-    setTimestamp(taskDateInput(p.hs_timestamp));
-    setPriority(p.hs_task_priority || "NONE");
-    setStatus(p.hs_task_status || "NOT_STARTED");
-  }, [task.id, p.hs_task_subject, p.hs_task_body, p.hs_timestamp, p.hs_task_priority, p.hs_task_status]);
-
-  async function updateTask(payload: Record<string, unknown>) {
-    setSaving(true);
-    setTaskError("");
-    try {
-      const response = await fetch(`/api/tasks/${encodeURIComponent(String(task.id))}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Impossible de modifier la tâche");
-      setEditing(false);
-      onUpdated();
-    } catch (cause) {
-      setTaskError(cause instanceof Error ? cause.message : "Impossible de modifier la tâche");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function saveEdits() {
-    if (!subject.trim()) {
-      setTaskError("Le titre de la tâche est obligatoire.");
-      return;
-    }
-    if (!timestamp) {
-      setTaskError("Choisissez une échéance.");
-      return;
-    }
-    await updateTask({
-      subject: subject.trim(),
-      body: description,
-      timestamp: new Date(timestamp).toISOString(),
-      priority,
-      status,
-    });
-  }
-
-  return (
-    <article className={`rounded-xl border p-4 ${completed ? "border-emerald-500/20 bg-emerald-500/[0.035]" : "border-border bg-card"}`}>
-      {editing ? (
-        <div className="space-y-3">
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Titre</label>
-            <input value={subject} onChange={event => setSubject(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Description</label>
-            <textarea value={description} onChange={event => setDescription(event.target.value)} rows={4} className="mt-1 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm leading-5 outline-none focus:border-primary" />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Échéance</label>
-              <input type="datetime-local" value={timestamp} onChange={event => setTimestamp(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Priorité</label>
-              <select value={priority} onChange={event => setPriority(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary">
-                <option value="NONE">Normale</option>
-                <option value="LOW">Basse</option>
-                <option value="MEDIUM">Moyenne</option>
-                <option value="HIGH">Haute</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Statut</label>
-              <select value={status} onChange={event => setStatus(event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary">
-                <option value="NOT_STARTED">À faire</option>
-                <option value="IN_PROGRESS">En cours</option>
-                <option value="WAITING">En attente</option>
-                <option value="DEFERRED">Reportée</option>
-                <option value="COMPLETED">Terminée</option>
-              </select>
-            </div>
-          </div>
-          {taskError ? <div className="text-xs font-medium text-destructive">{taskError}</div> : null}
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button size="sm" variant="ghost" disabled={saving} onClick={() => { setEditing(false); setTaskError(""); }}>Annuler</Button>
-            <Button size="sm" disabled={saving} onClick={() => void saveEdits()}>{saving ? <Loader2 size={14} className="animate-spin" /> : null} Enregistrer</Button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className={`font-semibold ${completed ? "line-through opacity-70" : ""}`}>{p.hs_task_subject || "Tâche"}</div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <Badge variant={completed ? "secondary" : "outline"}>{completed ? "Terminée" : p.hs_task_status || "À faire"}</Badge>
-                <Badge variant="outline">{ownerLabel(owners, p.hubspot_owner_id)}</Badge>
-                {p.hs_task_priority && p.hs_task_priority !== "NONE" ? <Badge variant="outline">Priorité {p.hs_task_priority}</Badge> : null}
-              </div>
-            </div>
-            <div className="text-xs text-muted-foreground">{p.hs_timestamp ? formatDate(p.hs_timestamp) : "—"}</div>
-          </div>
-          {body ? <div className="mt-3 whitespace-pre-wrap text-sm leading-6">{body}</div> : null}
-          {taskError ? <div className="mt-3 text-xs font-medium text-destructive">{taskError}</div> : null}
-          <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border/70 pt-3">
-            <Button size="sm" variant="outline" disabled={saving} onClick={() => setEditing(true)}>Modifier</Button>
-            <Button size="sm" variant={completed ? "outline" : "default"} disabled={saving} onClick={() => void updateTask({ status: completed ? "NOT_STARTED" : "COMPLETED" })}>
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {completed ? "Rouvrir" : "Terminer"}
-            </Button>
-          </div>
-        </>
-      )}
-    </article>
-  );
-}'''
-
-          if old not in text:
-              raise SystemExit('TaskCard block not found')
+          import_anchor = 'import { Card } from "@/components/ui/card";\n'
+          import_line = 'import { EditableCRMTaskCard } from "@/components/editable-crm-task-card";\n'
+          if import_line not in text:
+              if import_anchor not in text:
+                  raise SystemExit('import anchor not found')
+              text = text.replace(import_anchor, import_anchor + import_line, 1)
+          old = '<TaskCard key={activity.id} task={activity} owners={owners} />'
+          new = '<EditableCRMTaskCard key={activity.id} task={activity} ownerName={ownerLabel(owners, activity.properties?.hubspot_owner_id)} onUpdated={load} />'
+          if old not in text and new not in text:
+              raise SystemExit('task render not found')
           text = text.replace(old, new, 1)
-
-          old_render = '<TaskCard key={activity.id} task={activity} owners={owners} />'
-          new_render = '<TaskCard key={activity.id} task={activity} owners={owners} onUpdated={() => void load()} />'
-          if old_render not in text:
-              raise SystemExit('TaskCard render not found')
-          text = text.replace(old_render, new_render, 1)
-
           path.write_text(text)
           PY
       - name: Commit patch
@@ -190,5 +40,5 @@ function TaskCard({ task, owners, onUpdated }: { task: any; owners: Record<strin
           git config user.email "bot@gando.app"
           git add components/crm-record-page.tsx
           git diff --cached --quiet && exit 0
-          git commit -m "feat: edit and complete tasks from CRM records"
+          git commit -m "feat: enable task actions in CRM detail pages"
           git push origin HEAD:main
