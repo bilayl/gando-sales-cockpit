@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { getSupabaseAdmin } from "./supabase-admin";
 
 const COCKPIT_SESSION_COOKIE = "gando_cockpit_session";
-const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
+const SESSION_MAX_AGE = 60 * 60 * 24 * 90;
 
 export type CockpitAuthProvider = "password" | "hubspot";
 
