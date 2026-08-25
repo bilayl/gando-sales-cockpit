@@ -39,7 +39,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       await saveCockpitTaskAssignee(id, cockpitAssignee?.email || null);
     }
 
-    return NextResponse.json({ ...updated, cockpitAssignee: cockpitAssignee ?? undefined });
+    return NextResponse.json({
+      ...updated,
+      ...(body.assigneeEmail !== undefined ? { cockpitAssignee: cockpitAssignee || null } : {}),
+    });
   } catch (error) {
     return apiError(error);
   }
