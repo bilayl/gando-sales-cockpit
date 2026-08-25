@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { refreshCallRecommendations } from "@/lib/call-recommendations";
@@ -24,8 +24,128 @@ const ACTIVITY_TYPES: Record<string, { path: string; associationTypeId: number; 
   meeting: { path: "meetings", associationTypeId: 200, allowed: ["hs_meeting_title","hs_meeting_start_time","hs_meeting_end_time","hs_meeting_location","hs_meeting_outcome","hs_timestamp","hubspot_owner_id"], type: "meeting" },
 };
 
+const PROSPECTION_KEYS = new Set(["statut_prospection", "resultat_prospection", "statut_de_lappel", "date_prochaine_relance", "date_recyclage"]);
+
+const COMPANY_STATUS_SCORE: Record<string, number> = {
+  "À contacter": 30,
+  "Tentative": 45,
+  "Contact établi": 70,
+  "À relancer": 80,
+  "Ultérieur": 60,
+  "Opportunité": 90,
+  "Gagné": 100,
+  "Perdu": 5,
+};
+
+const COMPANY_CALL_STATUS: Record<string, string> = {
+  "Intéressé": "interesse",
+  "Intéressé mais": "interesse_mais",
+  "A une date ultérieure": "a_une_date_ulterieure",
+  "À une date ultérieure": "a_une_date_ulterieure",
+  "A Rappeler": "a_rappeler",
+  "À rappeler": "a_rappeler",
+  "pas intéressé": "pas_interesse",
+  "Pas intéressé": "pas_interesse",
+  "Occupé": "occupe",
+  "NRP": "nrp",
+  "HORS CIBLE": "hors_cible",
+  "Hors cible": "hors_cible",
+  "En attente décision": "en_attente_decision",
+  "Numéro invalide": "numero_invalide",
+  "Autres": "autres",
+};
+
 function hubspotRecord(row: any) {
   return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
+}
+
+function lastMultiValue(value?: string | null) {
+  return String(value || "").split(";").map(item => item.trim()).filter(Boolean).at(-1) || "";
+}
+
+function contactStatusFromCall(value?: string | null) {
+  const call = lastMultiValue(value);
+  if (["NRP", "Occupé", "A Rappeler", "À rappeler"].includes(call)) return "En prospection";
+  if (["Intéressé", "Intéressé mais", "En attente décision"].includes(call)) return "Conversation";
+  if (["A une date ultérieure", "À une date ultérieure"].includes(call)) return "À recycler";
+  if (["pas intéressé", "Pas intéressé"].includes(call)) return "Perdu";
+  if (["HORS CIBLE", "Hors cible", "Numéro invalide"].includes(call)) return "Non qualifié";
+  return undefined;
+}
+
+function companyWorkflowFromContact(properties: Record<string, string | null | undefined>) {
+  const contactStatus = String(properties.statut_prospection || "").trim();
+  const rawCall = lastMultiValue(properties.statut_de_lappel);
+  const callStatus = COMPANY_CALL_STATUS[rawCall] || rawCall;
+
+  if (contactStatus === "RDV booké") return { status: "Opportunité", leadStatus: "OPEN_DEAL", callStatus: callStatus || "interesse" };
+  if (contactStatus === "Conversation" && !["interesse_mais", "en_attente_decision"].includes(callStatus)) {
+    return { status: "Contact établi", leadStatus: "CONNECTED", callStatus: callStatus || "interesse" };
+  }
+  if (contactStatus === "À recycler") return { status: "Ultérieur", leadStatus: "BAD_TIMING", callStatus: callStatus || "a_une_date_ulterieure" };
+  if (contactStatus === "Non qualifié" || contactStatus === "Perdu") return { status: "Perdu", leadStatus: "UNQUALIFIED", callStatus };
+  if (contactStatus === "À prospecter") return { status: "À contacter", leadStatus: "OPEN", callStatus };
+
+  if (callStatus === "nrp") return { status: "Tentative", leadStatus: "ATTEMPTED_TO_CONTACT", callStatus };
+  if (["a_rappeler", "occupe", "interesse_mais", "en_attente_decision"].includes(callStatus)) return { status: "À relancer", leadStatus: "BAD_TIMING", callStatus };
+  if (callStatus === "a_une_date_ulterieure") return { status: "Ultérieur", leadStatus: "BAD_TIMING", callStatus };
+  if (callStatus === "interesse") return { status: "Contact établi", leadStatus: "CONNECTED", callStatus };
+  if (["pas_interesse", "hors_cible", "numero_invalide"].includes(callStatus)) return { status: "Perdu", leadStatus: "UNQUALIFIED", callStatus };
+  if (contactStatus === "Conversation") return { status: "Contact établi", leadStatus: "CONNECTED", callStatus };
+  if (contactStatus === "En prospection") return { status: "Tentative", leadStatus: "ATTEMPTED_TO_CONTACT", callStatus };
+  return { status: "À contacter", leadStatus: "OPEN", callStatus };
+}
+
+async function syncCompanyProspectionFromContact(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  contact: any,
+  contactProperties: Record<string, string | null | undefined>,
+  source: string,
+) {
+  let companyRow: any = null;
+  if (contact?.company_id) {
+    const result = await supabase.from("companies").select("*").eq("id", contact.company_id).maybeSingle();
+    companyRow = result.data;
+  }
+
+  if (!companyRow) {
+    const contactWithAssociations = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(String(contact.hubspot_id))}?associations=companies`);
+    const companyHubSpotId = contactWithAssociations.associations?.companies?.results?.[0]?.id;
+    if (companyHubSpotId) {
+      const result = await supabase.from("companies").select("*").eq("hubspot_id", String(companyHubSpotId)).maybeSingle();
+      companyRow = result.data;
+    }
+  }
+
+  if (!companyRow?.hubspot_id) return;
+
+  const workflow = companyWorkflowFromContact(contactProperties);
+  const reminder = contactProperties.date_recyclage || contactProperties.date_prochaine_relance || "";
+  const companyProperties: Record<string, string> = {
+    statut_prospection: workflow.status,
+    hs_lead_status: workflow.leadStatus,
+    statut_de_lappel: workflow.callStatus || "",
+    date_de_rappel: reminder,
+  };
+
+  const updatedCompany = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(String(companyRow.hubspot_id))}`, {
+    method: "PATCH",
+    body: JSON.stringify({ properties: companyProperties }),
+  });
+
+  const merged = { ...(companyRow.raw_data?.properties ?? {}), ...companyProperties, ...(updatedCompany.properties ?? {}) };
+  const { error } = await supabase.from("companies").update({
+    raw_data: { ...companyRow.raw_data, ...updatedCompany, properties: merged, updatedAt: new Date().toISOString() },
+    hubspot_updated_at: new Date().toISOString(),
+    prospecting_status: workflow.status,
+    qualification_status: workflow.status,
+    qualification_score: COMPANY_STATUS_SCORE[workflow.status] ?? companyRow.qualification_score,
+    qualification_reason: `Statut mis à jour depuis le setter (${source})`,
+    qualification_next_action_at: reminder || null,
+    qualification_last_call_status: workflow.callStatus || companyRow.qualification_last_call_status || null,
+    qualification_source: "sales_cockpit_setter",
+  }).eq("hubspot_id", String(companyRow.hubspot_id));
+  if (error) console.error("Supabase sync company from contact:", error.message);
 }
 
 async function refreshRecommendationScores() {
@@ -79,14 +199,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     const { id } = await params;
     const body = await request.json();
-    const properties = Object.fromEntries(Object.entries(body.properties ?? {}).filter(([key]) => editable.includes(key)));
+    const properties = Object.fromEntries(Object.entries(body.properties ?? {}).filter(([key]) => editable.includes(key))) as Record<string, string>;
     if (!Object.keys(properties).length) return NextResponse.json({ error: "Aucune propriété modifiable fournie" }, { status: 400 });
     const data = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ properties }) });
 
     const supabase = getSupabaseAdmin();
     const { data: existing } = await supabase.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
     if (existing) {
-      const props = { ...(existing.raw_data?.properties ?? {}), ...properties };
+      const props = { ...(existing.raw_data?.properties ?? {}), ...properties } as Record<string, string | null | undefined>;
       const { error } = await supabase.from("contacts").update({
         raw_data: { ...existing.raw_data, properties: props, updatedAt: new Date().toISOString() },
         hubspot_updated_at: new Date().toISOString(),
@@ -98,7 +218,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         owner_hubspot_id: props.hubspot_owner_id ?? null,
       }).eq("hubspot_id", id);
       if (error) console.error("Supabase update contact:", error.message);
-      else await refreshRecommendationScores();
+      else {
+        if (Object.keys(properties).some(key => PROSPECTION_KEYS.has(key))) {
+          await syncCompanyProspectionFromContact(supabase, existing, props, "fiche contact");
+        }
+        await refreshRecommendationScores();
+      }
     }
     return NextResponse.json(data);
   } catch (error) {
@@ -118,7 +243,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       Object.entries(body.properties ?? {})
         .filter(([key, value]) => def.allowed.includes(key) && value !== undefined && value !== null && String(value).trim() !== "")
         .map(([key, value]) => [key, String(value).trim()])
-    );
+    ) as Record<string, string>;
     if (!properties.hs_timestamp) properties.hs_timestamp = new Date().toISOString();
     if (!Object.keys(properties).length) return NextResponse.json({ error: "Aucune donnée à créer" }, { status: 400 });
     const data = await hubspotJson(`/crm/objects/2026-03/${def.path}`, {
@@ -130,7 +255,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
 
     const supabase = getSupabaseAdmin();
-    const { data: contact } = await supabase.from("contacts").select("id").eq("hubspot_id", id).maybeSingle();
+    const { data: contact } = await supabase.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
     if (contact) {
       if (def.type === "task") {
         const taskRow = {
@@ -164,7 +289,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         };
         const { error } = await supabase.from("activities").upsert(activityRow, { onConflict: "hubspot_id" });
         if (error) console.error("Supabase upsert activity:", error.message);
-        else await refreshRecommendationScores();
+        else {
+          if (def.type === "call" && properties.hs_call_disposition) {
+            const status = contactStatusFromCall(properties.hs_call_disposition);
+            if (status) {
+              const contactPatch = {
+                statut_de_lappel: properties.hs_call_disposition,
+                statut_prospection: status,
+              };
+              const updatedContact = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(id)}`, {
+                method: "PATCH",
+                body: JSON.stringify({ properties: contactPatch }),
+              });
+              const mergedContactProps = {
+                ...(contact.raw_data?.properties ?? {}),
+                ...contactPatch,
+                ...(updatedContact.properties ?? {}),
+              } as Record<string, string | null | undefined>;
+              await supabase.from("contacts").update({
+                raw_data: { ...contact.raw_data, ...updatedContact, properties: mergedContactProps, updatedAt: new Date().toISOString() },
+                hubspot_updated_at: new Date().toISOString(),
+              }).eq("hubspot_id", id);
+              await syncCompanyProspectionFromContact(supabase, contact, mergedContactProps, "résultat d’appel");
+            }
+          }
+          await refreshRecommendationScores();
+        }
       }
     }
     return NextResponse.json(data, { status: 201 });
