@@ -1,0 +1,230 @@
+name: One-off Pas interesse patch
+
+on:
+  push:
+    paths:
+      - '.github/patch-triggers/pas-interesse.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply status taxonomy patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8-sig')
+              if old not in text:
+                  raise SystemExit(f'Pattern not found in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          # Contact UI: add the explicit status.
+          replace(
+              'components/contact-drawer-base.tsx',
+              'const PROSPECTION_STATUSES = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Perdu"];',
+              'const PROSPECTION_STATUSES = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Pas intéressé", "Perdu"];',
+          )
+
+          # Company status schema + HubSpot contact enum updater.
+          replace(
+              'lib/hubspot/qualification-schema.ts',
+              '  prospection: ["À contacter", "Tentative", "Contact établi", "À relancer", "Ultérieur", "Démo prévue", "Opportunité", "Gagné", "Perdu"],',
+              '  prospection: ["À contacter", "Tentative", "Contact établi", "À relancer", "Ultérieur", "Démo prévue", "Opportunité", "Gagné", "Pas intéressé", "Perdu"],',
+          )
+          replace(
+              'lib/hubspot/qualification-schema.ts',
+              'export type QualificationSchemaResult = {\n  available: string[];\n  created: string[];\n  unavailable: Array<{ name: string; error: string }>;\n};',
+              '''export type QualificationSchemaResult = {\n  available: string[];\n  created: string[];\n  unavailable: Array<{ name: string; error: string }>;\n};\n\nconst CONTACT_PROSPECTION_SCHEMA: PropertySchema = {\n  name: "statut_prospection",\n  label: "Statut prospection",\n  type: "enumeration",\n  fieldType: "select",\n  options: options(["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Pas intéressé", "Perdu", "Gagné"]),\n};''',
+          )
+          replace(
+              'lib/hubspot/qualification-schema.ts',
+              'async function ensureExistingPropertyOptions(schema: PropertySchema, current: any) {',
+              '''export async function ensureContactProspectionOptions() {\n  const current = await hubspotJson(`/crm/properties/2026-03/contacts/${encodeURIComponent(CONTACT_PROSPECTION_SCHEMA.name)}`);\n  await ensureExistingPropertyOptions(CONTACT_PROSPECTION_SCHEMA, current);\n}\n\nexport async function ensureCompanyProspectionOptions() {\n  const schema = COMPANY_QUALIFICATION_SCHEMAS.find(property => property.name === "statut_prospection");\n  if (!schema) return;\n  const current = await hubspotJson(`/crm/properties/2026-03/companies/${encodeURIComponent(schema.name)}`);\n  await ensureExistingPropertyOptions(schema, current);\n}\n\nasync function ensureExistingPropertyOptions(schema: PropertySchema, current: any) {''',
+          )
+
+          # Setter call outcome mappings: Pas intéressé is not Perdu.
+          replace(
+              'lib/hubspot/contacts.ts',
+              'import { hubspotJson } from "@/lib/hubspot";',
+              'import { hubspotJson } from "@/lib/hubspot";\nimport { ensureCompanyProspectionOptions, ensureContactProspectionOptions } from "@/lib/hubspot/qualification-schema";',
+          )
+          replace(
+              'lib/hubspot/contacts.ts',
+              '  "Pas intéressé": { callStatus: "pas intéressé", prospectionStatus: "Perdu", resultStatus: "Pas intéressé" },',
+              '  "Pas intéressé": { callStatus: "pas intéressé", prospectionStatus: "Pas intéressé", resultStatus: "Pas intéressé" },',
+          )
+          replace(
+              'lib/hubspot/contacts.ts',
+              '  "Pas intéressé": { callStatus: "pas_interesse", leadStatus: "UNQUALIFIED", prospectionStatus: "Perdu" },',
+              '  "Pas intéressé": { callStatus: "pas_interesse", leadStatus: "UNQUALIFIED", prospectionStatus: "Pas intéressé" },',
+          )
+          replace(
+              'lib/hubspot/contacts.ts',
+              '  const updatedContact = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(contactId)}`, {',
+              '  await ensureContactProspectionOptions();\n  const updatedContact = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(contactId)}`, {',
+          )
+          replace(
+              'lib/hubspot/contacts.ts',
+              '  if (companyId && companyOutcome) {\n    const companyProperties: Record<string, string> = {',
+              '  if (companyId && companyOutcome) {\n    await ensureCompanyProspectionOptions();\n    const companyProperties: Record<string, string> = {',
+          )
+
+          # Local outcome cache.
+          replace(
+              'app/api/contacts/[id]/outcome/route.ts',
+              '  "Gagné": 100,\n  "Perdu": 5,',
+              '  "Gagné": 100,\n  "Pas intéressé": 10,\n  "Perdu": 5,',
+          )
+          replace(
+              'app/api/contacts/[id]/outcome/route.ts',
+              '  if (["pas_interesse", "hors_cible", "numero_invalide"].includes(String(properties.statut_de_lappel || ""))) return "Perdu";',
+              '  if (properties.statut_de_lappel === "pas_interesse") return "Pas intéressé";\n  if (["hors_cible", "numero_invalide"].includes(String(properties.statut_de_lappel || ""))) return "Perdu";',
+          )
+
+          # Segment freshness: custom status wins, and Pas intéressé stays distinct.
+          replace(
+              'app/api/segments/[listId]/members/route.ts',
+              '  if (String(properties?.lifecyclestage || "").toLowerCase() === "customer") return "Gagné";\n\n  const leadStatus = String(properties?.hs_lead_status || "");',
+              '  if (String(properties?.lifecyclestage || "").toLowerCase() === "customer") return "Gagné";\n  if (!genericExplicit) return explicit;\n\n  const leadStatus = String(properties?.hs_lead_status || "");',
+          )
+          replace(
+              'app/api/segments/[listId]/members/route.ts',
+              '  if (["pas_interesse", "hors_cible", "numero_invalide"].includes(callStatus)) return "Perdu";\n\n  if (!genericExplicit) return explicit;',
+              '  if (callStatus === "pas_interesse") return "Pas intéressé";\n  if (["hors_cible", "numero_invalide"].includes(callStatus)) return "Perdu";\n',
+          )
+
+          # Company stage taxonomy + separate board column.
+          replace(
+              'lib/company-prospection-priority.ts',
+              'export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "DEMO_SCHEDULED" | "OPEN_DEAL" | "WON" | "LOST";',
+              'export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "DEMO_SCHEDULED" | "OPEN_DEAL" | "WON" | "NOT_INTERESTED" | "LOST";',
+          )
+          replace(
+              'lib/company-prospection-priority.ts',
+              '  if (stage === "LOST" || containsAny(statusText, HARD_EXCLUSION_TERMS)) {',
+              '  if (stage === "NOT_INTERESTED") {\n    return { bucket: "EXCLUDED", priority: 98, priorityLabel: "Pas intéressé", reason: "Prospect non intéressé" };\n  }\n\n  if (stage === "LOST" || containsAny(statusText, HARD_EXCLUSION_TERMS)) {',
+          )
+
+          replace(
+              'components/company-prospection-board.tsx',
+              '  { value: "WON", label: "Gagné", tone: "won" },\n  { value: "LOST", label: "Perdu", tone: "lost" },',
+              '  { value: "WON", label: "Gagné", tone: "won" },\n  { value: "NOT_INTERESTED", label: "Pas intéressé", tone: "lost" },\n  { value: "LOST", label: "Perdu", tone: "lost" },',
+          )
+          replace(
+              'components/company-prospection-board.tsx',
+              '  "Gagné": "WON",\n  "Perdu": "LOST",',
+              '  "Gagné": "WON",\n  "Pas intéressé": "NOT_INTERESTED",\n  "Perdu": "LOST",',
+          )
+          replace(
+              'components/company-prospection-board.tsx',
+              '  if (consolidated && QUALIFICATION_STAGE[consolidated]) return QUALIFICATION_STAGE[consolidated];\n  if (p.hs_lead_status === "UNQUALIFIED") return "LOST";',
+              '  if (consolidated && QUALIFICATION_STAGE[consolidated]) return QUALIFICATION_STAGE[consolidated];\n  if (p.statut_de_lappel === "pas_interesse") return "NOT_INTERESTED";\n  if (p.hs_lead_status === "UNQUALIFIED") return "LOST";',
+          )
+          replace(
+              'components/company-prospection-board.tsx',
+              '                        {reminder && stage !== "WON" && stage !== "LOST" ?',
+              '                        {reminder && stage !== "WON" && stage !== "NOT_INTERESTED" && stage !== "LOST" ?',
+          )
+
+          # Workflow drag/drop: add a first-class NOT_INTERESTED action.
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              '  | "WON"\n  | "LOST";',
+              '  | "WON"\n  | "NOT_INTERESTED"\n  | "LOST";',
+          )
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              '  OPEN_DEAL: "OPEN_DEAL",\n  LOST: "UNQUALIFIED",',
+              '  OPEN_DEAL: "OPEN_DEAL",\n  NOT_INTERESTED: "UNQUALIFIED",\n  LOST: "UNQUALIFIED",',
+          )
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              '  WON: "Gagné",\n  LOST: "Perdu",',
+              '  WON: "Gagné",\n  NOT_INTERESTED: "Pas intéressé",\n  LOST: "Perdu",',
+          )
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              '  WON: 100,\n  LOST: 5,',
+              '  WON: 100,\n  NOT_INTERESTED: 10,\n  LOST: 5,',
+          )
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              '    case "WON":\n      return {\n        statut_prospection: "Gagné",',
+              '    case "NOT_INTERESTED":\n      return {\n        statut_prospection: "Pas intéressé",\n        resultat_prospection: "Pas intéressé",\n        statut_de_lappel: "pas intéressé",\n        ...clearDates,\n      };\n    case "WON":\n      return {\n        statut_prospection: "Gagné",',
+          )
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              '    const allowed: WorkflowAction[] = ["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "FOLLOW_UP", "LATER", "DEMO_SCHEDULED", "OPEN_DEAL", "WON", "LOST"];',
+              '    const allowed: WorkflowAction[] = ["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "FOLLOW_UP", "LATER", "DEMO_SCHEDULED", "OPEN_DEAL", "WON", "NOT_INTERESTED", "LOST"];',
+          )
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              '      case "WON":\n        properties.lifecyclestage = "customer";',
+              '      case "NOT_INTERESTED":\n        properties.statut_de_lappel = "pas_interesse";\n        properties.date_de_rappel = "";\n        break;\n      case "WON":\n        properties.lifecyclestage = "customer";',
+          )
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              '      case "LOST":\n        properties.statut_de_lappel = "pas_interesse";\n        properties.date_de_rappel = "";\n        break;',
+              '      case "LOST":\n        properties.date_de_rappel = "";\n        break;',
+          )
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              'import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";',
+              'import { ensureCompanyQualificationProperties, ensureContactProspectionOptions } from "@/lib/hubspot/qualification-schema";',
+          )
+          replace(
+              'app/api/companies/[id]/workflow/route.ts',
+              '    if (referenceContact) {\n      const contactProperties = contactWorkflowProperties(action, reminderAt);',
+              '    if (referenceContact) {\n      await ensureContactProspectionOptions();\n      const contactProperties = contactWorkflowProperties(action, reminderAt);',
+          )
+
+          # Manual edits from contact drawer must synchronize the same taxonomy.
+          replace(
+              'app/api/contacts/[id]/route.ts',
+              'import { refreshCallRecommendations } from "@/lib/call-recommendations";',
+              'import { refreshCallRecommendations } from "@/lib/call-recommendations";\nimport { ensureContactProspectionOptions } from "@/lib/hubspot/qualification-schema";',
+          )
+          replace(
+              'app/api/contacts/[id]/route.ts',
+              '  "Gagné": 100,\n  "Perdu": 5,',
+              '  "Gagné": 100,\n  "Pas intéressé": 10,\n  "Perdu": 5,',
+          )
+          replace(
+              'app/api/contacts/[id]/route.ts',
+              '  if (["pas intéressé", "Pas intéressé"].includes(call)) return "Perdu";',
+              '  if (["pas intéressé", "Pas intéressé"].includes(call)) return "Pas intéressé";',
+          )
+          replace(
+              'app/api/contacts/[id]/route.ts',
+              '  if (contactStatus === "Non qualifié" || contactStatus === "Perdu") return { status: "Perdu", leadStatus: "UNQUALIFIED", callStatus };',
+              '  if (contactStatus === "Pas intéressé") return { status: "Pas intéressé", leadStatus: "UNQUALIFIED", callStatus: callStatus || "pas_interesse" };\n  if (contactStatus === "Non qualifié" || contactStatus === "Perdu") return { status: "Perdu", leadStatus: "UNQUALIFIED", callStatus };',
+          )
+          replace(
+              'app/api/contacts/[id]/route.ts',
+              '  if (["pas_interesse", "hors_cible", "numero_invalide"].includes(callStatus)) return { status: "Perdu", leadStatus: "UNQUALIFIED", callStatus };',
+              '  if (callStatus === "pas_interesse") return { status: "Pas intéressé", leadStatus: "UNQUALIFIED", callStatus };\n  if (["hors_cible", "numero_invalide"].includes(callStatus)) return { status: "Perdu", leadStatus: "UNQUALIFIED", callStatus };',
+          )
+          replace(
+              'app/api/contacts/[id]/route.ts',
+              '    const data = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ properties }) });',
+              '    if ("statut_prospection" in properties) await ensureContactProspectionOptions();\n    const data = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ properties }) });',
+          )
+
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "gando-bot"
+          git config user.email "bot@gando.app"
+          git add components/contact-drawer-base.tsx components/company-prospection-board.tsx lib/company-prospection-priority.ts lib/hubspot/qualification-schema.ts lib/hubspot/contacts.ts app/api/contacts/[id]/outcome/route.ts app/api/contacts/[id]/route.ts app/api/segments/[listId]/members/route.ts app/api/companies/[id]/workflow/route.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: separate not interested from lost"
+          git push origin HEAD:main
