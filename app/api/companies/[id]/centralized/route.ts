@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireCockpitAccess } from "@/lib/cockpit-access";
 
+const COMPANY_PROPERTIES = [
+  "name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id",
+  "num_associated_contacts","num_associated_deals","hs_last_sales_activity_timestamp","hs_object_source_label","createdate",
+  "hs_lead_status","lifecyclestage","statut_de_lappel","date_de_rappel","statut_prospection","zip",
+  "ce_quil_apprecie_chez_gando","objections__retours","campagne_dacquisition","suite","taille_flotte","solution_paiement_reservation",
+];
 const CONTACT_PROPERTIES = [
   "firstname","lastname","email","phone","mobilephone","jobtitle","company","hubspot_owner_id",
   "statut_prospection","statut_de_lappel","hs_last_sales_activity_timestamp","ce_quil_apprecie_chez_gando",
   "objections__retours","campagne_dacquisition","suite","zip","taille_de_flo","hs_country_region_code","solution_paiement_reservation",
 ];
 const NOTE_PROPERTIES = ["hs_note_body","hs_timestamp","hs_createdate","hs_object_source_label","hubspot_owner_id"];
-const CALL_PROPERTIES = ["hs_call_title","hs_call_body","hs_call_status","hs_call_disposition","hs_call_duration","hs_timestamp","hubspot_owner_id"];
+const CALL_PROPERTIES = ["hs_call_title","hs_call_body","hs_call_status","hs_call_disposition","hs_call_duration","hs_timestamp","hubspot_owner_id","hs_call_summary"];
 const MEETING_PROPERTIES = ["hs_meeting_title","hs_meeting_start_time","hs_meeting_end_time","hs_meeting_location","hs_meeting_outcome","hs_internal_meeting_notes","hs_timestamp","hubspot_owner_id"];
 const TASK_PROPERTIES = ["hs_task_subject","hs_task_body","hs_task_status","hs_task_priority","hs_task_type","hs_timestamp","hubspot_owner_id"];
 const DEAL_PROPERTIES = ["dealname","amount","pipeline","dealstage","closedate","createdate","hubspot_owner_id"];
@@ -49,9 +56,10 @@ async function loadContactWithAssociations(contactId: string) {
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await requireCockpitAccess();
     const { id: companyId } = await params;
     const company = await hubspotJson(
-      `/crm/objects/2026-03/companies/${encodeURIComponent(companyId)}?properties=name,num_associated_contacts,num_associated_deals&associations=contacts,deals,notes,calls,meetings,tasks`,
+      `/crm/objects/2026-03/companies/${encodeURIComponent(companyId)}?properties=${encodeURIComponent(COMPANY_PROPERTIES.join(","))}&associations=contacts,deals,notes,calls,meetings,tasks`,
     );
 
     const contactIds = associationIds(company, "contacts");
@@ -144,6 +152,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }
 
     return NextResponse.json({
+      company: { ...company, id: String(company.id), properties: { ...(company.properties || {}), __hubspot_id: String(company.id) } },
       contacts: contacts.map(contact => ({
         ...contact,
         id: String(contact.id),
