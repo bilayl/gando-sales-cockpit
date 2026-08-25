@@ -15,6 +15,8 @@ type Props = {
   onOpenChange: (open: boolean) => void;
 };
 
+const PROSPECTION_DIRTY_KEY = "gando:prospection-company-dirty";
+
 function CompanyPhoneEditor({
   companyId,
   open,
@@ -133,12 +135,20 @@ function CompanyPhoneEditor({
 }
 
 export function CompanyDrawer(props: Props) {
-  const { companyId, open } = props;
+  const { companyId, open, onOpenChange } = props;
   const [refreshKey, setRefreshKey] = useState(0);
+
+  function handleOpenChange(nextOpen: boolean) {
+    onOpenChange(nextOpen);
+    if (!nextOpen && typeof window !== "undefined" && window.sessionStorage.getItem(PROSPECTION_DIRTY_KEY) === "1") {
+      window.sessionStorage.removeItem(PROSPECTION_DIRTY_KEY);
+      window.setTimeout(() => window.location.reload(), 0);
+    }
+  }
 
   return (
     <>
-      <CompanyDrawerBase key={`${companyId || "none"}-${refreshKey}`} {...props} />
+      <CompanyDrawerBase key={`${companyId || "none"}-${refreshKey}`} {...props} onOpenChange={handleOpenChange} />
       <CompanyPhoneEditor
         companyId={companyId}
         open={open}
