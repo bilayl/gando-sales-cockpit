@@ -146,6 +146,7 @@ export async function buildSalesSnapshot(question: string, scope: Scope = "today
 export async function askOpenRouterSales(question: string, snapshot: Awaited<ReturnType<typeof buildSalesSnapshot>>) {
   const { apiKey } = await resolveOpenRouterApiKey();
   const configuredModel = process.env.OPENROUTER_MODEL?.trim() || "~openai/gpt-latest";
+  const freeFallbackModel = "openrouter/free";
   if (!apiKey) return { configured: false as const, answer: "", model: configuredModel };
 
   const baseUrl = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/$/, "");
@@ -162,42 +163,59 @@ export async function askOpenRouterSales(question: string, snapshot: Awaited<Ret
   };
   if (process.env.OPENROUTER_ZDR?.trim().toLowerCase() === "true") provider.zdr = true;
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": process.env.OPENROUTER_SITE_URL?.trim() || "https://room.gando.pro",
-      "X-Title": "Gando Sales Cockpit",
+  const messages = [
+    {
+      role: "system",
+      content: [
+        "Tu es le copilote commercial interne de Gando.",
+        "Réponds en français, de façon courte, structurée et opérationnelle.",
+        "Utilise uniquement les données CRM, tâches et transcriptions fournies comme faits.",
+        "Distingue clairement les faits observés, tes interprétations et les informations manquantes.",
+        "Ne fabrique jamais ce qu'un prospect aurait dit, un intérêt, une objection, une prochaine étape ou un chiffre.",
+        "Quand c'est pertinent, classe les entreprises à prioriser et explique en une phrase pourquoi.",
+        "Si la question porte sur ce qu'un prospect a dit, cite seulement une reformulation fidèle de la transcription disponible.",
+      ].join(" "),
     },
-    body: JSON.stringify({
-      model: configuredModel,
-      temperature: 0.2,
-      max_completion_tokens: 1200,
-      provider,
-      messages: [
-        {
-          role: "system",
-          content: [
-            "Tu es le copilote commercial interne de Gando.",
-            "Réponds en français, de façon courte, structurée et opérationnelle.",
-            "Utilise uniquement les données CRM, tâches et transcriptions fournies comme faits.",
-            "Distingue clairement les faits observés, tes interprétations et les informations manquantes.",
-            "Ne fabrique jamais ce qu'un prospect aurait dit, un intérêt, une objection, une prochaine étape ou un chiffre.",
-            "Quand c'est pertinent, classe les entreprises à prioriser et explique en une phrase pourquoi.",
-            "Si la question porte sur ce qu'un prospect a dit, cite seulement une reformulation fidèle de la transcription disponible.",
-          ].join(" "),
-        },
-        {
-          role: "user",
-          content: `${question}\n\nCONTEXTE SALES COCKPIT:\n${JSON.stringify(context)}`,
-        },
-      ],
-    }),
-    cache: "no-store",
-  });
+    {
+      role: "user",
+      content: `${question}\n\nCONTEXTE SALES COCKPIT:\n${JSON.stringify(context)}`,
+    },
+  ];
 
-  const payload = await response.json().catch(() => ({}));
+  async function requestModel(model: string) {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": process.env.OPENROUTER_SITE_URL?.trim() || "https://room.gando.pro",
+        "X-Title": "Gando Sales Cockpit",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        max_completion_tokens: 1200,
+        provider,
+        messages,
+      }),
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    return { response, payload };
+  }
+
+  let usedModel = configuredModel;
+  let { response, payload } = await requestModel(usedModel);
+
+  if (!response.ok && usedModel !== freeFallbackModel) {
+    const errorMessage = String(payload?.error?.message || payload?.message || "").toLowerCase();
+    const insufficientCredits = response.status === 402 || errorMessage.includes("insufficient credits") || errorMessage.includes("purchase credits");
+    if (insufficientCredits) {
+      usedModel = freeFallbackModel;
+      ({ response, payload } = await requestModel(usedModel));
+    }
+  }
+
   if (!response.ok) {
     throw new Error(payload?.error?.message || payload?.message || `OpenRouter HTTP ${response.status}`);
   }
@@ -212,6 +230,7 @@ export async function askOpenRouterSales(question: string, snapshot: Awaited<Ret
   return {
     configured: true as const,
     answer: answer || "Réponse OpenRouter vide.",
-    model: String(payload?.model || configuredModel),
+    model: String(payload?.model || usedModel),
+    fallbackUsed: usedModel === freeFallbackModel && configuredModel !== freeFallbackModel,
   };
 }
