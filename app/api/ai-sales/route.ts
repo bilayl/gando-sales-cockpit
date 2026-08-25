@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { askOpenRouterSales, buildSalesSnapshot } from "@/lib/openrouter-sales";
+import { getOpenRouterSalesStatus } from "@/lib/openrouter-key";
 
 function scopeFrom(value: unknown) {
   return value === "recent" ? "recent" as const : "today" as const;
@@ -10,10 +11,14 @@ export async function GET(request: NextRequest) {
   try {
     await requireCockpitAccess();
     const scope = scopeFrom(new URL(request.url).searchParams.get("scope"));
-    const snapshot = await buildSalesSnapshot("brief commercial", scope);
+    const [snapshot, openRouter] = await Promise.all([
+      buildSalesSnapshot("brief commercial", scope),
+      getOpenRouterSalesStatus(),
+    ]);
     return NextResponse.json({
-      configured: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
-      model: process.env.OPENROUTER_MODEL?.trim() || "~openai/gpt-latest",
+      configured: openRouter.configured,
+      model: openRouter.model,
+      keySource: openRouter.source,
       snapshot,
     });
   } catch (error) {
