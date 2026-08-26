@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EditableCRMTaskCard } from "@/components/editable-crm-task-card";
+import { AllCRMProperties, NewCRMNoteButton } from "@/components/crm-record-tools";
 import { formatDate, initials } from "@/lib/utils";
 
 type Kind = "contact" | "company";
@@ -209,7 +210,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
                   <Avatar className="h-14 w-14 shrink-0 rounded-xl border border-border bg-muted"><AvatarFallback className="rounded-xl bg-muted text-primary">{kind === "company" ? <Building2 size={25} /> : initials(p.firstname, p.lastname)}</AvatarFallback></Avatar>
                   <div className="min-w-0"><div className="text-xs font-bold uppercase tracking-[0.15em] text-primary">{kind === "company" ? "Entreprise" : "Contact"}</div><h1 className="mt-1 break-words font-display text-2xl font-bold tracking-tight">{name}</h1><div className="mt-1 text-sm text-muted-foreground">{subtitle || "Fiche CRM HubSpot"}</div><div className="mt-3 flex flex-wrap gap-1.5">{p.statut_prospection ? <Badge>{p.statut_prospection}</Badge> : null}{p.statut_de_lappel ? <Badge variant="outline">{p.statut_de_lappel}</Badge> : null}<Badge variant="outline"><History size={11} /> {counts.notes + counts.calls + counts.meetings + counts.tasks} activités</Badge></div></div>
                 </div>
-                <div className="flex flex-wrap gap-2">{p.phone || p.mobilephone ? <Button asChild><a href={`tel:${p.phone || p.mobilephone}`}><Phone size={14} /> Appeler</a></Button> : null}{p.email ? <Button asChild variant="outline"><a href={`mailto:${p.email}`}><Mail size={14} /> Email</a></Button> : null}{kind === "company" && (p.website || p.domain) ? <Button asChild variant="outline"><a href={(p.website || "").startsWith("http") ? p.website : `https://${p.domain || p.website}`} target="_blank" rel="noreferrer"><Globe size={14} /> Site web</a></Button> : null}</div>
+                <div className="flex flex-wrap gap-2"><NewCRMNoteButton kind={kind} recordId={recordId} onCreated={async () => { setTab("notes"); await load(); }} />{p.phone || p.mobilephone ? <Button asChild><a href={`tel:${p.phone || p.mobilephone}`}><Phone size={14} /> Appeler</a></Button> : null}{p.email ? <Button asChild variant="outline"><a href={`mailto:${p.email}`}><Mail size={14} /> Email</a></Button> : null}{kind === "company" && (p.website || p.domain) ? <Button asChild variant="outline"><a href={(p.website || "").startsWith("http") ? p.website : `https://${p.domain || p.website}`} target="_blank" rel="noreferrer"><Globe size={14} /> Site web</a></Button> : null}</div>
               </div>
             </Card>
 
@@ -224,6 +225,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
                 </div></Card>
 
                 <Card className="p-4"><div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">{kind === "company" ? <Users size={14} /> : <Building2 size={14} />} {kind === "company" ? "Contacts associés" : "Entreprises associées"}</div><div className="space-y-2">{linkedRecords.length ? linkedRecords.map((item: any) => { const lp = item.properties || {}; const label = kind === "company" ? [lp.firstname, lp.lastname].filter(Boolean).join(" ") || lp.email || "Contact" : lp.name || lp.domain || "Entreprise"; const href = kind === "company" ? `/contacts/${item.id}` : `/companies/${item.id}`; return <Link key={item.id} href={href} className="block rounded-lg border border-border bg-muted/25 p-3 transition hover:border-primary/30 hover:bg-muted/50"><div className="truncate text-sm font-semibold">{label}</div><div className="mt-1 truncate text-xs text-muted-foreground">{kind === "company" ? lp.jobtitle || lp.email : lp.domain || lp.city}</div></Link>; }) : <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Aucun élément associé.</div>}</div></Card>
+                <AllCRMProperties kind={kind} recordId={recordId} />
               </div>
 
               <Card className="min-w-0 overflow-hidden">
