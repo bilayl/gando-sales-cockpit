@@ -1,0 +1,50 @@
+name: One-off CRM record tools patch
+
+on:
+  push:
+    paths:
+      - '.github/patch-triggers/crm-record-tools.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch CRM record page
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('components/crm-record-page.tsx')
+          text = path.read_text()
+
+          old = 'import { EditableCRMTaskCard } from "@/components/editable-crm-task-card";\nimport { formatDate, initials } from "@/lib/utils";'
+          new = 'import { EditableCRMTaskCard } from "@/components/editable-crm-task-card";\nimport { AllCRMProperties, NewCRMNoteButton } from "@/components/crm-record-tools";\nimport { formatDate, initials } from "@/lib/utils";'
+          if old not in text:
+              raise SystemExit('import needle not found')
+          text = text.replace(old, new, 1)
+
+          old = '<div className="flex flex-wrap gap-2">{p.phone || p.mobilephone ? <Button asChild>'
+          new = '<div className="flex flex-wrap gap-2"><NewCRMNoteButton kind={kind} recordId={recordId} onCreated={async () => { setTab("notes"); await load(); }} />{p.phone || p.mobilephone ? <Button asChild>'
+          if old not in text:
+              raise SystemExit('actions needle not found')
+          text = text.replace(old, new, 1)
+
+          old = 'Aucun élément associé.</div>}</div></Card>\n              </div>\n\n              <Card className="min-w-0 overflow-hidden">'
+          new = 'Aucun élément associé.</div>}</div></Card>\n                <AllCRMProperties kind={kind} recordId={recordId} />\n              </div>\n\n              <Card className="min-w-0 overflow-hidden">'
+          if old not in text:
+              raise SystemExit('properties needle not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+          git config user.name gando-bot
+          git config user.email gando-bot@users.noreply.github.com
+          git add components/crm-record-page.tsx
+          git commit -m "feat: show full CRM data and create HubSpot notes"
+          git push origin HEAD:main
