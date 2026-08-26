@@ -76,12 +76,12 @@ function companyProspectionLabel(properties: Record<string, any>) {
   if (properties.hs_lead_status === "CONNECTED") return "Contact établi";
   if (properties.hs_lead_status === "ATTEMPTED_TO_CONTACT") return "Tentative";
   if (properties.hs_lead_status === "OPEN") return "À contacter";
-  return "À travailler";
+  return "À contacter";
 }
 
 function companyStatusProperties(value: string) {
   const map: Record<string, Record<string, string>> = {
-    "À travailler": { hs_lead_status: "NEW", lifecyclestage: "" },
+    "À travailler": { statut_prospection: "À contacter", hs_lead_status: "OPEN", lifecyclestage: "" },
     "À contacter": { hs_lead_status: "OPEN", lifecyclestage: "" },
     "Tentative": { hs_lead_status: "ATTEMPTED_TO_CONTACT", lifecyclestage: "" },
     "Contact établi": { hs_lead_status: "CONNECTED", lifecyclestage: "" },
@@ -176,6 +176,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const orderedContacts = sortContactsByActivity(contacts);
     const current = companyRecord.properties as Record<string, string>;
     const backfill: Record<string, string> = {};
+    if (current.statut_prospection === "À travailler") {
+      backfill.statut_prospection = "À contacter";
+      if (current.hs_lead_status === "NEW") backfill.hs_lead_status = "OPEN";
+    }
     const setIfMissing = (property: string, value: string, requireCustomSchema = false) => {
       if (!valueExists(current[property]) && valueExists(value) && (!requireCustomSchema || qualificationSchema.available.includes(property))) {
         backfill[property] = value;
@@ -293,6 +297,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const supabase = getSupabaseAdmin();
     const { data: existing } = await supabase.from("companies").select("*").eq("hubspot_id", id).maybeSingle();
     const existingProperties = existing?.raw_data?.properties ?? {};
+
+    if (properties.statut_prospection === "À travailler") {
+      properties.statut_prospection = "À contacter";
+    }
 
     if (properties.statut_prospection) {
       properties = { ...properties, ...companyStatusProperties(properties.statut_prospection) };

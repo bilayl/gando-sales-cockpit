@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EditableCRMTaskCard } from "@/components/editable-crm-task-card";
 import { AllCRMProperties, NewCRMNoteButton } from "@/components/crm-record-tools";
+import { QualificationProperties } from "@/components/qualification-properties";
 import { formatDate, initials } from "@/lib/utils";
 
 type Kind = "contact" | "company";
@@ -223,6 +224,8 @@ export function CRMRecordPage({ kind, recordId }: Props) {
                   <Info icon={MapPin} label="Localisation" value={[p.zip, p.city, p.state, p.country].filter(Boolean).join(" · ")} />
                   <Info icon={Clock} label="Dernière activité" value={p.hs_last_sales_activity_timestamp ? formatDate(p.hs_last_sales_activity_timestamp) : undefined} />
                 </div></Card>
+
+                <Card className="p-4"><QualificationProperties kind={kind} properties={{ ...p, __hubspot_id: p.__hubspot_id || recordId }} fallbackProperties={kind === "company" ? (data?.contacts?.[0]?.properties || {}) : {}} /></Card>
 
                 <Card className="p-4"><div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">{kind === "company" ? <Users size={14} /> : <Building2 size={14} />} {kind === "company" ? "Contacts associés" : "Entreprises associées"}</div><div className="space-y-2">{linkedRecords.length ? linkedRecords.map((item: any) => { const lp = item.properties || {}; const label = kind === "company" ? [lp.firstname, lp.lastname].filter(Boolean).join(" ") || lp.email || "Contact" : lp.name || lp.domain || "Entreprise"; const href = kind === "company" ? `/contacts/${item.id}` : `/companies/${item.id}`; return <Link key={item.id} href={href} className="block rounded-lg border border-border bg-muted/25 p-3 transition hover:border-primary/30 hover:bg-muted/50"><div className="truncate text-sm font-semibold">{label}</div><div className="mt-1 truncate text-xs text-muted-foreground">{kind === "company" ? lp.jobtitle || lp.email : lp.domain || lp.city}</div></Link>; }) : <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Aucun élément associé.</div>}</div></Card>
                 <AllCRMProperties kind={kind} recordId={recordId} />

@@ -139,23 +139,23 @@ function mergedEnumerationOptions(schema: PropertySchema, current: any) {
 
 export async function ensureContactProspectionOptions() {
   const current = await hubspotJson(`/crm/properties/2026-03/contacts/${encodeURIComponent(CONTACT_PROSPECTION_SCHEMA.name)}`);
-  await ensureExistingPropertyOptions(CONTACT_PROSPECTION_SCHEMA, current);
+  await ensureExistingPropertyOptions(CONTACT_PROSPECTION_SCHEMA, current, "contacts");
 }
 
 export async function ensureCompanyProspectionOptions() {
   const schema = COMPANY_QUALIFICATION_SCHEMAS.find(property => property.name === "statut_prospection");
   if (!schema) return;
   const current = await hubspotJson(`/crm/properties/2026-03/companies/${encodeURIComponent(schema.name)}`);
-  await ensureExistingPropertyOptions(schema, current);
+  await ensureExistingPropertyOptions(schema, current, "companies");
 }
 
-async function ensureExistingPropertyOptions(schema: PropertySchema, current: any) {
+async function ensureExistingPropertyOptions(schema: PropertySchema, current: any, objectType: "contacts" | "companies") {
   const nextOptions = mergedEnumerationOptions(schema, current);
   const currentSignature = (current?.options || []).map((option: any) => `${option.value}:${Boolean(option.hidden)}`).join("|");
   const nextSignature = nextOptions.map(option => `${option.value}:${Boolean(option.hidden)}`).join("|");
   if (currentSignature === nextSignature) return;
 
-  await hubspotJson(`/crm/properties/2026-03/companies/${encodeURIComponent(schema.name)}`, {
+  await hubspotJson(`/crm/properties/2026-03/${objectType}/${encodeURIComponent(schema.name)}`, {
     method: "PATCH",
     body: JSON.stringify({ options: nextOptions }),
   });
@@ -169,7 +169,7 @@ export async function ensureCompanyQualificationProperties(): Promise<Qualificat
   for (const schema of COMPANY_QUALIFICATION_SCHEMAS) {
     try {
       const current = await hubspotJson(`/crm/properties/2026-03/companies/${encodeURIComponent(schema.name)}`);
-      await ensureExistingPropertyOptions(schema, current);
+      await ensureExistingPropertyOptions(schema, current, "companies");
       available.push(schema.name);
       continue;
     } catch (error) {

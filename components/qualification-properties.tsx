@@ -9,6 +9,9 @@ type Kind = "contact" | "company";
 type FieldType = "text" | "number" | "select" | "multi" | "company-status";
 type Option = { value: string; label: string };
 
+const COMPANY_STATUS_OPTIONS: Option[] = ["À contacter", "Tentative", "Contact établi", "À relancer", "Ultérieur", "Démo prévue", "Opportunité", "Gagné", "Pas intéressé", "Perdu"].map(value => ({ value, label: value }));
+const CONTACT_STATUS_OPTIONS: Option[] = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Pas intéressé", "Perdu", "Gagné"].map(value => ({ value, label: value }));
+
 type Props = {
   kind: Kind;
   properties: CRMProperties;
@@ -94,7 +97,7 @@ function companyStatusProperties(value: string) {
 }
 
 function resolveType(kind: Kind, spec: FieldSpec, definition?: PropertyDefinition): FieldType {
-  if (kind === "company" && spec.key === "prospection") return "company-status";
+  if (spec.key === "prospection") return kind === "company" ? "company-status" : "select";
   if (definition?.fieldType === "checkbox") return "multi";
   if (["select", "radio"].includes(definition?.fieldType || "")) return "select";
   if (definition?.type === "number" || definition?.fieldType === "number") return "number";
@@ -133,7 +136,10 @@ function EditablePropertyCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
-  const baseOptions = (definition?.options || []).filter(option => type !== "company-status" || option.value !== "À travailler");
+  const metadataOptions = definition?.options || [];
+  const fallbackOptions = spec.key === "prospection" ? (type === "company-status" ? COMPANY_STATUS_OPTIONS : CONTACT_STATUS_OPTIONS) : [];
+  const rawOptions = metadataOptions.length ? metadataOptions : fallbackOptions;
+  const baseOptions = rawOptions.filter(option => type !== "company-status" || option.value !== "À travailler");
   const options = type === "company-status" && !baseOptions.some(option => option.value === "Démo prévue")
     ? [...baseOptions.slice(0, 5), { value: "Démo prévue", label: "Démo prévue" }, ...baseOptions.slice(5)]
     : baseOptions;
@@ -173,7 +179,7 @@ function EditablePropertyCard({
         {!editing ? (
           <button
             type="button"
-            disabled={disabled || definition?.missing}
+            disabled={disabled || Boolean(definition?.missing && spec.key !== "prospection")}
             onClick={() => setEditing(true)}
             className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:bg-muted hover:text-primary disabled:cursor-not-allowed disabled:opacity-30"
             title={definition?.missing ? definition.error || "Propriété HubSpot indisponible" : `Modifier ${label}`}

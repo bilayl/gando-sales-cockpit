@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
-import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
+import { ensureCompanyQualificationProperties, ensureContactProspectionOptions } from "@/lib/hubspot/qualification-schema";
 
 const CONTACT_PROPERTIES = [
   "ce_quil_apprecie_chez_gando",
@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
 
     let schema = null;
     if (kind === "company") schema = await ensureCompanyQualificationProperties();
+    else await ensureContactProspectionOptions();
 
     const properties = await Promise.all(names.map(async name => {
       try {
