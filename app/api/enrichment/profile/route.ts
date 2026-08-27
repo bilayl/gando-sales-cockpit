@@ -352,6 +352,20 @@ export async function POST(request: NextRequest) {
     const websiteHasUsefulData = Boolean(websiteDiscovery.phone || websiteDiscovery.email || websiteDiscovery.contactPhone || websiteDiscovery.contactEmail);
     let prospect = backend.prospect ? { ...backend.prospect } as Prospect : null;
 
+    if (!prospect && cp.phone) {
+      prospect = {
+        companyName,
+        domain: normalizeDomain(domain || website || "") || null,
+        website: website || null,
+        phone: cp.phone,
+        city: city || null,
+        country: country || null,
+        contacts: [],
+        sourceProviders: ["hubspot"],
+        confidence: 1,
+      };
+    }
+
     if (!prospect && websiteHasUsefulData) {
       prospect = {
         companyName,

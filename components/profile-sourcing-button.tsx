@@ -134,10 +134,17 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
       }
 
       if (!payload.found) {
-        if (websiteUpdatedBefore || websiteBefore?.phoneFound) await onCompleted?.();
+        if (websiteBefore?.phoneFound) {
+          await onCompleted?.();
+          toast.success(websiteBefore.updatedFields?.includes("phone")
+            ? "Numéro trouvé et ajouté dans HubSpot."
+            : "Numéro déjà présent et vérifié dans HubSpot.");
+          return;
+        }
+        if (websiteUpdatedBefore) await onCompleted?.();
         toast.info(payload.pending
           ? "La recherche continue, mais aucun résultat suffisamment fiable n’est encore disponible."
-          : payload.message || (websiteBefore?.phoneFound ? "Numéro trouvé et enregistré dans HubSpot." : "Aucune donnée suffisamment fiable n’a été trouvée."));
+          : payload.message || "Aucune donnée suffisamment fiable n’a été trouvée.");
         return;
       }
 

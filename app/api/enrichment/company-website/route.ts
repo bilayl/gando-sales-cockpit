@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiError, hubspotJson } from "@/lib/hubspot";
 import { searchRentalCompaniesWithApifyDirect } from "@/lib/apify-direct";
 import { searchCompanyWebCandidates } from "@/lib/apify-company-web-search";
+import { searchPublicCompanyWeb } from "@/lib/public-company-web-search";
 import { discoverPublicWebsiteContacts } from "@/lib/website-contact-discovery";
 
 export const dynamic = "force-dynamic";
@@ -170,7 +171,17 @@ export async function POST(request: NextRequest) {
     }
 
     if ((!website || (!clean(properties.phone) && !discoveredPhone)) && companyName) {
-      const candidates = await searchCompanyWebCandidates({ companyName, city, country });
+      const [apifyCandidates, publicCandidates] = await Promise.all([
+        searchCompanyWebCandidates({ companyName, city, country }),
+        searchPublicCompanyWeb({ companyName, city, country }),
+      ]);
+      const byUrl = new Map<string, (typeof apifyCandidates)[number] | (typeof publicCandidates)[number]>();
+      for (const candidate of [...apifyCandidates, ...publicCandidates]) {
+        const key = candidate.url.toLowerCase().replace(/\/$/, "");
+        const previous = byUrl.get(key);
+        if (!previous || candidate.score > previous.score) byUrl.set(key, candidate);
+      }
+      const candidates = [...byUrl.values()].sort((a, b) => b.score - a.score).slice(0, 10);
       webCandidates = candidates.map(candidate => ({ url: candidate.url, title: candidate.title, score: candidate.score, kind: candidate.kind }));
 
       for (const candidate of candidates.slice(0, 5)) {
