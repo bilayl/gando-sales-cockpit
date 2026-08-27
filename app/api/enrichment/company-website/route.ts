@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError, hubspotJson } from "@/lib/hubspot";
 import { searchRentalCompaniesWithApifyDirect } from "@/lib/apify-direct";
+import { searchCompanyWebCandidates } from "@/lib/apify-company-web-search";
+import { discoverPublicWebsiteContacts } from "@/lib/website-contact-discovery";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 120;
 
 const PERSONAL_EMAIL_DOMAINS = new Set([
-  "gmail.com",
-  "googlemail.com",
-  "outlook.com",
-  "hotmail.com",
-  "live.com",
-  "yahoo.com",
-  "icloud.com",
-  "orange.fr",
-  "wanadoo.fr",
-  "free.fr",
+  "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "yahoo.com",
+  "icloud.com", "orange.fr", "wanadoo.fr", "free.fr",
 ]);
 
 function clean(value: unknown) {
@@ -79,9 +73,9 @@ async function searchPublicCompanyWebsite(companyName: string, city: string, cou
     const ranked = (result.prospects || [])
       .map(prospect => ({ prospect, score: scoreProspect(prospect, companyName, city) }))
       .sort((a, b) => b.score - a.score);
-    return ranked[0]?.score >= 80 ? ranked[0].prospect : null;
+    return ranked[0]?.score >= 65 ? ranked[0].prospect : null;
   } catch (error) {
-    console.error("Company website discovery via Apify:", error);
+    console.error("Company website discovery via Apify Maps:", error);
     return null;
   }
 }
@@ -103,19 +97,27 @@ async function readAssociatedContactWebsite(company: any) {
 
   for (const contact of batch.results || []) {
     const website = normalizeWebsite(contact?.properties?.website || "");
-    if (website) {
-      return { website, domain: normalizeDomain(website), source: "contact_website" };
-    }
+    if (website) return { website, domain: normalizeDomain(website), source: "contact_website" };
   }
-
   for (const contact of batch.results || []) {
     const domain = domainFromEmail(contact?.properties?.email || "");
-    if (domain) {
-      return { website: `https://${domain}`, domain, source: "contact_email_domain" };
-    }
+    if (domain) return { website: `https://${domain}`, domain, source: "contact_email_domain" };
   }
-
   return { website: "", domain: "", source: "" };
+}
+
+async function crawlCandidateForPhone(url: string) {
+  try {
+    const discovery = await discoverPublicWebsiteContacts({ website: url });
+    return {
+      website: normalizeWebsite(discovery.website || url),
+      phone: clean(discovery.phone || discovery.contactPhone),
+      pagesVisited: discovery.pagesVisited,
+    };
+  } catch (error) {
+    console.error("Candidate website crawl:", error);
+    return { website: normalizeWebsite(url), phone: "", pagesVisited: [] as string[] };
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -125,13 +127,19 @@ export async function POST(request: NextRequest) {
     if (!companyId) return NextResponse.json({ error: "companyId requis" }, { status: 400 });
 
     const company = await hubspotJson(
-      `/crm/v3/objects/companies/${encodeURIComponent(companyId)}?properties=name,domain,website,phone,city,country&associations=contacts`,
+      `/crm/v3/objects/companies/${encodeURIComponent(companyId)}?properties=name,domain,website,phone,city,country,address&associations=contacts`,
     );
     const properties = company?.properties || {};
+    const companyName = clean(properties.name);
+    const city = clean(properties.city);
+    const country = clean(properties.country) || "France";
 
     let website = normalizeWebsite(properties.website || "");
     let domain = normalizeDomain(properties.domain || website || "");
     let source = website ? "company_website" : domain ? "company_domain" : "";
+    let discoveredPhone = "";
+    let pagesVisited: string[] = [];
+    let webCandidates: Array<{ url: string; title: string; score: number; kind: string }> = [];
 
     if (!website && domain) website = `https://${domain}`;
 
@@ -142,9 +150,8 @@ export async function POST(request: NextRequest) {
       source = associated.source;
     }
 
-    let discoveredPhone = "";
     if (!website || !clean(properties.phone)) {
-      const prospect = await searchPublicCompanyWebsite(clean(properties.name), clean(properties.city), clean(properties.country) || "France");
+      const prospect = await searchPublicCompanyWebsite(companyName, city, country);
       const searchedWebsite = normalizeWebsite(prospect?.website || "");
       if (!website && searchedWebsite) {
         website = searchedWebsite;
@@ -152,6 +159,38 @@ export async function POST(request: NextRequest) {
         source = "apify_google_places";
       }
       discoveredPhone = clean(prospect?.phone);
+    }
+
+    if (website && !clean(properties.phone) && !discoveredPhone) {
+      const crawled = await crawlCandidateForPhone(website);
+      discoveredPhone = crawled.phone;
+      pagesVisited = crawled.pagesVisited;
+      if (crawled.website) website = crawled.website;
+      if (discoveredPhone) source = source || "website_crawl";
+    }
+
+    if ((!website || (!clean(properties.phone) && !discoveredPhone)) && companyName) {
+      const candidates = await searchCompanyWebCandidates({ companyName, city, country });
+      webCandidates = candidates.map(candidate => ({ url: candidate.url, title: candidate.title, score: candidate.score, kind: candidate.kind }));
+
+      for (const candidate of candidates.slice(0, 5)) {
+        const crawled = await crawlCandidateForPhone(candidate.url);
+        if (!website && candidate.kind !== "directory" && crawled.website) {
+          website = crawled.website;
+          domain = domain || normalizeDomain(crawled.website);
+          source = candidate.kind === "booking" ? "google_web_booking" : "google_web_official";
+        }
+        if (!discoveredPhone && crawled.phone) {
+          discoveredPhone = crawled.phone;
+          pagesVisited = crawled.pagesVisited;
+          if (!website && crawled.website) {
+            website = crawled.website;
+            domain = domain || normalizeDomain(crawled.website);
+          }
+          source = candidate.kind === "booking" ? "google_web_booking" : "google_web_search";
+          break;
+        }
+      }
     }
 
     const patch: Record<string, string> = {};
@@ -169,11 +208,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       companyId,
-      companyName: properties.name || "",
+      companyName,
       website: website || null,
       domain: domain || null,
+      phone: clean(properties.phone) || discoveredPhone || null,
+      phoneFound: Boolean(clean(properties.phone) || discoveredPhone),
       source: source || "not_found",
       updatedFields: Object.keys(patch),
+      pagesVisited,
+      webCandidates,
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return apiError(error instanceof Error ? error : new Error(String(error)));
