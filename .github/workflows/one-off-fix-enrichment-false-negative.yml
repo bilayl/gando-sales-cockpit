@@ -1,0 +1,64 @@
+name: One-off fix enrichment false negative
+
+on:
+  push:
+    paths:
+      - '.github/patch-triggers/fix-enrichment-false-negative.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fix enrichment search and false negative
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # Company website: add independent public web search fallback.
+          path = Path('app/api/enrichment/company-website/route.ts')
+          text = path.read_text()
+          old = 'import { searchCompanyWebCandidates } from "@/lib/apify-company-web-search";\nimport { discoverPublicWebsiteContacts } from "@/lib/website-contact-discovery";'
+          new = 'import { searchCompanyWebCandidates } from "@/lib/apify-company-web-search";\nimport { searchPublicCompanyWeb } from "@/lib/public-company-web-search";\nimport { discoverPublicWebsiteContacts } from "@/lib/website-contact-discovery";'
+          if old not in text:
+              raise SystemExit('company website import needle missing')
+          text = text.replace(old, new, 1)
+
+          old = '''      const candidates = await searchCompanyWebCandidates({ companyName, city, country });\n      webCandidates = candidates.map(candidate => ({ url: candidate.url, title: candidate.title, score: candidate.score, kind: candidate.kind }));'''
+          new = '''      const [apifyCandidates, publicCandidates] = await Promise.all([\n        searchCompanyWebCandidates({ companyName, city, country }),\n        searchPublicCompanyWeb({ companyName, city, country }),\n      ]);\n      const byUrl = new Map<string, (typeof apifyCandidates)[number] | (typeof publicCandidates)[number]>();\n      for (const candidate of [...apifyCandidates, ...publicCandidates]) {\n        const key = candidate.url.toLowerCase().replace(/\\/$/, "");\n        const previous = byUrl.get(key);\n        if (!previous || candidate.score > previous.score) byUrl.set(key, candidate);\n      }\n      const candidates = [...byUrl.values()].sort((a, b) => b.score - a.score).slice(0, 10);\n      webCandidates = candidates.map(candidate => ({ url: candidate.url, title: candidate.title, score: candidate.score, kind: candidate.kind }));'''
+          if old not in text:
+              raise SystemExit('company website candidates needle missing')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          # Profile endpoint: if the first enrichment pass already wrote a phone to HubSpot,
+          # do not return found:false just because Apify found nothing additional.
+          path = Path('app/api/enrichment/profile/route.ts')
+          text = path.read_text()
+          old = '''    const websiteHasUsefulData = Boolean(websiteDiscovery.phone || websiteDiscovery.email || websiteDiscovery.contactPhone || websiteDiscovery.contactEmail);\n    let prospect = backend.prospect ? { ...backend.prospect } as Prospect : null;\n\n    if (!prospect && websiteHasUsefulData) {'''
+          new = '''    const websiteHasUsefulData = Boolean(websiteDiscovery.phone || websiteDiscovery.email || websiteDiscovery.contactPhone || websiteDiscovery.contactEmail);\n    let prospect = backend.prospect ? { ...backend.prospect } as Prospect : null;\n\n    if (!prospect && cp.phone) {\n      prospect = {\n        companyName,\n        domain: normalizeDomain(domain || website || "") || null,\n        website: website || null,\n        phone: cp.phone,\n        city: city || null,\n        country: country || null,\n        contacts: [],\n        sourceProviders: ["hubspot"],\n        confidence: 1,\n      };\n    }\n\n    if (!prospect && websiteHasUsefulData) {'''
+          if old not in text:
+              raise SystemExit('profile prospect needle missing')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          # UI: a phone found by company-website is a success, regardless of the second pass.
+          path = Path('components/profile-sourcing-button.tsx')
+          text = path.read_text()
+          old = '''      if (!payload.found) {\n        if (websiteUpdatedBefore || websiteBefore?.phoneFound) await onCompleted?.();\n        toast.info(payload.pending\n          ? "La recherche continue, mais aucun résultat suffisamment fiable n’est encore disponible."\n          : payload.message || (websiteBefore?.phoneFound ? "Numéro trouvé et enregistré dans HubSpot." : "Aucune donnée suffisamment fiable n’a été trouvée."));\n        return;\n      }'''
+          new = '''      if (!payload.found) {\n        if (websiteBefore?.phoneFound) {\n          await onCompleted?.();\n          toast.success(websiteBefore.updatedFields?.includes("phone")\n            ? "Numéro trouvé et ajouté dans HubSpot."\n            : "Numéro déjà présent et vérifié dans HubSpot.");\n          return;\n        }\n        if (websiteUpdatedBefore) await onCompleted?.();\n        toast.info(payload.pending\n          ? "La recherche continue, mais aucun résultat suffisamment fiable n’est encore disponible."\n          : payload.message || "Aucune donnée suffisamment fiable n’a été trouvée.");\n        return;\n      }'''
+          if old not in text:
+              raise SystemExit('profile button false-negative needle missing')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          git config user.name gando-bot
+          git config user.email gando-bot@users.noreply.github.com
+          git add app/api/enrichment/company-website/route.ts app/api/enrichment/profile/route.ts components/profile-sourcing-button.tsx
+          git commit -m "fix: make company phone enrichment exhaustive"
+          git push origin HEAD:main
