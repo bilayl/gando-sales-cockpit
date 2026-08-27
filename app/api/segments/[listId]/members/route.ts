@@ -61,6 +61,63 @@ function freshProspectionStatus(properties: Record<string, unknown>) {
   return explicit || undefined;
 }
 
+type AssociatedContactPhone = {
+  id: string;
+  phone?: string;
+  name?: string;
+};
+
+async function associatedContactPhones(companyIds: string[]) {
+  const result = new Map<string, AssociatedContactPhone>();
+  if (!companyIds.length) return result;
+
+  try {
+    const associations = await hubspotJsonWithServiceFallback(`/crm/v3/associations/companies/contacts/batch/read`, {
+      method: "POST",
+      body: JSON.stringify({ inputs: companyIds.map(id => ({ id })) }),
+    });
+
+    const companyToContacts = new Map<string, string[]>();
+    const allContactIds = new Set<string>();
+    for (const association of associations.results ?? []) {
+      const companyId = String(association?.from?.id || association?.from?.objectId || association?.id || "");
+      if (!companyId) continue;
+      const targets = Array.isArray(association?.to) ? association.to : Array.isArray(association?.results) ? association.results : [];
+      const ids = targets.map((target: any) => String(target?.id || target?.toObjectId || target?.objectId || "")).filter(Boolean);
+      companyToContacts.set(companyId, ids);
+      ids.forEach(id => allContactIds.add(id));
+    }
+
+    const contactIds = Array.from(allContactIds);
+    if (!contactIds.length) return result;
+    const contacts = await hubspotJsonWithServiceFallback(`/crm/objects/2026-03/contacts/batch/read`, {
+      method: "POST",
+      body: JSON.stringify({
+        properties: ["firstname", "lastname", "email", "phone", "mobilephone"],
+        inputs: contactIds.map(id => ({ id })),
+      }),
+    });
+    const contactById = new Map((contacts.results ?? []).map((contact: any) => [String(contact.id), contact.properties ?? {}]));
+
+    for (const [companyId, ids] of companyToContacts) {
+      let fallback: AssociatedContactPhone | null = null;
+      for (const contactId of ids) {
+        const properties: any = contactById.get(contactId) || {};
+        const phone = String(properties.phone || properties.mobilephone || "").trim();
+        const name = [properties.firstname, properties.lastname].filter(Boolean).join(" ") || properties.email || undefined;
+        const candidate = { id: contactId, phone: phone || undefined, name };
+        if (!fallback) fallback = candidate;
+        if (phone) { fallback = candidate; break; }
+      }
+      if (fallback) result.set(companyId, fallback);
+    }
+  } catch (error) {
+    console.error("HubSpot associated contact phone batch:", error);
+  }
+
+  return result;
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ listId: string }> }) {
   try {
     const { listId } = await params;
@@ -87,6 +144,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       body: JSON.stringify({ properties: props, inputs: ids.map((id: string) => ({ id })) }),
     });
     const freshById = new Map((fresh.results ?? []).map((r: any) => [String(r.id), r.properties ?? {}]));
+    const associatedPhones = objectTypeId === "0-2" ? await associatedContactPhones(ids) : new Map<string, AssociatedContactPhone>();
 
     if (objectTypeId === "0-2") {
       const results = ids.map((id: string) => {
@@ -94,12 +152,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         const freshProperties = (freshById.get(id) ?? {}) as Record<string, unknown>;
         const localQualification = qualificationProperties(local);
         const freshStatus = freshProspectionStatus(freshProperties);
+        const associatedContact = associatedPhones.get(id);
+        const companyPhone = String(freshProperties.phone || local?.raw_data?.properties?.phone || "").trim();
+        const effectivePhone = companyPhone || associatedContact?.phone || "";
         return {
           id,
           properties: {
             ...(local?.raw_data?.properties ?? {}),
             ...localQualification,
             ...freshProperties,
+            phone: effectivePhone || undefined,
+            associated_contact_phone: associatedContact?.phone,
+            associated_contact_name: associatedContact?.name,
+            phone_source: companyPhone ? "company" : associatedContact?.phone ? "associated_contact" : undefined,
             qualification_status: freshStatus || localQualification.qualification_status,
             prospecting_status: freshStatus || localQualification.qualification_status,
             qualification_last_call_status: freshProperties.statut_de_lappel
