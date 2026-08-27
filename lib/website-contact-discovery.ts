@@ -33,6 +33,11 @@ const CONTACT_PATHS = [
   "/a-propos",
   "/about",
   "/mentions-legales",
+  "/reservation",
+  "/reservations",
+  "/reserver",
+  "/booking",
+  "/book",
 ];
 
 function normalizeWebsite(website?: string | null, domain?: string | null) {
@@ -204,7 +209,7 @@ function addCandidate(map: Map<string, Candidate>, candidate: Candidate) {
 function extractCandidates(url: URL, html: string, contactName?: string | null) {
   const text = plainText(html);
   const contactMatch = pageMatchesContact(text, contactName);
-  const pathLooksContact = /contact|equipe|team|about|a-propos|mentions/i.test(url.pathname);
+  const pathLooksContact = /contact|equipe|team|about|a-propos|mentions|reservation|reserver|booking|book/i.test(url.pathname);
   const phones = new Map<string, Candidate>();
   const emails = new Map<string, Candidate>();
   const pageBoost = pathLooksContact ? 20 : 0;
@@ -243,8 +248,12 @@ function discoverContactLinks(base: URL, html: string) {
   for (const match of html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
     try {
       const url = new URL(decodeHtml(match[1]), base);
-      if (!/^https?:$/.test(url.protocol) || url.hostname !== base.hostname) continue;
-      if (!/contact|contactez|nous-contacter|equipe|team|about|a-propos|mentions|agence|staff/i.test(url.pathname)) continue;
+      if (!/^https?:$/.test(url.protocol)) continue;
+      const usefulPath = /contact|contactez|nous-contacter|equipe|team|about|a-propos|mentions|agence|staff|reservation|reservations|reserver|booking|book/i.test(`${url.pathname}${url.search}`);
+      if (!usefulPath) continue;
+      const sameHost = url.hostname === base.hostname;
+      const bookingLink = /reservation|reserver|booking|book/i.test(`${url.hostname}${url.pathname}${url.search}`);
+      if (!sameHost && !bookingLink) continue;
       url.hash = "";
       links.push(url);
     } catch {}
@@ -298,7 +307,7 @@ export async function discoverPublicWebsiteContacts(input: WebsiteDiscoveryInput
   const uniquePages = [...discovered, ...common]
     .filter((url, index, all) => all.findIndex(other => other.toString() === url.toString()) === index)
     .filter(url => url.toString() !== home!.url.toString())
-    .slice(0, 4);
+    .slice(0, 6);
 
   const extraPages = await Promise.all(uniquePages.map(async url => {
     try {

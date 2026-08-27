@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError, hubspotJson } from "@/lib/hubspot";
+import { searchRentalCompaniesWithApifyDirect } from "@/lib/apify-direct";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -51,6 +52,40 @@ function domainFromEmail(value = "") {
   return domain && !PERSONAL_EMAIL_DOMAINS.has(domain) ? domain : "";
 }
 
+function scoreProspect(prospect: any, companyName: string, city: string) {
+  const normalize = (value = "") => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+  const a = normalize(companyName);
+  const b = normalize(prospect?.companyName || prospect?.legalName || "");
+  let score = 0;
+  if (a && b && a === b) score += 120;
+  else if (a && b && (a.includes(b) || b.includes(a))) score += 80;
+  if (city && normalize(city) === normalize(prospect?.city || "")) score += 25;
+  if (prospect?.website) score += 20;
+  if (prospect?.phone) score += 15;
+  return score;
+}
+
+async function searchPublicCompanyWebsite(companyName: string, city: string, country: string) {
+  if (!companyName) return null;
+  try {
+    const result = await searchRentalCompaniesWithApifyDirect({
+      query: companyName,
+      territories: [[city, country].filter(Boolean).join(", ") || "France"],
+      limit: 8,
+      apifyLimit: 80,
+      apifyContactsPerCompany: 3,
+      apifyPollWaitSeconds: 12,
+    });
+    const ranked = (result.prospects || [])
+      .map(prospect => ({ prospect, score: scoreProspect(prospect, companyName, city) }))
+      .sort((a, b) => b.score - a.score);
+    return ranked[0]?.score >= 80 ? ranked[0].prospect : null;
+  } catch (error) {
+    console.error("Company website discovery via Apify:", error);
+    return null;
+  }
+}
+
 async function readAssociatedContactWebsite(company: any) {
   const ids = (company?.associations?.contacts?.results || [])
     .map((row: any) => String(row?.id || ""))
@@ -90,7 +125,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) return NextResponse.json({ error: "companyId requis" }, { status: 400 });
 
     const company = await hubspotJson(
-      `/crm/v3/objects/companies/${encodeURIComponent(companyId)}?properties=name,domain,website&associations=contacts`,
+      `/crm/v3/objects/companies/${encodeURIComponent(companyId)}?properties=name,domain,website,phone,city,country&associations=contacts`,
     );
     const properties = company?.properties || {};
 
@@ -107,9 +142,22 @@ export async function POST(request: NextRequest) {
       source = associated.source;
     }
 
+    let discoveredPhone = "";
+    if (!website || !clean(properties.phone)) {
+      const prospect = await searchPublicCompanyWebsite(clean(properties.name), clean(properties.city), clean(properties.country) || "France");
+      const searchedWebsite = normalizeWebsite(prospect?.website || "");
+      if (!website && searchedWebsite) {
+        website = searchedWebsite;
+        domain = domain || normalizeDomain(searchedWebsite);
+        source = "apify_google_places";
+      }
+      discoveredPhone = clean(prospect?.phone);
+    }
+
     const patch: Record<string, string> = {};
     if (!clean(properties.website) && website) patch.website = website;
     if (!clean(properties.domain) && domain) patch.domain = domain;
+    if (!clean(properties.phone) && discoveredPhone) patch.phone = discoveredPhone;
 
     if (Object.keys(patch).length) {
       await hubspotJson(`/crm/v3/objects/companies/${encodeURIComponent(companyId)}`, {

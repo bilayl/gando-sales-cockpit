@@ -311,7 +311,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "La fiche ne contient pas assez d'informations pour identifier son entreprise (nom, domaine ou site requis)." }, { status: 400 });
     }
 
-    const [backend, websiteDiscovery] = await Promise.all([
+    const [backend, initialWebsiteDiscovery] = await Promise.all([
       callTargetBackend({
         companyName,
         domain,
@@ -327,6 +327,27 @@ export async function POST(request: NextRequest) {
       }),
       discoverPublicWebsiteContacts({ website, domain, contactName }),
     ]);
+
+    let websiteDiscovery = initialWebsiteDiscovery;
+    const discoveredWebsite = backend.prospect?.website || backend.prospect?.domain || "";
+    const initialHost = normalizeDomain(initialWebsiteDiscovery.website || website || domain || "");
+    const discoveredHost = normalizeDomain(discoveredWebsite);
+    if (discoveredWebsite && discoveredHost && discoveredHost !== initialHost && !initialWebsiteDiscovery.phone) {
+      const secondPass = await discoverPublicWebsiteContacts({
+        website: backend.prospect?.website || undefined,
+        domain: backend.prospect?.domain || undefined,
+        contactName,
+      });
+      websiteDiscovery = {
+        website: secondPass.website || initialWebsiteDiscovery.website,
+        phone: secondPass.phone || initialWebsiteDiscovery.phone,
+        email: secondPass.email || initialWebsiteDiscovery.email,
+        contactPhone: secondPass.contactPhone || initialWebsiteDiscovery.contactPhone,
+        contactEmail: secondPass.contactEmail || initialWebsiteDiscovery.contactEmail,
+        pagesVisited: [...new Set([...(initialWebsiteDiscovery.pagesVisited || []), ...(secondPass.pagesVisited || [])])],
+        errors: [...new Set([...(initialWebsiteDiscovery.errors || []), ...(secondPass.errors || [])])],
+      };
+    }
 
     const websiteHasUsefulData = Boolean(websiteDiscovery.phone || websiteDiscovery.email || websiteDiscovery.contactPhone || websiteDiscovery.contactEmail);
     let prospect = backend.prospect ? { ...backend.prospect } as Prospect : null;
