@@ -38,6 +38,8 @@ type CompanyWebsiteResponse = {
   ok?: boolean;
   website?: string | null;
   domain?: string | null;
+  phone?: string | null;
+  phoneFound?: boolean;
   source?: string;
   updatedFields?: string[];
   error?: unknown;
@@ -84,6 +86,15 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
     return payload;
   }
 
+  async function safeCompanyWebsiteLookup() {
+    try {
+      return await ensureCompanyWebsite();
+    } catch (error) {
+      console.warn("Company website lookup failed; continuing full enrichment", error);
+      return null;
+    }
+  }
+
   async function requestEnrichment(apifyRunRefs?: RunRef[]) {
     const response = await fetch("/api/enrichment/profile", {
       method: "POST",
@@ -99,18 +110,21 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
     if (busy) return;
     setBusy(true);
     try {
-      const websiteBefore = await ensureCompanyWebsite();
+      const websiteBefore = await safeCompanyWebsiteLookup();
       const websiteUpdatedBefore = Boolean(websiteBefore?.updatedFields?.length);
       if (websiteBefore?.website && websiteUpdatedBefore) {
         const siteLabel = websiteBefore.domain || websiteBefore.website;
         toast.info(`Site web récupéré : ${siteLabel}`);
+      }
+      if (websiteBefore?.phoneFound && websiteBefore.updatedFields?.includes("phone")) {
+        toast.info("Numéro public trouvé et ajouté dans HubSpot.");
       }
 
       let payload = await requestEnrichment();
       let runs = (payload.runs || []).filter(run => run.runId);
 
       if (payload.pending && runs.length) {
-        toast.info("Apify recherche les coordonnées et décideurs associés à cette fiche…");
+        toast.info("Recherche des coordonnées publiques, du site et des décideurs…");
         for (let attempt = 0; attempt < 10 && payload.pending; attempt += 1) {
           await delay(attempt < 2 ? 3_000 : 5_000);
           payload = await requestEnrichment(runs);
@@ -120,14 +134,14 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
       }
 
       if (!payload.found) {
-        if (websiteUpdatedBefore) await onCompleted?.();
+        if (websiteUpdatedBefore || websiteBefore?.phoneFound) await onCompleted?.();
         toast.info(payload.pending
-          ? "L’enrichissement Apify continue, mais aucun résultat fiable n’est encore disponible."
-          : payload.message || "Aucune donnée suffisamment fiable n’a été trouvée.");
+          ? "La recherche continue, mais aucun résultat suffisamment fiable n’est encore disponible."
+          : payload.message || (websiteBefore?.phoneFound ? "Numéro trouvé et enregistré dans HubSpot." : "Aucune donnée suffisamment fiable n’a été trouvée."));
         return;
       }
 
-      const websiteAfter = await ensureCompanyWebsite();
+      const websiteAfter = await safeCompanyWebsiteLookup();
       const websiteUpdatedAfter = Boolean(websiteAfter?.updatedFields?.length);
       if (websiteAfter?.website && websiteUpdatedAfter) {
         const siteLabel = websiteAfter.domain || websiteAfter.website;
@@ -143,6 +157,7 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
         companyFields ? `${companyFields} champ(s) entreprise complété(s)` : "",
         contactFields ? `${contactFields} champ(s) contact complété(s)` : "",
         websiteUpdatedAfter ? "site web ajouté" : "",
+        websiteAfter?.updatedFields?.includes("phone") ? "téléphone ajouté" : "",
         created ? `${created} contact(s) créé(s)` : "",
         reused ? `${reused} contact(s) associé(s)` : "",
       ].filter(Boolean);
@@ -160,7 +175,7 @@ export function ProfileSourcingButton({ entityType, entityId, onCompleted, class
   return (
     <Button variant="outline" className={className} onClick={() => void run()} disabled={busy}>
       {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-      {busy ? "Sourcing de la fiche…" : label}
+      {busy ? "Recherche de la fiche…" : label}
       {!busy ? <Search size={13} className="opacity-60" /> : null}
     </Button>
   );
