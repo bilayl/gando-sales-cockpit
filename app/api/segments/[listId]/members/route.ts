@@ -83,9 +83,9 @@ async function associatedContactPhones(companyIds: string[]) {
       const companyId = String(association?.from?.id || association?.from?.objectId || association?.id || "");
       if (!companyId) continue;
       const targets = Array.isArray(association?.to) ? association.to : Array.isArray(association?.results) ? association.results : [];
-      const ids = targets.map((target: any) => String(target?.id || target?.toObjectId || target?.objectId || "")).filter(Boolean);
+      const ids: string[] = targets.map((target: any) => String(target?.id || target?.toObjectId || target?.objectId || "")).filter(Boolean);
       companyToContacts.set(companyId, ids);
-      ids.forEach(id => allContactIds.add(id));
+      ids.forEach((id: string) => allContactIds.add(id));
     }
 
     const contactIds = Array.from(allContactIds);
@@ -94,18 +94,18 @@ async function associatedContactPhones(companyIds: string[]) {
       method: "POST",
       body: JSON.stringify({
         properties: ["firstname", "lastname", "email", "phone", "mobilephone"],
-        inputs: contactIds.map(id => ({ id })),
+        inputs: contactIds.map((id: string) => ({ id })),
       }),
     });
-    const contactById = new Map((contacts.results ?? []).map((contact: any) => [String(contact.id), contact.properties ?? {}]));
+    const contactById = new Map<string, Record<string, unknown>>((contacts.results ?? []).map((contact: any) => [String(contact.id), contact.properties ?? {}]));
 
     for (const [companyId, ids] of companyToContacts) {
       let fallback: AssociatedContactPhone | null = null;
       for (const contactId of ids) {
-        const properties: any = contactById.get(contactId) || {};
+        const properties = contactById.get(contactId) || {};
         const phone = String(properties.phone || properties.mobilephone || "").trim();
-        const name = [properties.firstname, properties.lastname].filter(Boolean).join(" ") || properties.email || undefined;
-        const candidate = { id: contactId, phone: phone || undefined, name };
+        const name = [properties.firstname, properties.lastname].filter(Boolean).join(" ") || String(properties.email || "") || undefined;
+        const candidate: AssociatedContactPhone = { id: contactId, phone: phone || undefined, name };
         if (!fallback) fallback = candidate;
         if (phone) { fallback = candidate; break; }
       }
