@@ -65,14 +65,14 @@ export function BrandAssetDownloads({ svg, fileName }: Props) {
       <a
         href={svgDataUrl(svg)}
         download={fileName}
-        className="inline-flex items-center gap-2 rounded-lg bg-[#004855] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#003b46]"
+        className="inline-flex items-center gap-2 rounded-lg bg-[#735DF3] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#735DF3]/90"
       >
         <Download className="h-3.5 w-3.5" /> SVG
       </a>
       <button
         type="button"
         onClick={() => void downloadPng(svg, fileName)}
-        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+        className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-[#111111] transition hover:border-[#735DF3]/40 hover:text-[#735DF3]"
       >
         <Download className="h-3.5 w-3.5" /> PNG
       </button>
