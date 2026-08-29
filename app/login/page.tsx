@@ -12,7 +12,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  if (await isCockpitAuthenticated()) redirect("/prospection");
+  if (await isCockpitAuthenticated()) redirect("/");
 
   const { error } = await searchParams;
   const oauthReady = isHubSpotOAuthConfigured();
@@ -26,8 +26,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="relative w-full max-w-md">
         <div className="mb-7 text-center">
           <div className="brand-mark mx-auto grid h-14 w-14 place-items-center rounded-2xl text-xl font-black text-white">G</div>
-          <h1 className="font-display mt-5 text-3xl font-bold tracking-tight">Gando Sales Cockpit</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Connectez-vous à votre espace commercial Gando.</p>
+          <h1 className="font-display mt-5 text-3xl font-bold tracking-tight">Gando Cockpit</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Connectez-vous à votre espace Gando.</p>
         </div>
 
         <Card className="panel shadow-glow-lg">
@@ -37,7 +37,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             </Badge>
             <CardTitle>Se connecter</CardTitle>
             <CardDescription>
-              Utilisez votre compte interne Gando. L’inscription libre n’est pas disponible sur le Sales Cockpit.
+              Utilisez votre compte interne Gando. L’inscription libre n’est pas disponible sur le Cockpit.
             </CardDescription>
           </CardHeader>
 
