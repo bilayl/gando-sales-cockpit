@@ -3,7 +3,7 @@ export type GandoBrandAsset = {
   name: string;
   description: string;
   fileName: string;
-  preview: "light" | "dark" | "purple" | "petrol";
+  preview: "light" | "dark" | "purple";
   svg: string;
 };
 
@@ -15,7 +15,7 @@ function symbolSvg(fill: string) {
   return `<svg width="134" height="134" viewBox="0 0 134 134" fill="none" xmlns="http://www.w3.org/2000/svg"><g fill="${fill}">${symbolPrimary}</g></svg>`;
 }
 
-function iconSvg(background: string, symbol = "#FFFFFF") {
+function iconSvg(background: string, symbol: string) {
   return `<svg width="134" height="134" viewBox="0 0 134 134" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="3.5" width="127" height="127" rx="30" fill="${background}"/><g fill="${symbol}">${symbolPrimary}</g></svg>`;
 }
 
@@ -24,93 +24,89 @@ function horizontalSvg(markColor: string, textColor: string) {
 }
 
 export const GANDO_BRAND_COLORS = [
-  { name: "Pétrole", hex: "#004855", rgb: "0 · 72 · 85", role: "Fond fort, texte à fort contraste" },
-  { name: "Citron", hex: "#D4F9C3", rgb: "212 · 249 · 195", role: "Accent clair et fonds secondaires" },
-  { name: "Violet", hex: "#735DF3", rgb: "115 · 93 · 243", role: "Couleur de marque principale" },
-  { name: "Lavande", hex: "#D6D0FB", rgb: "214 · 208 · 251", role: "Fond doux et accompagnement du violet" },
-  { name: "Vert pomme", hex: "#00D776", rgb: "0 · 215 · 118", role: "Accent dynamique et signal positif" },
+  { name: "Gando Violet", hex: "#735DF3", rgb: "115 · 93 · 243", role: "Couleur de marque principale" },
+  { name: "White", hex: "#FFFFFF", rgb: "255 · 255 · 255", role: "Fond clair et logo inversé" },
+  { name: "Gando Black", hex: "#111111", rgb: "17 · 17 · 17", role: "Texte, contraste et logo sombre" },
 ] as const;
 
 export const GANDO_BRAND_CONTRASTS = [
-  { foreground: "#004855", background: "#D4F9C3", label: "Pétrole / Citron", score: "8.81:1", level: "AAA texte" },
-  { foreground: "#004855", background: "#D6D0FB", label: "Pétrole / Lavande", score: "6.91:1", level: "AA texte" },
-  { foreground: "#004855", background: "#00D776", label: "Pétrole / Pomme", score: "5.33:1", level: "AA texte" },
-  { foreground: "#735DF3", background: "#D6D0FB", label: "Violet / Lavande", score: "3.3:1", level: "Titres uniquement" },
-  { foreground: "#00D776", background: "#D4F9C3", label: "Pomme / Citron", score: "1.65:1", level: "Décoratif uniquement" },
+  { foreground: "#111111", background: "#FFFFFF", label: "Gando Black / White", score: "18.88:1", level: "AAA texte" },
+  { foreground: "#735DF3", background: "#FFFFFF", label: "Gando Violet / White", score: "4.58:1", level: "AA texte" },
+  { foreground: "#735DF3", background: "#111111", label: "Gando Violet / Gando Black", score: "4.13:1", level: "Grand texte / accents" },
 ] as const;
 
 export const GANDO_BRAND_ASSETS: GandoBrandAsset[] = [
   {
-    id: "logo-primary",
-    name: "Logo primaire · Pétrole",
-    description: "Version partenaire par défaut sur fond clair.",
-    fileName: "gando-logo-primary.svg",
-    preview: "light",
-    svg: horizontalSvg("#004855", "#004855"),
-  },
-  {
     id: "logo-violet",
-    name: "Logo primaire · Violet",
-    description: "Alternative de marque sur fond blanc ou très clair.",
+    name: "Logo primaire · Gando Violet",
+    description: "Version de marque principale sur fond blanc.",
     fileName: "gando-logo-violet.svg",
     preview: "light",
     svg: horizontalSvg("#735DF3", "#735DF3"),
   },
   {
+    id: "logo-black",
+    name: "Logo primaire · Gando Black",
+    description: "Version sombre pour documents et usages sobres.",
+    fileName: "gando-logo-black.svg",
+    preview: "light",
+    svg: horizontalSvg("#111111", "#111111"),
+  },
+  {
     id: "logo-white",
-    name: "Logo primaire · Blanc",
-    description: "Version pour fonds pétrole, violet, photo ou très sombres.",
+    name: "Logo primaire · White",
+    description: "Version inversée pour fond violet ou noir.",
     fileName: "gando-logo-white.svg",
-    preview: "petrol",
+    preview: "purple",
     svg: horizontalSvg("#FFFFFF", "#FFFFFF"),
   },
   {
-    id: "symbol-petrol",
-    name: "Symbole Gando · Pétrole",
-    description: "Symbole seul pour espaces compacts et co-branding.",
-    fileName: "gando-symbol-petrol.svg",
-    preview: "light",
-    svg: symbolSvg("#004855"),
-  },
-  {
     id: "symbol-violet",
-    name: "Symbole Gando · Violet",
-    description: "Symbole seul dans la couleur de marque principale.",
+    name: "Symbole · Gando Violet",
+    description: "Symbole seul pour co-branding et petits espaces.",
     fileName: "gando-symbol-violet.svg",
     preview: "light",
     svg: symbolSvg("#735DF3"),
   },
   {
+    id: "symbol-black",
+    name: "Symbole · Gando Black",
+    description: "Alternative monochrome sombre.",
+    fileName: "gando-symbol-black.svg",
+    preview: "light",
+    svg: symbolSvg("#111111"),
+  },
+  {
     id: "symbol-white",
-    name: "Symbole Gando · Blanc",
-    description: "À utiliser sur un fond violet, pétrole ou sombre.",
+    name: "Symbole · White",
+    description: "À utiliser sur fond violet ou noir.",
     fileName: "gando-symbol-white.svg",
-    preview: "purple",
+    preview: "dark",
     svg: symbolSvg("#FFFFFF"),
   },
   {
-    id: "icon-petrol",
-    name: "Icône responsive · Pétrole",
-    description: "Version carrée arrondie pour interfaces, avatars et badges.",
-    fileName: "gando-icon-petrol.svg",
-    preview: "light",
-    svg: iconSvg("#004855"),
-  },
-  {
     id: "icon-violet",
-    name: "Icône responsive · Violet",
-    description: "Version carrée arrondie dans la couleur principale.",
+    name: "Icône responsive · Gando Violet",
+    description: "Icône carrée arrondie avec symbole blanc.",
     fileName: "gando-icon-violet.svg",
     preview: "light",
-    svg: iconSvg("#735DF3"),
+    svg: iconSvg("#735DF3", "#FFFFFF"),
   },
   {
-    id: "icon-citron",
-    name: "Icône responsive · Citron",
-    description: "Version claire avec symbole pétrole.",
-    fileName: "gando-icon-citron.svg",
+    id: "icon-black",
+    name: "Icône responsive · Gando Black",
+    description: "Icône sombre avec symbole blanc.",
+    fileName: "gando-icon-black.svg",
     preview: "light",
-    svg: iconSvg("#D4F9C3", "#004855"),
+    svg: iconSvg("#111111", "#FFFFFF"),
+  },
+  {
+    id: "icon-white",
+    name: "Icône responsive · White",
+    description: "Icône blanche avec symbole noir pour fond contrasté.",
+    fileName: "gando-icon-white.svg",
+    preview: "dark",
+    svg: iconSvg("#FFFFFF", "#111111"),
   },
 ];
 
