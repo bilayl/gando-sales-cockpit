@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { GandoMark } from "@/components/gando-mark";
-import { KpiBusinessDashboard } from "@/components/kpi-business-dashboard";
+import { BusinessKpiDashboard } from "@/components/business-kpi-dashboard";
 import { getCockpitAccess } from "@/lib/cockpit-access";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ export default async function KpiPage() {
       </header>
 
       <div className="mx-auto w-full max-w-[1440px] px-5 py-8 sm:px-8 lg:px-10">
-        <KpiBusinessDashboard canEdit={access.role !== "commercial"} />
+        <BusinessKpiDashboard canEdit={access.role !== "commercial"} />
       </div>
     </main>
   );
