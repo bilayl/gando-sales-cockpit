@@ -53,7 +53,7 @@ export default async function Page() {
       key: "kpi",
       name: "KPI",
       domain: "kpi.gando.pro",
-      href: appHref(process.env.GANDO_KPI_URL, "/analytics"),
+      href: appHref(process.env.GANDO_KPI_URL, "/kpi"),
       icon: BarChart3,
       iconClassName: "bg-[#e6f7ef] text-[#17845b]",
     },
