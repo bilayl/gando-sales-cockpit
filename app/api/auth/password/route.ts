@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       provider: "password",
     });
 
-    return NextResponse.redirect(new URL("/prospection", request.url), 303);
+    return NextResponse.redirect(new URL("/", request.url), 303);
   } catch (error) {
     console.error("Cockpit password sign-in failed", error);
     return loginRedirect(request, "La connexion est momentanément indisponible.");
