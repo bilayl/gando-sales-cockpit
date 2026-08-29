@@ -22,19 +22,62 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type CockpitRole = "admin" | "member" | "commercial";
+type NavIcon = typeof PhoneCall;
+type NavItem = { href: string; label: string; icon: NavIcon };
+type NavSection = { label: string; items: NavItem[] };
 
-const nav = [
-  { href: "/prospection", label: "Prospection", icon: PhoneCall },
-  { href: "/ai-sales", label: "IA Sales", icon: Bot },
-  { href: "/sourcing", label: "Sourcing", icon: Search },
-  { href: "/segments", label: "Segments", icon: ListFilter },
-  { href: "/tasks", label: "Tâches", icon: ListTodo },
-  { href: "/emails", label: "Emails envoyés", icon: MailCheck },
-  { href: "/agenda", label: "Agenda", icon: CalendarDays },
-  { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
-  { href: "/analytics", label: "Statistiques", icon: BarChart3 },
-  { href: "/support", label: "Support", icon: LifeBuoy },
-  { href: "/deal-room", label: "Deal Room", icon: Target },
+const commercialNav: NavSection[] = [
+  {
+    label: "Aujourd'hui",
+    items: [
+      { href: "/prospection", label: "Appels", icon: PhoneCall },
+      { href: "/tasks", label: "Tâches", icon: ListTodo },
+      { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
+    ],
+  },
+  {
+    label: "Préparer",
+    items: [
+      { href: "/sourcing", label: "Trouver des prospects", icon: Search },
+      { href: "/agenda", label: "Agenda", icon: CalendarDays },
+    ],
+  },
+  {
+    label: "Suivre",
+    items: [
+      { href: "/analytics", label: "Statistiques", icon: BarChart3 },
+      { href: "/support", label: "Support", icon: LifeBuoy },
+    ],
+  },
+];
+
+const fullNav: NavSection[] = [
+  {
+    label: "Vendre",
+    items: [
+      { href: "/prospection", label: "Prospection", icon: PhoneCall },
+      { href: "/tasks", label: "Tâches", icon: ListTodo },
+      { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
+      { href: "/agenda", label: "Agenda", icon: CalendarDays },
+    ],
+  },
+  {
+    label: "Préparer",
+    items: [
+      { href: "/sourcing", label: "Sourcing", icon: Search },
+      { href: "/segments", label: "Segments", icon: ListFilter },
+      { href: "/ai-sales", label: "IA Sales", icon: Bot },
+    ],
+  },
+  {
+    label: "Suivre",
+    items: [
+      { href: "/emails", label: "Emails envoyés", icon: MailCheck },
+      { href: "/analytics", label: "Statistiques", icon: BarChart3 },
+      { href: "/deal-room", label: "Deal Room", icon: Target },
+      { href: "/support", label: "Support", icon: LifeBuoy },
+    ],
+  },
 ];
 
 function roleLabel(role: CockpitRole) {
@@ -43,7 +86,7 @@ function roleLabel(role: CockpitRole) {
 
 export function AppSidebar({ email, role = "member" }: { email?: string; role?: CockpitRole }) {
   const pathname = usePathname();
-  const visibleNav = role === "commercial" ? nav.filter(item => item.href !== "/deal-room") : nav;
+  const sections = role === "commercial" ? commercialNav : fullNav;
 
   return (
     <aside className="flex h-screen w-[72px] flex-col border-r border-border bg-card px-2.5 py-4 lg:w-[216px] lg:px-3">
@@ -57,32 +100,41 @@ export function AppSidebar({ email, role = "member" }: { email?: string; role?: 
 
       <div className="my-4 border-t border-border" />
 
-      <nav className="space-y-1" aria-label="Navigation principale">
-        {visibleNav.map(({ href, label, icon: Icon }) => {
-          const active = pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              title={label}
-              className={cn(
-                "group flex h-10 items-center justify-center gap-3 rounded-lg px-2.5 text-sm font-semibold transition-colors lg:justify-start",
-                active
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              <span className={cn("grid h-5 w-5 place-items-center", active && "text-primary")}>
-                <Icon className="h-[17px] w-[17px]" />
-              </span>
-              <span className="hidden truncate lg:block">{label}</span>
-              {active ? <span className="ml-auto hidden h-1.5 w-1.5 rounded-full bg-primary lg:block" /> : null}
-            </Link>
-          );
-        })}
+      <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto minari-scrollbar" aria-label="Navigation principale">
+        {sections.map(section => (
+          <div key={section.label}>
+            <div className="mb-1 hidden px-2.5 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70 lg:block">
+              {section.label}
+            </div>
+            <div className="space-y-1">
+              {section.items.map(({ href, label, icon: Icon }) => {
+                const active = pathname.startsWith(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    title={label}
+                    className={cn(
+                      "group flex h-10 items-center justify-center gap-3 rounded-lg px-2.5 text-sm font-semibold transition-colors lg:justify-start",
+                      active
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <span className={cn("grid h-5 w-5 place-items-center", active && "text-primary")}>
+                      <Icon className="h-[17px] w-[17px]" />
+                    </span>
+                    <span className="hidden truncate lg:block">{label}</span>
+                    {active ? <span className="ml-auto hidden h-1.5 w-1.5 rounded-full bg-primary lg:block" /> : null}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
-      <div className="mt-auto space-y-2 border-t border-border pt-3">
+      <div className="mt-3 space-y-2 border-t border-border pt-3">
         <Link
           href="/settings"
           title="Paramètres"
@@ -90,7 +142,7 @@ export function AppSidebar({ email, role = "member" }: { email?: string; role?: 
             "flex h-10 items-center justify-center gap-3 rounded-lg px-2.5 text-sm font-semibold transition-colors lg:justify-start",
             pathname.startsWith("/settings")
               ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >
           <Settings className="h-[17px] w-[17px]" />
