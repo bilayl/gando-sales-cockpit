@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, ListFilter, Loader2, MapPin, Play, Plus, RefreshCw, Search, SquareKanban, Table2, Users } from "lucide-react";
-import { CallRecommendationStrip } from "@/components/call-recommendation-strip";
+import { Building2, ListFilter, Loader2, MapPin, Plus, RefreshCw, Search, SquareKanban, Table2, Users } from "lucide-react";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { NewContactDialog } from "@/components/new-contact-dialog";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
 import { ProspectionSession } from "@/components/prospection-session";
+import { SdrWorkQueue, type SdrWorkFilter } from "@/components/sdr-work-queue";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   compareCompanyProspectionPriority,
   getCompanyProspectionDecision,
-  type ProspectionBucket,
 } from "@/lib/company-prospection-priority";
 import { fetchAllPagedResults } from "@/lib/fetch-all-paged-results";
 import {
@@ -33,7 +32,6 @@ type Company = { id: string; properties: Record<string, string | null | undefine
 type List = { listId: string; name: string; objectTypeId: string; size?: number };
 type Owner = { id: string; firstName?: string; lastName?: string; email?: string };
 type ViewMode = "board" | "table";
-type WorkFilter = ProspectionBucket | "ALL";
 
 const STAGE_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(column => [column.value, column.label]));
 
@@ -65,7 +63,7 @@ function companySuggestion(
   if (decision.bucket === "SNOOZED") return "Attendre la prochaine relance";
   if (decision.bucket === "OPPORTUNITY") return "Préparer le RDV / deal";
   if (decision.bucket === "EXCLUDED") return "Ne pas appeler";
-  if (decision.priority === 1) return "Traiter la tâche HubSpot en retard";
+  if (decision.priority === 1) return "Traiter la tâche en retard";
   if (stage === "FOLLOW_UP") return "Rappeler maintenant";
   if (stage === "ATTEMPTED_TO_CONTACT") return "Retenter l'appel";
   if (stage === "CONNECTED") return "Qualifier la prochaine étape";
@@ -87,8 +85,8 @@ export function CompanyFirstProspectionView() {
   const [locationQuery, setLocationQuery] = useState("");
   const [owner, setOwner] = useState("");
   const [stageFilter, setStageFilter] = useState<CompanyStage | "">("");
-  const [workFilter, setWorkFilter] = useState<WorkFilter>("ACTIONABLE");
-  const [view, setView] = useState<ViewMode>("board");
+  const [workFilter, setWorkFilter] = useState<SdrWorkFilter>("ACTIONABLE");
+  const [view, setView] = useState<ViewMode>("table");
   const [sessionOpen, setSessionOpen] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [newContactOpen, setNewContactOpen] = useState(false);
@@ -190,22 +188,6 @@ export function CompanyFirstProspectionView() {
     [classified],
   );
 
-  const recommendations = useMemo(() => classified
-    .filter(item => item.decision.bucket === "ACTIONABLE")
-    .slice(0, 3)
-    .map(({ company, stage, decision }) => {
-      const p = company.properties;
-      return {
-        id: company.id,
-        title: p.name || "Entreprise sans nom",
-        subtitle: [callLabel(p.statut_de_lappel), p.city || p.domain].filter(Boolean).join(" · "),
-        phone: p.phone,
-        priorityLabel: decision.priorityLabel,
-        reason: decision.reason,
-        suggestion: companySuggestion(stage, decision),
-      };
-    }), [classified]);
-
   const currentList = visibleLists.find(item => item.listId === segmentId);
   const actionableCount = classified.filter(item => item.decision.bucket === "ACTIONABLE").length;
   const opportunities = classified.filter(item => item.decision.bucket === "OPPORTUNITY").length;
@@ -241,70 +223,74 @@ export function CompanyFirstProspectionView() {
 
   return (
     <div className="page-shell flex h-screen flex-col overflow-hidden">
-      <div className="flex shrink-0 items-end gap-1.5 border-b border-border bg-card px-5 pt-3 minari-scrollbar">
-        <div className="mb-2 flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
-          <Button size="sm" variant="secondary" className="h-8 gap-1.5 rounded-md px-3"><Building2 size={14} /> Entreprises</Button>
-          <Button asChild size="sm" variant="ghost" className="h-8 gap-1.5 rounded-md px-3"><a href="/prospection?mode=contacts"><Users size={14} /> Contacts</a></Button>
-        </div>
-        <Button asChild variant="ghost" size="sm" className="mb-2 h-9 gap-2 px-3 font-semibold text-primary hover:bg-accent"><a href="/segments"><ListFilter size={15} /> Gérer les segments</a></Button>
-        <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto">
-          <button onClick={() => setSegmentId("")} className={`relative flex h-11 shrink-0 items-center rounded-t-xl border border-b-0 px-4 text-sm ${!segmentId ? "border-border bg-background font-semibold" : "border-transparent text-muted-foreground hover:bg-muted/60"}`}>Toutes les entreprises</button>
-          {visibleLists.map(list => (
-            <button key={list.listId} onClick={() => setSegmentId(list.listId)} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-t-xl border border-b-0 px-4 text-sm ${segmentId === list.listId ? "border-border bg-background font-semibold text-foreground before:absolute before:inset-x-3 before:top-0 before:h-[2px] before:bg-primary" : "border-transparent text-muted-foreground hover:bg-muted/60"}`}>
-              <span className="max-w-[150px] truncate">{list.name}</span>
-              {list.size !== undefined ? <Badge variant="secondary" className="text-[10px]">{list.size}</Badge> : null}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-hidden p-5 pt-4 lg:px-7">
-        <Card className="flex h-full min-h-0 flex-col overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-            <div>
-              <h1 className="font-display text-lg font-bold tracking-tight">{currentList?.name || "Prospection par entreprise"}</h1>
-              <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-primary">{actionableCount} à traiter</strong> · {opportunities} RDV/deals · {snoozed} relances futures · {excluded} exclus · {total} comptes au total</p>
+      <header className="shrink-0 border-b border-border bg-card px-5 py-3 lg:px-7">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">Prospection</span>
+              <span className="text-[10px] text-muted-foreground">{total} comptes chargés</span>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="hidden rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2 text-xs text-muted-foreground 2xl:block"><strong className="text-primary">File sécurisée</strong> · pas intéressé, hors cible, RDV pris et relances futures sont retirés de la session</div>
-              <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewContactOpen(true)}><Plus size={14} /> Contact</Button>
-              <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewCompanyOpen(true)}><Building2 size={14} /> Entreprise</Button>
-              <Button disabled={loading || !actionableCompanies.length} onClick={() => setSessionOpen(true)} className="gap-2">
-                <Play size={15} className="fill-current" /> Démarrer la session
-                {actionableCompanies.length ? <Badge variant="secondary" className="ml-1 bg-background/80 text-foreground">{actionableCompanies.length}</Badge> : null}
-              </Button>
-            </div>
+            <p className="mt-0.5 text-sm font-semibold text-foreground">Travaillez le prochain compte utile, sans chercher quoi faire ensuite.</p>
           </div>
 
-          <CallRecommendationStrip items={recommendations} onOpen={id => router.push(`/companies/${id}`)} />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
+              <Button size="sm" variant="secondary" className="h-8 gap-1.5 rounded-md px-3"><Building2 size={14} /> Entreprises</Button>
+              <Button asChild size="sm" variant="ghost" className="h-8 gap-1.5 rounded-md px-3"><a href="/prospection?mode=contacts"><Users size={14} /> Contacts</a></Button>
+            </div>
+
+            <Select value={segmentId || "__all__"} onValueChange={value => setSegmentId(value === "__all__" ? "" : value)}>
+              <SelectTrigger className="h-9 w-[220px]"><SelectValue placeholder="Segment" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Toutes les entreprises</SelectItem>
+                {visibleLists.map(list => (
+                  <SelectItem key={list.listId} value={list.listId}>{list.name}{list.size !== undefined ? ` · ${list.size}` : ""}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button asChild variant="outline" size="sm" className="h-9 gap-1.5"><a href="/segments"><ListFilter size={14} /> Segments</a></Button>
+            <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewContactOpen(true)}><Plus size={14} /> Contact</Button>
+            <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewCompanyOpen(true)}><Building2 size={14} /> Entreprise</Button>
+          </div>
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-hidden p-4 lg:px-6 lg:py-5">
+        <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+          <SdrWorkQueue
+            activeFilter={workFilter}
+            actionableCount={actionableCount}
+            opportunitiesCount={opportunities}
+            snoozedCount={snoozed}
+            excludedCount={excluded}
+            totalCount={classified.length}
+            segmentName={currentList?.name}
+            loading={loading}
+            onFilterChange={setWorkFilter}
+            onStartSession={() => setSessionOpen(true)}
+          />
 
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-4 py-2.5">
             <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
-              <Button variant={view === "board" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("board")}><SquareKanban size={14} /> Pipeline comptes</Button>
-              <Button variant={view === "table" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("table")}><Table2 size={14} /> Tableau</Button>
+              <Button variant={view === "table" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("table")}><Table2 size={14} /> File d'appels</Button>
+              <Button variant={view === "board" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("board")}><SquareKanban size={14} /> Pipeline</Button>
             </div>
-            <Select value={workFilter} onValueChange={value => setWorkFilter(value as WorkFilter)}>
-              <SelectTrigger className="h-9 w-[190px]"><SelectValue placeholder="File de travail" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ACTIONABLE">À traiter maintenant</SelectItem>
-                <SelectItem value="ALL">Tous les comptes</SelectItem>
-                <SelectItem value="OPPORTUNITY">RDV / opportunités</SelectItem>
-                <SelectItem value="SNOOZED">Relances futures</SelectItem>
-                <SelectItem value="EXCLUDED">Exclus de prospection</SelectItem>
-              </SelectContent>
-            </Select>
+
             <Select value={owner || "all"} onValueChange={value => setOwner(value === "all" ? "" : value)}>
               <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="Commercial" /></SelectTrigger>
               <SelectContent><SelectItem value="all">Tous les commerciaux</SelectItem>{owners.map(item => <SelectItem key={item.id} value={item.id}>{ownerNames[item.id]}</SelectItem>)}</SelectContent>
             </Select>
+
             <Select value={stageFilter || "all"} onValueChange={value => setStageFilter(value === "all" ? "" : value as CompanyStage)}>
-              <SelectTrigger className="h-9 w-[165px]"><SelectValue placeholder="Statut compte" /></SelectTrigger>
+              <SelectTrigger className="h-9 w-[165px]"><SelectValue placeholder="Statut" /></SelectTrigger>
               <SelectContent><SelectItem value="all">Tous les statuts</SelectItem>{COMPANY_PIPELINE.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
             </Select>
-            <div className="relative"><MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={locationQuery} onChange={event => setLocationQuery(event.target.value)} placeholder="Ville, région, pays, CP…" className="h-9 w-52 pl-9" /></div>
-            <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, domaine…" className="h-9 w-52 pl-9" /></div>
+
+            <div className="relative"><MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={locationQuery} onChange={event => setLocationQuery(event.target.value)} placeholder="Ville, région, pays…" className="h-9 w-48 pl-9" /></div>
+            <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, domaine…" className="h-9 w-48 pl-9" /></div>
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>{syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}</Button>
-            <span className="ml-auto text-[11px] text-muted-foreground">La session appelle uniquement les comptes « À traiter maintenant » correspondant à ces filtres.</span>
+            <span className="ml-auto hidden text-[11px] text-muted-foreground 2xl:inline">Ces filtres s'appliquent aussi à la prochaine session d'appels.</span>
           </div>
 
           {error ? <div className="mx-4 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
@@ -322,15 +308,16 @@ export function CompanyFirstProspectionView() {
 
           {view === "table" ? (
             <div className="min-h-0 flex-1 overflow-auto border-t border-border minari-scrollbar">
-              <Table className="min-w-[1400px]">
+              <Table className="min-w-[1500px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Priorité</TableHead>
+                    <TableHead>Prochaine action</TableHead>
                     <TableHead>Entreprise</TableHead>
-                    <TableHead>Localisation</TableHead>
-                    <TableHead>Étape workflow</TableHead>
                     <TableHead>Dernier appel</TableHead>
-                    <TableHead>Prochaine reprise</TableHead>
+                    <TableHead>Localisation</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead>Rappel prévu</TableHead>
                     <TableHead>Contacts</TableHead>
                     <TableHead>Deals</TableHead>
                     <TableHead>Commercial</TableHead>
@@ -338,16 +325,17 @@ export function CompanyFirstProspectionView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell colSpan={10} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filtered.map(company => {
+                  {loading ? <TableRow><TableCell colSpan={11} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filtered.map(company => {
                     const p = company.properties;
                     const stage = deriveCompanyStage(company);
                     const decision = getCompanyProspectionDecision(company, stage);
                     return (
                       <TableRow key={company.id} className="cursor-pointer" onClick={() => router.push(`/companies/${company.id}`)}>
+                        <TableCell><Badge variant={decision.bucket === "ACTIONABLE" ? "secondary" : "outline"}>{decision.priorityLabel}</Badge></TableCell>
                         <TableCell>
-                          <div className="min-w-[120px]">
-                            <Badge variant={decision.bucket === "ACTIONABLE" ? "secondary" : "outline"}>{decision.priorityLabel}</Badge>
-                            <div className="mt-1 max-w-[180px] text-[10px] leading-4 text-muted-foreground">{companySuggestion(stage, decision)}</div>
+                          <div className="min-w-[190px]">
+                            <div className="text-xs font-semibold text-foreground">{companySuggestion(stage, decision)}</div>
+                            <div className="mt-1 max-w-[240px] text-[10px] leading-4 text-muted-foreground">{decision.reason}</div>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -356,9 +344,9 @@ export function CompanyFirstProspectionView() {
                             <div><div className="font-medium">{p.name || "Sans nom"}</div><div className="text-[11px] text-muted-foreground">{p.domain || "—"}</div></div>
                           </div>
                         </TableCell>
+                        <TableCell>{callLabel(p.statut_de_lappel)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground"><span className="inline-flex items-center gap-1.5"><MapPin size={12} />{companyLocation(p)}</span></TableCell>
                         <TableCell><Badge variant="outline">{STAGE_LABELS[stage]}</Badge></TableCell>
-                        <TableCell>{callLabel(p.statut_de_lappel)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{stage === "LATER" || stage === "FOLLOW_UP" ? formatDate(p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date) : "—"}</TableCell>
                         <TableCell>{p.qualification_contacts_count || p.num_associated_contacts || 0}</TableCell>
                         <TableCell>{p.qualification_deals_count || p.num_associated_deals || 0}</TableCell>
@@ -367,7 +355,7 @@ export function CompanyFirstProspectionView() {
                       </TableRow>
                     );
                   })}
-                  {!loading && !filtered.length ? <TableRow><TableCell colSpan={10} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow> : null}
+                  {!loading && !filtered.length ? <TableRow><TableCell colSpan={11} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow> : null}
                 </TableBody>
               </Table>
             </div>

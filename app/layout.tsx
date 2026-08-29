@@ -5,8 +5,8 @@ import { Toaster } from "sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Gando · Sales Cockpit",
-  description: "Cockpit commercial Gando connecté à HubSpot",
+  title: "Gando · Cockpit",
+  description: "Les outils Gando réunis dans un même Cockpit.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
