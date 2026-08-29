@@ -1,4 +1,5 @@
 import { CheckCircle2, Download, ShieldCheck, XCircle } from "lucide-react";
+import { bricolageGrotesque, dmSans } from "@/lib/brand-fonts";
 import { GANDO_BRAND_ASSETS, GANDO_BRAND_COLORS, svgDataUrl } from "@/lib/gando-brand";
 
 const previewClass = {
@@ -9,21 +10,21 @@ const previewClass = {
 
 export function BrandBookContent() {
   return (
-    <div className="mx-auto w-full max-w-[1240px] px-5 py-10 sm:px-8 lg:px-10">
+    <div className={`${dmSans.className} mx-auto w-full max-w-[1240px] px-5 py-10 sm:px-8 lg:px-10`}>
       <section className="max-w-3xl">
         <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">
           <ShieldCheck className="h-3.5 w-3.5" /> Ressources officielles Gando
         </div>
-        <h1 className="mt-5 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">Brand Book</h1>
+        <h1 className={`${bricolageGrotesque.className} mt-5 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl`}>Brand Book</h1>
         <p className="mt-4 max-w-2xl text-base leading-7 text-slate-500">
-          Les logos, couleurs et règles essentielles pour présenter Gando de manière cohérente dans une intégration, une annonce partenaire ou un support commercial.
+          Les logos, couleurs, typographies et règles essentielles pour présenter Gando de manière cohérente dans une intégration, une annonce partenaire ou un support commercial.
         </p>
       </section>
 
       <section className="mt-10">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold tracking-[-0.025em]">Logos</h2>
+            <h2 className={`${bricolageGrotesque.className} text-xl font-semibold tracking-[-0.025em]`}>Logos</h2>
             <p className="mt-1 text-sm text-slate-500">Téléchargez la variante adaptée à votre support.</p>
           </div>
           <span className="hidden text-xs font-medium text-slate-400 sm:inline">Format vectoriel SVG</span>
@@ -36,7 +37,7 @@ export function BrandBookContent() {
                 <div className="flex h-full w-full items-center justify-center [&>svg]:max-h-28 [&>svg]:max-w-full" dangerouslySetInnerHTML={{ __html: asset.svg }} />
               </div>
               <div className="border-t border-slate-100 p-5">
-                <h3 className="text-sm font-semibold text-slate-900">{asset.name}</h3>
+                <h3 className={`${bricolageGrotesque.className} text-sm font-semibold text-slate-900`}>{asset.name}</h3>
                 <p className="mt-1 min-h-10 text-xs leading-5 text-slate-500">{asset.description}</p>
                 <a
                   href={svgDataUrl(asset.svg)}
@@ -52,14 +53,14 @@ export function BrandBookContent() {
       </section>
 
       <section className="mt-12">
-        <h2 className="text-xl font-semibold tracking-[-0.025em]">Couleurs</h2>
+        <h2 className={`${bricolageGrotesque.className} text-xl font-semibold tracking-[-0.025em]`}>Couleurs</h2>
         <p className="mt-1 text-sm text-slate-500">Palette principale pour le co-branding et les supports partenaires.</p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {GANDO_BRAND_COLORS.map(color => (
             <div key={color.hex} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="h-28" style={{ backgroundColor: color.hex }} />
               <div className="p-4">
-                <div className="text-sm font-semibold text-slate-900">{color.name}</div>
+                <div className={`${bricolageGrotesque.className} text-sm font-semibold text-slate-900`}>{color.name}</div>
                 <div className="mt-1 font-mono text-xs text-slate-500">{color.hex}</div>
                 <div className="mt-2 text-[11px] leading-4 text-slate-400">{color.role}</div>
               </div>
@@ -68,22 +69,48 @@ export function BrandBookContent() {
         </div>
       </section>
 
+      <section className="mt-12">
+        <h2 className={`${bricolageGrotesque.className} text-xl font-semibold tracking-[-0.025em]`}>Typographies</h2>
+        <p className="mt-1 text-sm text-slate-500">Deux polices officielles avec des rôles simples et complémentaires.</p>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#735DF3]">Titres & identité</div>
+            <div className={`${bricolageGrotesque.className} mt-4 text-4xl font-semibold tracking-[-0.045em] text-slate-900 sm:text-5xl`}>Bricolage Grotesque</div>
+            <p className="mt-4 text-sm leading-6 text-slate-500">À utiliser pour les titres, accroches, grandes statistiques et moments de marque.</p>
+            <div className={`${bricolageGrotesque.className} mt-6 rounded-xl bg-[#f5f2ff] p-5 text-2xl font-medium tracking-[-0.035em] text-[#1B1F23]`}>
+              Louez sans bloquer votre argent.
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#735DF3]">Texte & interfaces</div>
+            <div className={`${dmSans.className} mt-4 text-4xl font-semibold tracking-[-0.045em] text-slate-900 sm:text-5xl`}>DM Sans</div>
+            <p className="mt-4 text-sm leading-6 text-slate-500">À utiliser pour les paragraphes, boutons, légendes, interfaces produit et contenus partenaires.</p>
+            <div className={`${dmSans.className} mt-6 rounded-xl bg-slate-50 p-5 text-base leading-7 text-slate-700`}>
+              Gando permet de sécuriser une caution sans immobiliser plusieurs centaines ou milliers d’euros sur la carte du locataire.
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section className="mt-12 grid gap-4 lg:grid-cols-2">
         <article className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6">
-          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800"><CheckCircle2 className="h-4 w-4" /> À faire</div>
+          <div className={`${bricolageGrotesque.className} flex items-center gap-2 text-sm font-semibold text-emerald-800`}><CheckCircle2 className="h-4 w-4" /> À faire</div>
           <ul className="mt-4 space-y-3 text-sm leading-6 text-emerald-950/75">
             <li>Utiliser le logo violet ou sombre sur les fonds clairs.</li>
             <li>Utiliser la version blanche sur les fonds violet, noirs ou très sombres.</li>
             <li>Conserver une zone de respiration autour du logo et une taille suffisante pour rester lisible.</li>
+            <li>Utiliser Bricolage Grotesque pour les titres et DM Sans pour le texte courant.</li>
             <li>Privilégier les fichiers SVG pour le web, les présentations et les intégrations partenaires.</li>
           </ul>
         </article>
         <article className="rounded-2xl border border-rose-200 bg-rose-50/60 p-6">
-          <div className="flex items-center gap-2 text-sm font-semibold text-rose-800"><XCircle className="h-4 w-4" /> À éviter</div>
+          <div className={`${bricolageGrotesque.className} flex items-center gap-2 text-sm font-semibold text-rose-800`}><XCircle className="h-4 w-4" /> À éviter</div>
           <ul className="mt-4 space-y-3 text-sm leading-6 text-rose-950/75">
             <li>Ne pas étirer, compresser ou faire pivoter le logo.</li>
             <li>Ne pas remplacer le violet Gando par une autre couleur sans validation.</li>
             <li>Ne pas ajouter d’ombre, de contour ou d’effet graphique au symbole.</li>
+            <li>Ne pas remplacer les typographies officielles par une autre police dans les supports de marque.</li>
             <li>Ne pas placer la version sombre sur un fond qui réduit fortement le contraste.</li>
           </ul>
         </article>
@@ -92,7 +119,7 @@ export function BrandBookContent() {
       <section className="mt-12 rounded-3xl bg-[#735DF3] px-6 py-8 text-white sm:px-8">
         <div className="max-w-2xl">
           <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/65">Pour les partenaires</div>
-          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.035em]">Vous pouvez partager directement cette page.</h2>
+          <h2 className={`${bricolageGrotesque.className} mt-3 text-2xl font-semibold tracking-[-0.035em]`}>Vous pouvez partager directement cette page.</h2>
           <p className="mt-3 text-sm leading-6 text-white/75">Elle est pensée comme la source officielle des ressources de marque Gando. Pour un usage qui sort de ces règles, demandez validation à votre interlocuteur Gando.</p>
         </div>
       </section>
