@@ -48,7 +48,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const destination = returnTo ? `${returnTo}?hubspot=reconnected` : "/prospection";
+    const destination = returnTo ? `${returnTo}?hubspot=reconnected` : "/";
     return NextResponse.redirect(new URL(destination, request.url));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Échec de la connexion HubSpot";
