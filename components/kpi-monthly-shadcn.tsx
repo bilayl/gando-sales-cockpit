@@ -1,14 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Banknote, Building2, Calculator, Pencil, RefreshCw, Save, ShieldCheck, TrendingDown, TrendingUp, UsersRound, WalletCards } from "lucide-react"
-import { Badge } from "@/components/kpi-shadcn/ui/badge"
-import { Button } from "@/components/kpi-shadcn/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/kpi-shadcn/ui/card"
-import { Input } from "@/components/kpi-shadcn/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/kpi-shadcn/ui/select"
-import { Skeleton } from "@/components/kpi-shadcn/ui/skeleton"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/kpi-shadcn/ui/table"
+import { Pencil, RefreshCw, Save, TrendingDown, TrendingUp } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/kpi-shadcn/ui/tabs"
 
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
@@ -181,21 +181,36 @@ function nullableInput(value: string) {
 }
 
 function TrendBadge({ value }: { value: number | null }) {
-  if (value == null) return <Badge variant="outline" className="h-6 rounded-md px-2 text-[11px] text-muted-foreground">—</Badge>
+  if (value == null) return <span className="text-[10px] font-medium text-muted-foreground/60">—</span>
   const up = value >= 0
-  return <Badge variant="outline" className="h-6 gap-1 rounded-md px-2 text-[11px] tabular-nums">{up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}{up ? "+" : "-"}{percent(Math.abs(value))}</Badge>
+  return (
+    <Badge variant="outline" className={up
+      ? "h-5 gap-0.5 border-emerald-200/80 bg-emerald-50/70 px-1.5 text-[10px] font-semibold text-emerald-700"
+      : "h-5 gap-0.5 border-rose-200/80 bg-rose-50/70 px-1.5 text-[10px] font-semibold text-rose-700"}>
+      {up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{up ? "+" : "-"}{percent(Math.abs(value))}
+    </Badge>
+  )
 }
 
-function DriverCard({ label, value, formula }: { label: string; value: string; formula: string }) {
-  return <Card className="shadow-sm"><CardHeader className="pb-2"><CardDescription className="text-xs">{label}</CardDescription></CardHeader><CardContent><CardTitle className="text-xl tabular-nums">{value}</CardTitle><p className="mt-2 text-[11px] text-muted-foreground">{formula}</p></CardContent></Card>
+function DriverCell({ label, value, formula, index }: { label: string; value: string; formula: string; index: number }) {
+  return (
+    <div className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index % 4 === 0 && index > 0 ? "sm:border-l-0 lg:border-l-0" : ""} ${index >= 4 ? "lg:border-t" : ""}`}>
+      <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{label}</div>
+      <div className="mt-2 text-[19px] font-semibold tracking-[-0.02em] tabular-nums">{value}</div>
+      <div className="mt-1.5 text-[10px] font-medium text-muted-foreground">{formula}</div>
+    </div>
+  )
 }
 
 function AssumptionField({ label, value, suffix, percentValue, onChange }: { label: string; value: number; suffix?: string; percentValue?: boolean; onChange: (value: number) => void }) {
   const shown = percentValue ? value * 100 : value
   return (
     <label className="space-y-1.5">
-      <span className="text-xs font-medium">{label}</span>
-      <div className="relative"><Input type="number" step="any" value={Number(shown.toFixed(2))} onChange={event => { const parsed = Number(event.target.value); if (Number.isFinite(parsed)) onChange(percentValue ? parsed / 100 : parsed) }} />{suffix ? <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{suffix}</span> : null}</div>
+      <span className="text-[11px] font-semibold">{label}</span>
+      <div className="relative">
+        <Input className="h-9 text-xs" type="number" step="any" value={Number(shown.toFixed(2))} onChange={event => { const parsed = Number(event.target.value); if (Number.isFinite(parsed)) onChange(percentValue ? parsed / 100 : parsed) }} />
+        {suffix ? <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">{suffix}</span> : null}
+      </div>
     </label>
   )
 }
@@ -363,123 +378,173 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
     }
   }
 
-  if (loading) return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32 rounded-xl" />)}</div>
+  if (loading) return <Skeleton className="h-[680px] w-full rounded-xl" />
 
   const projection = simulation.at(-1) || null
+  const monthlyMetrics = selected && selectedDerived ? [
+    { label: "CA Gando", value: euro(selected.revenue, 2), trend: selectedDerived.revenueGrowth },
+    { label: "TDV sécurisé", value: euro(selected.tdv), trend: selectedDerived.tdvGrowth },
+    { label: "Cautions activées", value: integer(selected.deposits), trend: selectedDerived.depositGrowth },
+    { label: "Loueurs actifs", value: integer(selected.activeRenters), trend: growth(selected.activeRenters, previous?.activeRenters) },
+  ] : []
+  const drivers = selectedDerived ? [
+    ["Take rate", percent(selectedDerived.takeRate, 2), "CA / TDV"],
+    ["ARPU loueur", euro(selectedDerived.arpu, 2), "CA / loueurs actifs"],
+    ["Caution moyenne", euro(selectedDerived.avgDeposit), "TDV / cautions"],
+    ["CA / caution", euro(selectedDerived.revenuePerDeposit, 2), "CA / cautions"],
+    ["Cautions / MAU", decimal(selectedDerived.depositsPerRenter, 2), "cautions / loueurs actifs"],
+    ["Taux d’encaissement", percent(selectedDerived.cashoutRate), "encaissées / activées"],
+    ["Montant moyen encaissé", euro(selectedDerived.avgCashout), "montant / encaissements"],
+    ["Churn loueurs", percent(selectedDerived.churnRate), "churnés / MAU précédent"],
+  ] : []
 
   return (
-    <Tabs defaultValue="monthly" className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Badge variant="outline">Pilotage mensuel</Badge>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Chiffres réels & simulation</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Saisis les données sources, puis laisse le Cockpit calculer les ratios et les projections.</p>
+    <Tabs defaultValue="monthly" className="min-w-0">
+      <Card className="min-w-0 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/20 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="h-6 text-[10px] font-semibold">Pilotage mensuel</Badge>
+            <span className="text-[11px] text-muted-foreground">Réel, ratios calculés et projection</span>
+          </div>
+          <TabsList className="h-8"><TabsTrigger value="monthly" className="h-7 text-xs">Réel</TabsTrigger><TabsTrigger value="simulation" className="h-7 text-xs">Projection</TabsTrigger></TabsList>
         </div>
-        <TabsList><TabsTrigger value="monthly">Réel</TabsTrigger><TabsTrigger value="simulation">Simulation</TabsTrigger></TabsList>
-      </div>
 
-      {error ? <Card className="border-destructive/30"><CardContent className="pt-6 text-sm text-destructive">{error}</CardContent></Card> : null}
+        {error ? <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2.5 text-xs text-destructive">{error}</div> : null}
 
-      <TabsContent value="monthly" className="m-0 space-y-6">
-        <Card className="shadow-sm">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+        <TabsContent value="monthly" className="m-0">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div className="flex flex-wrap items-center gap-3">
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-[180px]"><SelectValue placeholder="Choisir un mois" /></SelectTrigger>
+                <SelectTrigger className="h-9 w-[180px] text-xs"><SelectValue placeholder="Choisir un mois" /></SelectTrigger>
                 <SelectContent>{sortedRows.map(row => <SelectItem key={rowKey(row.year, row.monthNumber)} value={rowKey(row.year, row.monthNumber)}>{row.month} {row.year}</SelectItem>)}</SelectContent>
               </Select>
-              {selected ? <div className="text-xs text-muted-foreground">{SOURCE_FIELDS.filter(field => selected[field.key] != null).length}/{SOURCE_FIELDS.length} sources renseignées</div> : null}
+              {selected ? <span className="text-[11px] text-muted-foreground">{SOURCE_FIELDS.filter(field => selected[field.key] != null).length}/{SOURCE_FIELDS.length} sources renseignées</span> : null}
             </div>
-            {canEdit ? <Button variant="outline" onClick={() => setEditing(current => !current)}><Pencil className="size-4" />{editing ? "Fermer" : "Saisir / corriger"}</Button> : null}
-          </CardContent>
-        </Card>
+            {canEdit ? <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setEditing(current => !current)}><Pencil size={14} />{editing ? "Fermer" : "Saisir / corriger"}</Button> : null}
+          </div>
 
-        {selected && selectedDerived ? (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {[
-                { label: "CA Gando", value: euro(selected.revenue, 2), trend: selectedDerived.revenueGrowth, icon: Banknote },
-                { label: "TDV sécurisé", value: euro(selected.tdv), trend: selectedDerived.tdvGrowth, icon: WalletCards },
-                { label: "Cautions activées", value: integer(selected.deposits), trend: selectedDerived.depositGrowth, icon: ShieldCheck },
-                { label: "Loueurs actifs", value: integer(selected.activeRenters), trend: growth(selected.activeRenters, previous?.activeRenters), icon: Building2 },
-              ].map(item => {
-                const Icon = item.icon
-                return <Card key={item.label} className="shadow-sm"><CardHeader className="pb-2"><div className="flex items-center justify-between gap-2"><CardDescription className="text-xs">{item.label}</CardDescription><div className="grid size-8 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="size-4" /></div></div></CardHeader><CardContent><div className="flex items-end justify-between gap-2"><CardTitle className="text-2xl tabular-nums">{item.value}</CardTitle><TrendBadge value={item.trend} /></div></CardContent></Card>
-              })}
-            </div>
-
-            <div>
-              <div className="mb-3 flex items-center gap-2"><Calculator className="size-4 text-primary" /><h2 className="text-sm font-semibold">Drivers calculés automatiquement</h2></div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <DriverCard label="Take rate" value={percent(selectedDerived.takeRate, 2)} formula="CA / TDV" />
-                <DriverCard label="ARPU loueur" value={euro(selectedDerived.arpu, 2)} formula="CA / loueurs actifs" />
-                <DriverCard label="Caution moyenne" value={euro(selectedDerived.avgDeposit)} formula="TDV / cautions" />
-                <DriverCard label="CA / caution" value={euro(selectedDerived.revenuePerDeposit, 2)} formula="CA / cautions" />
-                <DriverCard label="Cautions / MAU" value={decimal(selectedDerived.depositsPerRenter, 2)} formula="cautions / loueurs actifs" />
-                <DriverCard label="Taux d’encaissement" value={percent(selectedDerived.cashoutRate)} formula="cautions encaissées / activées" />
-                <DriverCard label="Montant moyen encaissé" value={euro(selectedDerived.avgCashout)} formula="montant encaissé / encaissements" />
-                <DriverCard label="Churn loueurs" value={percent(selectedDerived.churnRate)} formula="churnés / MAU précédent" />
+          {monthlyMetrics.length ? (
+            <section className="border-b border-border">
+              <div className="grid sm:grid-cols-2 xl:grid-cols-4">
+                {monthlyMetrics.map((item, index) => (
+                  <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{item.label}</span>
+                      <TrendBadge value={item.trend} />
+                    </div>
+                    <div className="mt-2 text-[23px] font-semibold tracking-[-0.03em] tabular-nums">{item.value}</div>
+                  </div>
+                ))}
               </div>
+            </section>
+          ) : null}
+
+          {drivers.length ? (
+            <section className="border-b border-border">
+              <div className="border-b border-border px-4 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Calculé</div>
+                <div className="mt-0.5 text-sm font-semibold">Drivers automatiques</div>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4">
+                {drivers.map(([label, value, formula], index) => <DriverCell key={label} label={label} value={value} formula={formula} index={index} />)}
+              </div>
+            </section>
+          ) : null}
+
+          {editing && canEdit && draft ? (
+            <section className="border-b border-border">
+              <div className="border-b border-border px-4 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Sources</div>
+                <div className="mt-0.5 text-sm font-semibold">{MONTHS[draft.monthNumber - 1]} {draft.year}</div>
+              </div>
+              <div className="space-y-5 p-4">
+                {["Revenu & volume", "Usage", "Risque & recouvrement"].map(group => (
+                  <div key={group}>
+                    <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/70">{group}</div>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {SOURCE_FIELDS.filter(field => field.group === group).map(field => (
+                        <label key={field.key} className="space-y-1.5">
+                          <span className="text-[11px] font-semibold">{field.label}</span>
+                          <div className="relative">
+                            <Input className="h-9 text-xs" type="number" step="any" value={draft[field.key] ?? ""} onChange={event => setDraft(current => current ? ({ ...current, [field.key]: nullableInput(event.target.value) } as KpiRow) : current)} />
+                            {field.euro ? <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">€</span> : null}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-end gap-2 border-t border-border pt-4"><Button variant="outline" size="sm" className="h-9" onClick={() => setEditing(false)}>Annuler</Button><Button size="sm" className="h-9 gap-1.5" onClick={() => void save()} disabled={saving}>{saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}Enregistrer et recalculer</Button></div>
+              </div>
+            </section>
+          ) : null}
+
+          <section>
+            <div className="border-b border-border px-4 py-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Historique</div>
+              <div className="mt-0.5 text-sm font-semibold">Réel + ratios calculés</div>
             </div>
-          </>
-        ) : null}
-
-        {editing && canEdit && draft ? (
-          <Card className="shadow-sm">
-            <CardHeader><CardTitle className="text-base">Données sources · {MONTHS[draft.monthNumber - 1]} {draft.year}</CardTitle><CardDescription>Les ratios, la croissance et le churn sont recalculés automatiquement.</CardDescription></CardHeader>
-            <CardContent className="space-y-6">
-              {["Revenu & volume", "Usage", "Risque & recouvrement"].map(group => (
-                <div key={group}><div className="mb-3 text-xs font-medium text-muted-foreground">{group}</div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{SOURCE_FIELDS.filter(field => field.group === group).map(field => <label key={field.key} className="space-y-1.5"><span className="text-xs font-medium">{field.label}</span><div className="relative"><Input type="number" step="any" value={draft[field.key] ?? ""} onChange={event => setDraft(current => current ? ({ ...current, [field.key]: nullableInput(event.target.value) } as KpiRow) : current)} />{field.euro ? <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">€</span> : null}</div></label>)}</div></div>
-              ))}
-              <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEditing(false)}>Annuler</Button><Button onClick={() => void save()} disabled={saving}>{saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}Enregistrer et recalculer</Button></div>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <Card className="overflow-hidden shadow-sm">
-          <CardHeader className="border-b"><CardTitle className="text-base">Historique mensuel</CardTitle><CardDescription>Réel + ratios calculés automatiquement.</CardDescription></CardHeader>
-          <CardContent className="p-0">
-            <Table className="min-w-[1050px]">
-              <TableHeader className="bg-muted/35"><TableRow><TableHead className="sticky left-0 z-10 bg-muted/95 pl-6">Mois</TableHead><TableHead>CA</TableHead><TableHead>Δ CA</TableHead><TableHead>TDV</TableHead><TableHead>Take rate</TableHead><TableHead>Cautions</TableHead><TableHead>Δ cautions</TableHead><TableHead>MAU</TableHead><TableHead>Cautions / MAU</TableHead><TableHead>ARPU</TableHead><TableHead>Caution moy.</TableHead></TableRow></TableHeader>
-              <TableBody>{[...actualRows].reverse().map(row => { const derived = derivedByMonth.get(rowKey(row.year, row.monthNumber)); return <TableRow key={rowKey(row.year, row.monthNumber)} onClick={() => setSelectedMonth(rowKey(row.year, row.monthNumber))} className="cursor-pointer"><TableCell className="sticky left-0 bg-card pl-6 font-medium">{row.month} {row.year}</TableCell><TableCell>{euro(row.revenue, 2)}</TableCell><TableCell><TrendBadge value={derived?.revenueGrowth ?? null} /></TableCell><TableCell>{euro(row.tdv)}</TableCell><TableCell>{percent(derived?.takeRate, 2)}</TableCell><TableCell>{integer(row.deposits)}</TableCell><TableCell><TrendBadge value={derived?.depositGrowth ?? null} /></TableCell><TableCell>{integer(row.activeRenters)}</TableCell><TableCell>{decimal(derived?.depositsPerRenter, 2)}</TableCell><TableCell>{euro(derived?.arpu, 2)}</TableCell><TableCell>{euro(derived?.avgDeposit)}</TableCell></TableRow> })}</TableBody>
+            <Table className="min-w-[1050px] text-[11px]">
+              <TableHeader className="bg-muted/35"><TableRow><TableHead className="sticky left-0 z-10 bg-muted/95 pl-4">Mois</TableHead><TableHead>CA</TableHead><TableHead>Δ CA</TableHead><TableHead>TDV</TableHead><TableHead>Take rate</TableHead><TableHead>Cautions</TableHead><TableHead>Δ cautions</TableHead><TableHead>MAU</TableHead><TableHead>Cautions / MAU</TableHead><TableHead>ARPU</TableHead><TableHead>Caution moy.</TableHead></TableRow></TableHeader>
+              <TableBody>{[...actualRows].reverse().map(row => { const derived = derivedByMonth.get(rowKey(row.year, row.monthNumber)); return <TableRow key={rowKey(row.year, row.monthNumber)} onClick={() => setSelectedMonth(rowKey(row.year, row.monthNumber))} className="group cursor-pointer"><TableCell className="sticky left-0 bg-card pl-4 font-semibold group-hover:bg-muted/50">{row.month} {row.year}</TableCell><TableCell>{euro(row.revenue, 2)}</TableCell><TableCell><TrendBadge value={derived?.revenueGrowth ?? null} /></TableCell><TableCell>{euro(row.tdv)}</TableCell><TableCell>{percent(derived?.takeRate, 2)}</TableCell><TableCell>{integer(row.deposits)}</TableCell><TableCell><TrendBadge value={derived?.depositGrowth ?? null} /></TableCell><TableCell>{integer(row.activeRenters)}</TableCell><TableCell>{decimal(derived?.depositsPerRenter, 2)}</TableCell><TableCell>{euro(derived?.arpu, 2)}</TableCell><TableCell>{euro(derived?.avgDeposit)}</TableCell></TableRow> })}</TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      </TabsContent>
+          </section>
+        </TabsContent>
 
-      <TabsContent value="simulation" className="m-0 space-y-6">
-        {!assumptions ? <Skeleton className="h-64 rounded-xl" /> : (
-          <>
-            <Card className="shadow-sm">
-              <CardHeader className="sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="text-base">Hypothèses de simulation</CardTitle><CardDescription className="mt-1">Initialisées avec les moyennes historiques, puis modifiables.</CardDescription></div><Select value={horizon} onValueChange={setHorizon}><SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="6">+6 mois</SelectItem><SelectItem value="12">+12 mois</SelectItem><SelectItem value="24">+24 mois</SelectItem></SelectContent></Select></CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                <AssumptionField label="Croissance cautions" value={assumptions.depositGrowth} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, depositGrowth: value }))} />
-                <AssumptionField label="Cautions / loueur" value={assumptions.depositsPerRenter} onChange={value => setAssumptions(current => current && ({ ...current, depositsPerRenter: value }))} />
-                <AssumptionField label="TDV / caution" value={assumptions.tdvPerDeposit} suffix="€" onChange={value => setAssumptions(current => current && ({ ...current, tdvPerDeposit: value }))} />
-                <AssumptionField label="Take rate" value={assumptions.takeRate} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, takeRate: value }))} />
-                <AssumptionField label="Nouveaux users / mois" value={assumptions.newUsersPerMonth} onChange={value => setAssumptions(current => current && ({ ...current, newUsersPerMonth: value }))} />
-                <AssumptionField label="Nouveaux clients / mois" value={assumptions.newClientsPerMonth} onChange={value => setAssumptions(current => current && ({ ...current, newClientsPerMonth: value }))} />
-                <AssumptionField label="Taux d’encaissement" value={assumptions.cashoutRate} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, cashoutRate: value }))} />
-                <AssumptionField label="Montant / encaissement" value={assumptions.cashoutAmount} suffix="€" onChange={value => setAssumptions(current => current && ({ ...current, cashoutAmount: value }))} />
-                <AssumptionField label="Part garantie avancée" value={assumptions.guaranteeShare} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, guaranteeShare: value }))} />
-                <AssumptionField label="Churn loueurs" value={assumptions.churnRate} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, churnRate: value }))} />
-              </CardContent>
-            </Card>
+        <TabsContent value="simulation" className="m-0">
+          {!assumptions ? <div className="p-4"><Skeleton className="h-64 rounded-xl" /></div> : (
+            <>
+              <section className="border-b border-border">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Hypothèses</div>
+                    <div className="mt-0.5 text-sm font-semibold">Scénario basé sur les moyennes historiques</div>
+                  </div>
+                  <Select value={horizon} onValueChange={setHorizon}><SelectTrigger className="h-9 w-[130px] text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="6">+6 mois</SelectItem><SelectItem value="12">+12 mois</SelectItem><SelectItem value="24">+24 mois</SelectItem></SelectContent></Select>
+                </div>
+                <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                  <AssumptionField label="Croissance cautions" value={assumptions.depositGrowth} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, depositGrowth: value }))} />
+                  <AssumptionField label="Cautions / loueur" value={assumptions.depositsPerRenter} onChange={value => setAssumptions(current => current && ({ ...current, depositsPerRenter: value }))} />
+                  <AssumptionField label="TDV / caution" value={assumptions.tdvPerDeposit} suffix="€" onChange={value => setAssumptions(current => current && ({ ...current, tdvPerDeposit: value }))} />
+                  <AssumptionField label="Take rate" value={assumptions.takeRate} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, takeRate: value }))} />
+                  <AssumptionField label="Nouveaux users / mois" value={assumptions.newUsersPerMonth} onChange={value => setAssumptions(current => current && ({ ...current, newUsersPerMonth: value }))} />
+                  <AssumptionField label="Nouveaux clients / mois" value={assumptions.newClientsPerMonth} onChange={value => setAssumptions(current => current && ({ ...current, newClientsPerMonth: value }))} />
+                  <AssumptionField label="Taux d’encaissement" value={assumptions.cashoutRate} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, cashoutRate: value }))} />
+                  <AssumptionField label="Montant / encaissement" value={assumptions.cashoutAmount} suffix="€" onChange={value => setAssumptions(current => current && ({ ...current, cashoutAmount: value }))} />
+                  <AssumptionField label="Part garantie avancée" value={assumptions.guaranteeShare} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, guaranteeShare: value }))} />
+                  <AssumptionField label="Churn loueurs" value={assumptions.churnRate} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, churnRate: value }))} />
+                </div>
+              </section>
 
-            {projection ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[
-              { label: `CA à +${horizon} mois`, value: euro(projection.revenue, 2), icon: Banknote },
-              { label: "TDV projeté", value: euro(projection.tdv), icon: WalletCards },
-              { label: "Cautions projetées", value: integer(projection.deposits), icon: ShieldCheck },
-              { label: "Loueurs actifs", value: integer(projection.activeRenters), icon: UsersRound },
-            ].map(item => { const Icon = item.icon; return <Card key={item.label} className="shadow-sm"><CardHeader className="pb-2"><div className="flex items-center justify-between"><CardDescription className="text-xs">{item.label}</CardDescription><div className="grid size-8 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="size-4" /></div></div></CardHeader><CardContent><CardTitle className="text-2xl tabular-nums">{item.value}</CardTitle></CardContent></Card> })}</div> : null}
+              {projection ? (
+                <section className="border-b border-border">
+                  <div className="grid sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      [ `CA à +${horizon} mois`, euro(projection.revenue, 2) ],
+                      [ "TDV projeté", euro(projection.tdv) ],
+                      [ "Cautions projetées", integer(projection.deposits) ],
+                      [ "Loueurs actifs", integer(projection.activeRenters) ],
+                    ].map(([label, value], index) => (
+                      <div key={label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{label}</div>
+                        <div className="mt-2 text-[23px] font-semibold tracking-[-0.03em] tabular-nums">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
 
-            <Card className="overflow-hidden shadow-sm">
-              <CardHeader className="border-b"><CardTitle className="text-base">Projection mensuelle</CardTitle><CardDescription>Scénario généré depuis le dernier mois réel.</CardDescription></CardHeader>
-              <CardContent className="p-0"><Table className="min-w-[900px]"><TableHeader className="bg-muted/35"><TableRow><TableHead className="pl-6">Mois</TableHead><TableHead>CA</TableHead><TableHead>TDV</TableHead><TableHead>Cautions</TableHead><TableHead>MAU</TableHead><TableHead>Users inscrits</TableHead><TableHead>Clients</TableHead><TableHead>Encaissements</TableHead><TableHead>Garantie avancée</TableHead></TableRow></TableHeader><TableBody>{simulation.map(row => <TableRow key={rowKey(row.year, row.monthNumber)}><TableCell className="pl-6 font-medium">{row.month} {row.year}</TableCell><TableCell>{euro(row.revenue, 2)}</TableCell><TableCell>{euro(row.tdv)}</TableCell><TableCell>{integer(row.deposits)}</TableCell><TableCell>{integer(row.activeRenters)}</TableCell><TableCell>{integer(row.registeredUsers)}</TableCell><TableCell>{integer(row.totalClients)}</TableCell><TableCell>{integer(row.depositCashouts)}</TableCell><TableCell>{euro(row.advancedGuarantee)}</TableCell></TableRow>)}</TableBody></Table></CardContent>
-            </Card>
-          </>
-        )}
-      </TabsContent>
+              <section>
+                <div className="border-b border-border px-4 py-3">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Projection</div>
+                  <div className="mt-0.5 text-sm font-semibold">Scénario mensuel</div>
+                </div>
+                <Table className="min-w-[900px] text-[11px]"><TableHeader className="bg-muted/35"><TableRow><TableHead className="pl-4">Mois</TableHead><TableHead>CA</TableHead><TableHead>TDV</TableHead><TableHead>Cautions</TableHead><TableHead>MAU</TableHead><TableHead>Users inscrits</TableHead><TableHead>Clients</TableHead><TableHead>Encaissements</TableHead><TableHead>Garantie avancée</TableHead></TableRow></TableHeader><TableBody>{simulation.map(row => <TableRow key={rowKey(row.year, row.monthNumber)}><TableCell className="pl-4 font-semibold">{row.month} {row.year}</TableCell><TableCell>{euro(row.revenue, 2)}</TableCell><TableCell>{euro(row.tdv)}</TableCell><TableCell>{integer(row.deposits)}</TableCell><TableCell>{integer(row.activeRenters)}</TableCell><TableCell>{integer(row.registeredUsers)}</TableCell><TableCell>{integer(row.totalClients)}</TableCell><TableCell>{integer(row.depositCashouts)}</TableCell><TableCell>{euro(row.advancedGuarantee)}</TableCell></TableRow>)}</TableBody></Table>
+              </section>
+            </>
+          )}
+        </TabsContent>
+      </Card>
     </Tabs>
   )
 }
