@@ -79,7 +79,7 @@ export function KpiDashboardOverview() {
   ) / (summary.coverage.total * 4)
 
   return (
-    <div id="kpi-dashboard" className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+    <div id="kpi-dashboard" className="flex scroll-mt-20 flex-col gap-4 py-4 md:gap-6 md:py-6">
       <div className="flex flex-col gap-2 px-4 lg:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -100,10 +100,10 @@ export function KpiDashboardOverview() {
 
       <KpiSectionCards summary={summary} />
 
-      <div className="grid gap-4 px-4 lg:px-6 @5xl/main:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.7fr)]">
+      <div id="kpi-trajectory" className="grid scroll-mt-20 gap-4 px-4 lg:px-6 @5xl/main:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.7fr)]">
         <KpiChartAreaInteractive data={summary.points} />
 
-        <Card className="border-border/80 shadow-sm">
+        <Card id="kpi-funnel" className="scroll-mt-20 border-border/80 shadow-sm">
           <CardHeader className="border-b border-border/70">
             <CardTitle className="text-base">Value funnel</CardTitle>
             <CardDescription>Du prospect au loueur qui active sa première caution.</CardDescription>
@@ -136,7 +136,7 @@ export function KpiDashboardOverview() {
         </Card>
       </div>
 
-      <div className="grid gap-4 px-4 lg:px-6 @5xl/main:grid-cols-3">
+      <div id="kpi-finance" className="grid scroll-mt-20 gap-4 px-4 lg:px-6 @5xl/main:grid-cols-3">
         <Card className="border-border/80 shadow-sm">
           <CardHeader><CardDescription>Cash collecté</CardDescription><CardTitle className="text-2xl">{euro(summary.cashCollected)}</CardTitle></CardHeader>
           <CardContent className="text-xs text-muted-foreground">{percent(summary.collectionRate)} du CA signé ({euro(summary.signedRevenue)})</CardContent>
@@ -151,7 +151,7 @@ export function KpiDashboardOverview() {
         </Card>
       </div>
 
-      <div className="px-4 lg:px-6">
+      <div id="kpi-history" className="scroll-mt-20 px-4 lg:px-6">
         <KpiDataTable data={summary.points} />
       </div>
     </div>
