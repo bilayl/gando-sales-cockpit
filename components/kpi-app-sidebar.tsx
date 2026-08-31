@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { BarChart3, ChartNoAxesCombined, Database, Gauge, Landmark, Table2 } from "lucide-react"
 import { GandoMark } from "@/components/gando-mark"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/kpi-shadcn/ui/avatar"
 import {
   Sidebar,
   SidebarContent,
