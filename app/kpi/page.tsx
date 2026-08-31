@@ -1,8 +1,5 @@
 import { redirect } from "next/navigation"
-import { KpiAppSidebar } from "@/components/kpi-app-sidebar"
-import { KpiSiteHeader } from "@/components/kpi-site-header"
-import { KpiWorkspace } from "@/components/kpi-workspace"
-import { SidebarInset, SidebarProvider } from "@/components/kpi-shadcn/ui/sidebar"
+import { KpiClientShell } from "@/components/kpi-client-shell"
 import { getCockpitAccess } from "@/lib/cockpit-access"
 
 export const dynamic = "force-dynamic"
@@ -11,28 +8,5 @@ export default async function KpiPage() {
   const access = await getCockpitAccess()
   if (!access) redirect("/login")
 
-  return (
-    <SidebarProvider
-      className="bg-muted/40"
-      style={
-        {
-          "--sidebar-width": "15.5rem",
-          "--header-height": "3.5rem",
-          "--primary": "#735DF3",
-          "--ring": "#735DF3",
-          "--sidebar-primary": "#735DF3",
-          "--sidebar-primary-foreground": "#FFFFFF",
-          "--chart-1": "#735DF3",
-        } as React.CSSProperties
-      }
-    >
-      <KpiAppSidebar email={access.email} role={access.role} />
-      <SidebarInset className="min-w-0 overflow-hidden border-border bg-background md:peer-data-[variant=inset]:border">
-        <KpiSiteHeader />
-        <div className="@container/main flex min-w-0 flex-1 flex-col">
-          <KpiWorkspace canEdit={access.role !== "commercial"} />
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
-  )
+  return <KpiClientShell email={access.email} role={access.role} />
 }
