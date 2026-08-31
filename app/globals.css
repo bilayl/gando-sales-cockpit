@@ -31,14 +31,6 @@
   --chart-4: #dd7a34;
   --chart-5: #3a7ba8;
   color-scheme: light;
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
 .dark {
@@ -62,14 +54,6 @@
   --input: #33464b;
   --ring: #a895ff;
   color-scheme: dark;
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
 @theme inline {
@@ -101,14 +85,6 @@
   --radius-md: calc(var(--radius) - 1px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 3px);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
 }
 
 * { box-sizing: border-box; }
@@ -172,97 +148,6 @@ input:-webkit-autofill:focus {
 
 .animate-fade-in { animation: fade-in 180ms ease-out both; }
 @keyframes fade-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
-
-/* KPI workspace: a flatter, denser reporting surface inspired by modern CRM workspaces. */
-.kpi-attio-shell {
-  --background: #ffffff;
-  --foreground: #25262a;
-  --card: #ffffff;
-  --card-foreground: #25262a;
-  --popover: #ffffff;
-  --popover-foreground: #25262a;
-  --secondary: #f5f5f6;
-  --secondary-foreground: #333438;
-  --muted: #f6f6f7;
-  --muted-foreground: #777981;
-  --accent: #efeff1;
-  --accent-foreground: #2c2d31;
-  --border: #e6e6e8;
-  --input: #dddddf;
-  --sidebar: #f5f5f6;
-  --sidebar-foreground: #37383d;
-  --sidebar-accent: #eaeaed;
-  --sidebar-accent-foreground: #222328;
-  --sidebar-border: #e1e1e4;
-  background: #f5f5f6;
-}
-
-.dark .kpi-attio-shell {
-  --background: #171719;
-  --foreground: #eeeeef;
-  --card: #1c1c1f;
-  --card-foreground: #eeeeef;
-  --popover: #202024;
-  --popover-foreground: #eeeeef;
-  --secondary: #27272b;
-  --secondary-foreground: #ececef;
-  --muted: #242428;
-  --muted-foreground: #9a9aa2;
-  --accent: #2b2b30;
-  --accent-foreground: #f2f2f3;
-  --border: #303036;
-  --input: #3a3a40;
-  --sidebar: #141416;
-  --sidebar-foreground: #d9d9dd;
-  --sidebar-accent: #252529;
-  --sidebar-accent-foreground: #f0f0f2;
-  --sidebar-border: #2a2a2f;
-  background: #141416;
-}
-
-.kpi-attio .shadow,
-.kpi-attio .shadow-sm,
-.kpi-attio .shadow-md,
-.kpi-attio .shadow-lg {
-  box-shadow: none !important;
-}
-
-.kpi-attio .rounded-xl,
-.kpi-attio .rounded-2xl,
-.kpi-attio .rounded-3xl {
-  border-radius: 0.5rem !important;
-}
-
-.kpi-attio .bg-gradient-to-t,
-.kpi-attio .bg-gradient-to-b,
-.kpi-attio .bg-gradient-to-r {
-  background-image: none !important;
-}
-
-.kpi-attio h1 {
-  font-size: 1.0625rem !important;
-  line-height: 1.5rem !important;
-  font-weight: 600 !important;
-  letter-spacing: -0.02em !important;
-}
-
-.kpi-attio table {
-  font-variant-numeric: tabular-nums;
-}
-
-.kpi-attio input,
-.kpi-attio button,
-.kpi-attio [role="combobox"] {
-  box-shadow: none !important;
-}
-
-.kpi-attio [role="tablist"] {
-  box-shadow: none !important;
-}
-
-.kpi-attio .space-y-6 > :not([hidden]) ~ :not([hidden]) {
-  margin-top: 1rem !important;
-}
 
 @media (max-width: 900px) {
   .page-content { padding: 1rem; }
