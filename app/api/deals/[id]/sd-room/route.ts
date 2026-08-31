@@ -12,13 +12,17 @@ import {
   updateSDRoomSettings,
 } from "@/lib/sd-room";
 import { requireSDInternalAccess } from "@/lib/sd-room-access";
-import type { SDRoomBrandTheme, SDRoomRecord } from "@/lib/sd-room-types";
+import type { SDRoomBrandTheme, SDRoomMode, SDRoomRecord } from "@/lib/sd-room-types";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
 function brandTheme(value: unknown): SDRoomBrandTheme {
   return value === "gradient" || value === "dark" || value === "light" ? value : "gando";
+}
+
+function roomMode(value: unknown): SDRoomMode {
+  return value === "enterprise" ? "enterprise" : "standard";
 }
 
 function standaloneDeal(room: SDRoomRecord): DealRoomDetail {
@@ -123,6 +127,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const prospectLogoUrl = String(body.prospectLogoUrl || "").trim().slice(0, 2000) || null;
     const brandBannerImageUrl = String(body.brandBannerImageUrl || "").trim().slice(0, 2000) || null;
     const roomBrandTheme = brandTheme(body.brandTheme);
+    const selectedRoomMode = roomMode(body.roomMode);
     const brandTitle = String(body.brandTitle || title || created.title).trim().slice(0, 240) || null;
     const brandSubtitle = String(body.brandSubtitle || "Espace de collaboration").trim().slice(0, 500) || null;
     const meetingBookingUrl = String(body.meetingBookingUrl || "").trim().slice(0, 2000) || null;
@@ -131,6 +136,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       brand_theme: roomBrandTheme,
       brand_title: brandTitle,
       brand_subtitle: brandSubtitle,
+      room_mode: selectedRoomMode,
     };
     if (title) updates.title = title;
     if (companyName) updates.company_name = companyName;
