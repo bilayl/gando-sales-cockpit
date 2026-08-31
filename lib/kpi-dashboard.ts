@@ -24,6 +24,10 @@ export type ValueKpiRow = {
   firstDepositRenters: number | null
   paidSpend: number | null
   salesCost: number | null
+  toolingCost?: number | null
+  agencyCost?: number | null
+  creativeCost?: number | null
+  otherAcquisitionCost?: number | null
   signedRevenue: number | null
   cashCollected: number | null
   netMargin: number | null
@@ -33,6 +37,11 @@ export type CampaignKpiRow = {
   year: number
   monthNumber: number
   spend: number | null
+  salesCost?: number | null
+  toolingCost?: number | null
+  agencyCost?: number | null
+  creativeCost?: number | null
+  otherCost?: number | null
   leads: number | null
   clients: number | null
   signedRevenue: number | null
@@ -81,8 +90,10 @@ export type KpiDashboardSummary = {
   netMargin: number
   marginRate: number | null
   campaignSpend: number
+  campaignTotalCost: number
   campaignCash: number
   cashRoas: number | null
+  cashRoi: number | null
   coverage: {
     revenue: number
     tdv: number
@@ -105,6 +116,10 @@ function known(value: number | null | undefined): value is number {
 
 function ratio(top: number, bottom: number) {
   return bottom > 0 ? top / bottom : null
+}
+
+function roi(returnValue: number, cost: number) {
+  return cost > 0 ? (returnValue - cost) / cost : null
 }
 
 function key(year: number, monthNumber: number) {
@@ -179,6 +194,15 @@ export function buildKpiDashboardSummary(
   const netMargin = valueRows.reduce((sum, row) => sum + n(row.netMargin), 0)
 
   const campaignSpend = campaignRows.reduce((sum, row) => sum + n(row.spend), 0)
+  const campaignTotalCost = campaignRows.reduce((sum, row) => (
+    sum
+    + n(row.spend)
+    + n(row.salesCost)
+    + n(row.toolingCost)
+    + n(row.agencyCost)
+    + n(row.creativeCost)
+    + n(row.otherCost)
+  ), 0)
   const campaignCash = campaignRows.reduce((sum, row) => sum + n(row.cashCollected), 0)
 
   const first = core[0]
@@ -210,8 +234,10 @@ export function buildKpiDashboardSummary(
     netMargin,
     marginRate: ratio(netMargin, totalRevenue),
     campaignSpend,
+    campaignTotalCost,
     campaignCash,
     cashRoas: ratio(campaignCash, campaignSpend),
+    cashRoi: roi(campaignCash, campaignTotalCost),
     coverage: {
       revenue: core.filter(row => known(row.revenue)).length,
       tdv: core.filter(row => known(row.tdv)).length,
