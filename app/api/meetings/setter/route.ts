@@ -134,7 +134,12 @@ export async function GET(request: NextRequest) {
       const inferred = inferredQualification(meeting);
       const review = reviews.get(meeting.id);
       const stored = parseStoredReview(review?.review_note);
-      const commercialResult = stored?.result || inferred.result;
+      const commercialResult = stored?.result
+        || (review?.qualification_status === "qualified"
+          ? "qualified"
+          : review?.qualification_status === "not_qualified"
+            ? "not_qualified"
+            : inferred.result);
       const qualificationStatus = review?.qualification_status || inferred.status;
       const qualificationReason = review
         ? stored?.note || (commercialResult === "follow_up" ? "Relance commerciale programmée" : "Résultat commercial renseigné")
