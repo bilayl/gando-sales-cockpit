@@ -45,8 +45,15 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
         const response = await fetch("/api/sd-rooms", { cache: "no-store" });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.message || payload.error || "Chargement impossible");
-        const room = (payload.results || []).find((item: { hubspot_deal_id?: string; room_mode?: SDRoomMode }) => item.hubspot_deal_id === dealId);
+        const room = (payload.results || []).find((item: { id?: string; hubspot_deal_id?: string; room_mode?: SDRoomMode }) => item.hubspot_deal_id === dealId);
         const mode: SDRoomMode = room?.room_mode === "enterprise" ? "enterprise" : "standard";
+        if (mode === "standard" && room?.id) {
+          await fetch("/api/sd-rooms", {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ roomId: room.id, roomMode: "standard" }),
+          });
+        }
         if (cancelled) return;
         setRoomMode(mode);
         const requested = new URLSearchParams(window.location.search).get("tab") as WorkspaceTab | null;
