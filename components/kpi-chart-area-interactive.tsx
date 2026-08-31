@@ -2,14 +2,13 @@
 
 import { useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/kpi-shadcn/ui/card"
 import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/kpi-shadcn/ui/chart"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/kpi-shadcn/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { KpiMonthlyPoint } from "@/lib/kpi-dashboard"
 
 type Metric = "revenue" | "tdv" | "deposits" | "activeRenters"
@@ -32,33 +31,27 @@ export function KpiChartAreaInteractive({ data }: { data: KpiMonthlyPoint[] }) {
   }, [data, range])
 
   const config = useMemo(() => ({
-    value: {
-      label: METRICS[metric].label,
-      color: "#735DF3",
-    },
+    value: { label: METRICS[metric].label, color: "#735DF3" },
   } satisfies ChartConfig), [metric])
 
-  const chartData = visible.map(point => ({
-    month: point.label,
-    value: point[metric],
-  }))
+  const chartData = visible.map(point => ({ month: point.label, value: point[metric] }))
 
   return (
-    <Card id="kpi-trajectory" className="overflow-hidden rounded-lg border-border shadow-none">
-      <CardHeader className="flex flex-col gap-3 space-y-0 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-0.5">
-          <CardTitle className="text-[13px] font-medium">Trajectoire business</CardTitle>
-          <CardDescription className="text-[11px]">Évolution mensuelle depuis le début de l’activité.</CardDescription>
+    <section id="kpi-trajectory" className="min-w-0 bg-card">
+      <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-5">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Trajectoire</div>
+          <div className="mt-0.5 text-sm font-semibold text-foreground">Évolution business</div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           <Select value={metric} onValueChange={value => setMetric(value as Metric)}>
-            <SelectTrigger className="h-7 w-[145px] rounded-md px-2 text-[11px] shadow-none"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               {Object.entries(METRICS).map(([key, item]) => <SelectItem key={key} value={key}>{item.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={range} onValueChange={setRange}>
-            <SelectTrigger className="h-7 w-[92px] rounded-md px-2 text-[11px] shadow-none"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tout</SelectItem>
               <SelectItem value="12">12 mois</SelectItem>
@@ -66,34 +59,28 @@ export function KpiChartAreaInteractive({ data }: { data: KpiMonthlyPoint[] }) {
             </SelectContent>
           </Select>
         </div>
-      </CardHeader>
-      <CardContent className="px-2 pb-2 pt-4 sm:px-3">
+      </div>
+
+      <div className="px-2 pb-2 pt-4 sm:px-3">
         {!chartData.length ? (
-          <div className="grid h-[258px] place-items-center text-[12px] text-muted-foreground">Pas encore de données.</div>
+          <div className="grid h-[270px] place-items-center text-xs text-muted-foreground">Pas encore de données.</div>
         ) : (
-          <ChartContainer config={config} className="h-[258px] w-full aspect-auto">
+          <ChartContainer config={config} className="h-[270px] w-full aspect-auto">
             <AreaChart data={chartData} margin={{ left: -2, right: 8, top: 8, bottom: 0 }}>
               <defs>
                 <linearGradient id="fillKpi" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.16} />
-                  <stop offset="95%" stopColor="var(--color-value)" stopOpacity={0.015} />
+                  <stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.12} />
+                  <stop offset="95%" stopColor="var(--color-value)" stopOpacity={0.01} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical={false} strokeDasharray="0" stroke="currentColor" opacity={0.055} />
+              <CartesianGrid vertical={false} stroke="currentColor" opacity={0.055} />
               <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={9} minTickGap={30} fontSize={10} />
-              <YAxis
-                width={52}
-                tickLine={false}
-                axisLine={false}
-                fontSize={10}
-                tickFormatter={value => METRICS[metric].formatter(Number(value))}
-              />
+              <YAxis width={52} tickLine={false} axisLine={false} fontSize={10} tickFormatter={value => METRICS[metric].formatter(Number(value))} />
               <ChartTooltip
                 cursor={{ stroke: "#d9d9dc", strokeWidth: 1 }}
                 content={
                   <ChartTooltipContent
                     indicator="line"
-                    className="rounded-md shadow-lg"
                     formatter={value => (
                       <div className="flex min-w-[130px] items-center justify-between gap-4">
                         <span className="text-muted-foreground">{METRICS[metric].label}</span>
@@ -103,20 +90,11 @@ export function KpiChartAreaInteractive({ data }: { data: KpiMonthlyPoint[] }) {
                   />
                 }
               />
-              <Area
-                dataKey="value"
-                type="monotone"
-                fill="url(#fillKpi)"
-                fillOpacity={1}
-                stroke="var(--color-value)"
-                strokeWidth={1.75}
-                dot={false}
-                activeDot={{ r: 3.5, fill: "#735DF3", stroke: "#ffffff", strokeWidth: 2 }}
-              />
+              <Area dataKey="value" type="monotone" fill="url(#fillKpi)" fillOpacity={1} stroke="var(--color-value)" strokeWidth={1.75} dot={false} activeDot={{ r: 3.5, fill: "#735DF3", stroke: "#ffffff", strokeWidth: 2 }} />
             </AreaChart>
           </ChartContainer>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
