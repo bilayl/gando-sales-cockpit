@@ -1,5 +1,5 @@
-import { SDDealRoomHubV2 } from "@/components/sd-deal-room-hub-v2";
+import { SDDealRoomHubV3 } from "@/components/sd-deal-room-hub-v3";
 
 export default function Page() {
-  return <SDDealRoomHubV2 />;
+  return <SDDealRoomHubV3 />;
 }
