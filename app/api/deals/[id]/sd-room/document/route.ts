@@ -60,7 +60,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const { error } = await getSupabaseAdmin()
         .from("deal_rooms")
         .update({ proposal_sent_at: new Date().toISOString() })
-        .eq("id", bundle.room.id);
+        .eq("id", bundle.room.id)
+        .is("proposal_sent_at", null);
       if (error) throw error;
     }
 
