@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Activity, Banknote, Building2, CircleDollarSign, ShieldCheck, TrendingUp, UsersRound, WalletCards } from "lucide-react"
+import { Activity } from "lucide-react"
 import { Badge } from "@/components/kpi-shadcn/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/kpi-shadcn/ui/card"
 import { Skeleton } from "@/components/kpi-shadcn/ui/skeleton"
@@ -37,51 +37,28 @@ type ValueRow = {
 function n(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0
 }
-
 function ratio(top: number | null | undefined, bottom: number | null | undefined) {
   const b = n(bottom)
   return b > 0 ? n(top) / b : null
 }
-
 function euro(value: number | null | undefined, digits = 0) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: digits }).format(value)
 }
-
 function integer(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)
 }
-
 function percent(value: number | null | undefined, digits = 1) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { style: "percent", maximumFractionDigits: digits }).format(value)
 }
-
 function decimal(value: number | null | undefined, digits = 1) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: digits }).format(value)
 }
-
 function key(row: { year: number; monthNumber: number }) {
   return row.year * 12 + row.monthNumber
-}
-
-function MetricCard({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: typeof Banknote }) {
-  return (
-    <Card className="shadow-sm">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-3">
-          <CardDescription className="text-xs font-medium">{label}</CardDescription>
-          <div className="grid size-8 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="size-4" /></div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <CardTitle className="text-2xl font-semibold tracking-tight tabular-nums">{value}</CardTitle>
-        <p className="mt-2 text-xs text-muted-foreground">{detail}</p>
-      </CardContent>
-    </Card>
-  )
 }
 
 export function KpiExecutiveOverview() {
@@ -146,15 +123,19 @@ export function KpiExecutiveOverview() {
   }, [coreRows, valueRows])
 
   if (loading) {
-    return (
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-32 w-full rounded-xl" />)}
-      </div>
-    )
+    return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-24 w-full rounded-lg" />)}</div>
   }
-  if (error) return <Card className="border-destructive/30"><CardContent className="pt-6 text-sm text-destructive">{error}</CardContent></Card>
+  if (error) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-[12px] text-destructive">{error}</div>
 
   const { value, core } = snapshot
+  const metrics = [
+    ["CA Gando", euro(core?.revenue), `Take rate ${percent(snapshot.takeRate)}`],
+    ["Marge nette", euro(value?.netMargin), `Taux de marge ${percent(snapshot.marginRate)}`],
+    ["TDV sécurisé", euro(core?.tdv), `${integer(core?.deposits)} cautions`],
+    ["Loueurs actifs", integer(core?.activeRenters), "MAU du mois"],
+    ["Cash encaissé", euro(value?.cashCollected), `${percent(snapshot.collectionRate)} du CA signé`],
+    ["Taux de closing", percent(snapshot.closingRate), "RDV → loueurs activés"],
+  ]
   const funnel = [
     { label: "Prospects", value: value?.prospectsContacted },
     { label: "Rendez-vous", value: value?.meetings },
@@ -163,75 +144,75 @@ export function KpiExecutiveOverview() {
   ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <Badge variant="outline">Dernier mois disponible</Badge>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Santé business de Gando</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Les KPI essentiels du dernier mois renseigné.</p>
+          <h1 className="text-[17px] font-semibold tracking-[-0.02em]">Dernier mois</h1>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Performance actuelle et signaux à surveiller.</p>
         </div>
-        <Badge variant="secondary" className="text-sm">{MONTHS[snapshot.monthNumber - 1]} {snapshot.year}</Badge>
+        <Badge variant="outline" className="h-6 rounded-md px-2 text-[11px] font-normal shadow-none">{MONTHS[snapshot.monthNumber - 1]} {snapshot.year}</Badge>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <MetricCard label="CA Gando" value={euro(core?.revenue)} detail={`Take rate ${percent(snapshot.takeRate)}`} icon={Banknote} />
-        <MetricCard label="Marge nette" value={euro(value?.netMargin)} detail={`Taux de marge ${percent(snapshot.marginRate)}`} icon={CircleDollarSign} />
-        <MetricCard label="TDV sécurisé" value={euro(core?.tdv)} detail={`${integer(core?.deposits)} cautions activées`} icon={ShieldCheck} />
-        <MetricCard label="Loueurs actifs" value={integer(core?.activeRenters)} detail="MAU loueurs sur la période" icon={Building2} />
-        <MetricCard label="Cash encaissé" value={euro(value?.cashCollected)} detail={`${percent(snapshot.collectionRate)} du CA signé`} icon={WalletCards} />
-        <MetricCard label="Taux de closing" value={percent(snapshot.closingRate)} detail="RDV → loueurs activés" icon={UsersRound} />
+      <div className="grid overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-2 xl:grid-cols-3">
+        {metrics.map(([label, metric, detail], index) => (
+          <div key={label} className={`px-4 py-4 ${index > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""} ${index >= 3 ? "xl:border-t" : ""}`}>
+            <div className="text-[11px] text-muted-foreground">{label}</div>
+            <div className="mt-2 text-[24px] font-semibold tracking-[-0.03em] tabular-nums">{metric}</div>
+            <div className="mt-1.5 text-[10px] text-muted-foreground/75">{detail}</div>
+          </div>
+        ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">Funnel de création de valeur</CardTitle>
-            <CardDescription>Du prospect à la première caution.</CardDescription>
+      <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+        <Card className="overflow-hidden rounded-lg border-border shadow-none">
+          <CardHeader className="space-y-0.5 border-b border-border px-4 py-3">
+            <CardTitle className="text-[13px] font-medium">Funnel de création de valeur</CardTitle>
+            <CardDescription className="text-[11px]">Conversion du prospect jusqu’à la première caution.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <CardContent className="grid p-0 sm:grid-cols-2 xl:grid-cols-4">
             {funnel.map((item, index) => {
               const previous = index > 0 ? funnel[index - 1].value : null
               const conversion = index > 0 ? ratio(item.value, previous) : null
               return (
-                <div key={item.label} className="rounded-lg border bg-muted/20 p-4">
-                  <div className="text-xs text-muted-foreground">{item.label}</div>
-                  <div className="mt-2 text-xl font-semibold tabular-nums">{integer(item.value)}</div>
-                  {conversion != null ? <Badge variant="outline" className="mt-3">{percent(conversion)}</Badge> : null}
+                <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}>
+                  <div className="text-[11px] text-muted-foreground">{item.label}</div>
+                  <div className="mt-2 text-[22px] font-semibold tabular-nums">{integer(item.value)}</div>
+                  <div className="mt-2 text-[10px] text-muted-foreground/70">{conversion == null ? "Entrée" : `${percent(conversion)} conversion`}</div>
                 </div>
               )
             })}
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
-          <CardHeader>
-            <div className="flex items-center gap-2"><Activity className="size-4 text-primary" /><CardTitle className="text-base">À surveiller</CardTitle></div>
-            <CardDescription>Signaux calculés à partir des données disponibles.</CardDescription>
+        <Card className="overflow-hidden rounded-lg border-border shadow-none">
+          <CardHeader className="space-y-0.5 border-b border-border px-4 py-3">
+            <div className="flex items-center gap-1.5"><Activity className="size-3.5 text-primary" /><CardTitle className="text-[13px] font-medium">À surveiller</CardTitle></div>
+            <CardDescription className="text-[11px]">Signaux calculés automatiquement.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="divide-y divide-border p-0">
             {snapshot.alerts.length ? snapshot.alerts.slice(0, 4).map(alert => (
-              <div key={alert} className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-xs leading-5 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">{alert}</div>
+              <div key={alert} className="px-4 py-3 text-[11px] leading-4 text-amber-800">{alert}</div>
             )) : (
-              <div className="rounded-lg border bg-muted/25 px-3 py-3 text-xs text-muted-foreground">Aucun signal critique avec les données disponibles.</div>
+              <div className="px-4 py-4 text-[11px] text-muted-foreground">Aucun signal critique avec les données disponibles.</div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <div className="flex items-center gap-2"><TrendingUp className="size-4 text-primary" /><CardTitle className="text-base">Unit economics</CardTitle></div>
-          <CardDescription>Lecture simple de l’efficacité d’acquisition et de la valeur client.</CardDescription>
+      <Card className="overflow-hidden rounded-lg border-border shadow-none">
+        <CardHeader className="space-y-0.5 border-b border-border px-4 py-3">
+          <CardTitle className="text-[13px] font-medium">Unit economics</CardTitle>
+          <CardDescription className="text-[11px]">Efficacité d’acquisition et valeur client sur une LTV plafonnée à 24 mois.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-3">
+        <CardContent className="grid p-0 sm:grid-cols-3">
           {[
             ["CAC", euro(snapshot.cac)],
             ["LTV 24 mois", euro(snapshot.ltv24)],
             ["LTV / CAC", snapshot.ltvCac == null ? "—" : `${decimal(snapshot.ltvCac, 1)}×`],
-          ].map(([label, metric]) => (
-            <div key={label} className="rounded-lg border bg-muted/20 p-4">
-              <div className="text-xs text-muted-foreground">{label}</div>
-              <div className="mt-2 text-xl font-semibold tabular-nums">{metric}</div>
+          ].map(([label, metric], index) => (
+            <div key={label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""}`}>
+              <div className="text-[11px] text-muted-foreground">{label}</div>
+              <div className="mt-2 text-[22px] font-semibold tracking-[-0.025em] tabular-nums">{metric}</div>
             </div>
           ))}
         </CardContent>
