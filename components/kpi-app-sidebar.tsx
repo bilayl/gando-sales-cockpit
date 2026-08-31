@@ -10,7 +10,7 @@ import {
   PanelTop,
   Table2,
 } from "lucide-react"
-import { Avatar, AvatarFallback } from "@/components/kpi-shadcn/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Sidebar,
   SidebarContent,
