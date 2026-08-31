@@ -88,7 +88,7 @@ export function KpiDashboardOverview() {
   const finance = [
     { label: "Cash collecté", value: euro(summary.cashCollected), detail: `${percent(summary.collectionRate)} du CA signé` },
     { label: "Marge nette", value: euro(summary.netMargin), detail: `Taux de marge ${percent(summary.marginRate)}` },
-    { label: "ROAS cash", value: summary.cashRoas == null ? "—" : `${summary.cashRoas.toFixed(1)}×`, detail: `${euro(summary.campaignSpend)} dépensés` },
+    { label: "ROI cash acquisition", value: percent(summary.cashRoi), detail: `${euro(summary.campaignTotalCost)} de coûts complets · ROAS ${summary.cashRoas == null ? "—" : `${summary.cashRoas.toFixed(1)}×`}` },
   ]
 
   return (
