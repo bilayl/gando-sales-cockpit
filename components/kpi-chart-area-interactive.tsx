@@ -44,21 +44,21 @@ export function KpiChartAreaInteractive({ data }: { data: KpiMonthlyPoint[] }) {
   }))
 
   return (
-    <Card id="kpi-trajectory" className="shadow-sm">
-      <CardHeader className="gap-4 border-b sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <CardTitle className="text-base">Trajectoire business</CardTitle>
-          <CardDescription>Évolution mensuelle de la métrique sélectionnée.</CardDescription>
+    <Card id="kpi-trajectory" className="overflow-hidden rounded-lg border-border shadow-none">
+      <CardHeader className="flex flex-col gap-3 space-y-0 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-0.5">
+          <CardTitle className="text-[13px] font-medium">Trajectoire business</CardTitle>
+          <CardDescription className="text-[11px]">Évolution mensuelle depuis le début de l’activité.</CardDescription>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <Select value={metric} onValueChange={value => setMetric(value as Metric)}>
-            <SelectTrigger className="w-[170px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-7 w-[145px] rounded-md px-2 text-[11px] shadow-none"><SelectValue /></SelectTrigger>
             <SelectContent>
               {Object.entries(METRICS).map(([key, item]) => <SelectItem key={key} value={key}>{item.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={range} onValueChange={setRange}>
-            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-7 w-[92px] rounded-md px-2 text-[11px] shadow-none"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tout</SelectItem>
               <SelectItem value="12">12 mois</SelectItem>
@@ -67,35 +67,37 @@ export function KpiChartAreaInteractive({ data }: { data: KpiMonthlyPoint[] }) {
           </Select>
         </div>
       </CardHeader>
-      <CardContent className="pt-6">
+      <CardContent className="px-2 pb-2 pt-4 sm:px-3">
         {!chartData.length ? (
-          <div className="grid h-[320px] place-items-center text-sm text-muted-foreground">Pas encore de données.</div>
+          <div className="grid h-[258px] place-items-center text-[12px] text-muted-foreground">Pas encore de données.</div>
         ) : (
-          <ChartContainer config={config} className="h-[320px] w-full aspect-auto">
-            <AreaChart data={chartData} margin={{ left: 4, right: 12, top: 8 }}>
+          <ChartContainer config={config} className="h-[258px] w-full aspect-auto">
+            <AreaChart data={chartData} margin={{ left: -2, right: 8, top: 8, bottom: 0 }}>
               <defs>
                 <linearGradient id="fillKpi" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.28} />
-                  <stop offset="95%" stopColor="var(--color-value)" stopOpacity={0.02} />
+                  <stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.16} />
+                  <stop offset="95%" stopColor="var(--color-value)" stopOpacity={0.015} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical={false} strokeDasharray="3 3" />
-              <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={10} minTickGap={26} />
+              <CartesianGrid vertical={false} strokeDasharray="0" stroke="currentColor" opacity={0.055} />
+              <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={9} minTickGap={30} fontSize={10} />
               <YAxis
-                width={56}
+                width={52}
                 tickLine={false}
                 axisLine={false}
+                fontSize={10}
                 tickFormatter={value => METRICS[metric].formatter(Number(value))}
               />
               <ChartTooltip
-                cursor={false}
+                cursor={{ stroke: "#d9d9dc", strokeWidth: 1 }}
                 content={
                   <ChartTooltipContent
                     indicator="line"
+                    className="rounded-md shadow-lg"
                     formatter={value => (
-                      <div className="flex min-w-[140px] items-center justify-between gap-4">
+                      <div className="flex min-w-[130px] items-center justify-between gap-4">
                         <span className="text-muted-foreground">{METRICS[metric].label}</span>
-                        <span className="font-mono font-medium tabular-nums text-foreground">{METRICS[metric].formatter(Number(value))}</span>
+                        <span className="font-medium tabular-nums text-foreground">{METRICS[metric].formatter(Number(value))}</span>
                       </div>
                     )}
                   />
@@ -107,9 +109,9 @@ export function KpiChartAreaInteractive({ data }: { data: KpiMonthlyPoint[] }) {
                 fill="url(#fillKpi)"
                 fillOpacity={1}
                 stroke="var(--color-value)"
-                strokeWidth={2}
-                dot={{ r: 3, fill: "var(--color-value)" }}
-                activeDot={{ r: 5 }}
+                strokeWidth={1.75}
+                dot={false}
+                activeDot={{ r: 3.5, fill: "#735DF3", stroke: "#ffffff", strokeWidth: 2 }}
               />
             </AreaChart>
           </ChartContainer>
