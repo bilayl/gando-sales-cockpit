@@ -13,15 +13,21 @@ export default async function KpiPage() {
 
   return (
     <SidebarProvider
+      className="bg-muted/40"
       style={
         {
-          "--sidebar-width": "16rem",
+          "--sidebar-width": "15.5rem",
           "--header-height": "3.5rem",
+          "--primary": "#735DF3",
+          "--ring": "#735DF3",
+          "--sidebar-primary": "#735DF3",
+          "--sidebar-primary-foreground": "#FFFFFF",
+          "--chart-1": "#735DF3",
         } as React.CSSProperties
       }
     >
       <KpiAppSidebar email={access.email} role={access.role} />
-      <SidebarInset className="min-w-0 overflow-hidden md:peer-data-[variant=inset]:border md:peer-data-[variant=inset]:border-border">
+      <SidebarInset className="min-w-0 overflow-hidden border-border bg-background md:peer-data-[variant=inset]:border">
         <KpiSiteHeader />
         <div className="@container/main flex min-w-0 flex-1 flex-col">
           <KpiWorkspace canEdit={access.role !== "commercial"} />
