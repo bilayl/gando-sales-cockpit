@@ -1,7 +1,6 @@
 "use client"
 
-import Link from "next/link"
-import { BarChart3, ChartNoAxesCombined, Database, Gauge, Landmark, Table2 } from "lucide-react"
+import { ChartNoAxesCombined, Database, Gauge, History, Infinity } from "lucide-react"
 import { GandoMark } from "@/components/gando-mark"
 import { Avatar, AvatarFallback } from "@/components/kpi-shadcn/ui/avatar"
 import {
@@ -18,13 +17,13 @@ import {
   SidebarRail,
 } from "@/components/kpi-shadcn/ui/sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
+import type { KpiView } from "@/lib/kpi-views"
 
-const sections = [
-  { href: "#kpi-dashboard", label: "Vue d’ensemble", icon: Gauge },
-  { href: "#kpi-trajectory", label: "Trajectoire", icon: ChartNoAxesCombined },
-  { href: "#kpi-funnel", label: "Funnel", icon: BarChart3 },
-  { href: "#kpi-finance", label: "Finance & marge", icon: Landmark },
-  { href: "#kpi-history", label: "Historique", icon: Table2 },
+const sections: Array<{ id: KpiView; label: string; icon: typeof Gauge }> = [
+  { id: "lifetime", label: "Depuis le début", icon: Infinity },
+  { id: "overview", label: "Dernier mois", icon: Gauge },
+  { id: "funnel", label: "Funnel & économie", icon: ChartNoAxesCombined },
+  { id: "history", label: "Mensuel & simulation", icon: History },
 ]
 
 const ROLE_LABEL: Record<"admin" | "member" | "commercial", string> = {
@@ -33,20 +32,33 @@ const ROLE_LABEL: Record<"admin" | "member" | "commercial", string> = {
   commercial: "Commercial",
 }
 
-export function KpiAppSidebar({ email, role }: { email?: string; role: "admin" | "member" | "commercial" }) {
+export function KpiAppSidebar({
+  email,
+  role,
+  view,
+  onViewChange,
+}: {
+  email?: string
+  role: "admin" | "member" | "commercial"
+  view: KpiView
+  onViewChange: (view: KpiView) => void
+}) {
   return (
     <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border/70 p-3">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="Gando KPI" className="h-11 px-1">
-              <Link href="/kpi">
-                <GandoMark className="size-8" />
-                <span className="grid min-w-0 flex-1 text-left leading-tight">
-                  <span className="truncate text-sm font-semibold">Gando KPI</span>
-                  <span className="truncate text-[11px] text-sidebar-foreground/55">Business dashboard</span>
-                </span>
-              </Link>
+            <SidebarMenuButton
+              size="lg"
+              tooltip="Gando KPI"
+              className="h-11 px-1"
+              onClick={() => onViewChange("lifetime")}
+            >
+              <GandoMark className="size-8" />
+              <span className="grid min-w-0 flex-1 text-left leading-tight">
+                <span className="truncate text-sm font-semibold">Gando KPI</span>
+                <span className="truncate text-[11px] text-sidebar-foreground/55">Business dashboard</span>
+              </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -60,12 +72,14 @@ export function KpiAppSidebar({ email, role }: { email?: string; role: "admin" |
               {sections.map(item => {
                 const Icon = item.icon
                 return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild tooltip={item.label}>
-                      <a href={item.href}>
-                        <Icon />
-                        <span>{item.label}</span>
-                      </a>
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      isActive={view === item.id}
+                      tooltip={item.label}
+                      onClick={() => onViewChange(item.id)}
+                    >
+                      <Icon />
+                      <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )
