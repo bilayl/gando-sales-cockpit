@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { GandoMark } from "@/components/gando-mark";
 import { BusinessKpiDashboard } from "@/components/business-kpi-dashboard";
+import { ValueKpiFunnel } from "@/components/value-kpi-funnel";
 import { getCockpitAccess } from "@/lib/cockpit-access";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +27,16 @@ export default async function KpiPage() {
         </Link>
       </header>
 
-      <div className="mx-auto w-full max-w-[1440px] px-5 py-8 sm:px-8 lg:px-10">
-        <BusinessKpiDashboard canEdit={access.role !== "commercial"} />
+      <div className="mx-auto w-full max-w-[1440px] space-y-10 px-5 py-8 sm:px-8 lg:px-10">
+        <ValueKpiFunnel canEdit={access.role !== "commercial"} />
+
+        <section className="border-t border-slate-200 pt-10 dark:border-white/10">
+          <div className="mb-5">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Historique & simulation</div>
+            <h2 className="mt-1 text-xl font-bold tracking-[-0.03em]">KPI business mensuels</h2>
+          </div>
+          <BusinessKpiDashboard canEdit={access.role !== "commercial"} />
+        </section>
       </div>
     </main>
   );
