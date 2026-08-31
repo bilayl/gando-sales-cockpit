@@ -1,15 +1,15 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { AlertTriangle, Calculator, Megaphone, Pencil, Plus, RefreshCw, Save, Trash2, TrendingUp, Wallet } from "lucide-react"
-import { Badge } from "@/components/kpi-shadcn/ui/badge"
-import { Button } from "@/components/kpi-shadcn/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/kpi-shadcn/ui/card"
-import { Input } from "@/components/kpi-shadcn/ui/input"
+import { AlertTriangle, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Progress } from "@/components/kpi-shadcn/ui/progress"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/kpi-shadcn/ui/select"
-import { Skeleton } from "@/components/kpi-shadcn/ui/skeleton"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/kpi-shadcn/ui/table"
 
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
 
@@ -325,9 +325,7 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
     if (response.ok) setCampaignRows(Array.isArray(body.rows) ? body.rows : [])
   }
 
-  if (loading) {
-    return <div className="grid gap-4 lg:grid-cols-2">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-40 rounded-xl" />)}</div>
-  }
+  if (loading) return <Skeleton className="h-[680px] w-full rounded-xl" />
 
   const funnelSteps = [
     { label: "Prospects", value: value.prospectsContacted, previous: null },
@@ -337,17 +335,23 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
     { label: "1re caution", value: value.firstDepositRenters, previous: value.rentersActivated },
   ]
 
+  const economics = [
+    { label: "CAC complet", value: euro(derived.cac), detail: "Paid + coût commercial / loueur activé" },
+    { label: "LTV 24 mois", value: euro(derived.ltv24), detail: `ARPU ${euro(derived.arpu, 2)}` },
+    { label: "LTV / CAC", value: derived.ltvCac == null ? "—" : `${decimal(derived.ltvCac, 1)}×`, detail: "Repère : > 3×" },
+    { label: "CA signé → cash", value: percent(derived.collectionRate), detail: `${euro(value.cashCollected)} encaissés` },
+  ]
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Badge variant="outline">Funnel business</Badge>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Acquisition → activation → valeur</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Une lecture unique des conversions, du CAC, du cash et des campagnes.</p>
+    <Card className="min-w-0 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/20 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="h-6 text-[10px] font-semibold">Funnel business</Badge>
+          <span className="text-[11px] text-muted-foreground">Acquisition → activation → valeur</span>
         </div>
         <div className="flex items-center gap-2">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[170px]"><SelectValue placeholder="Choisir un mois" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-[175px] text-xs"><SelectValue placeholder="Choisir un mois" /></SelectTrigger>
             <SelectContent>
               {monthOptions.map(month => {
                 const [y, m] = month.split("-").map(Number)
@@ -355,117 +359,128 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
               })}
             </SelectContent>
           </Select>
-          {canEdit ? <Button variant="outline" onClick={() => setEditing(current => !current)}><Pencil className="size-4" />{editing ? "Fermer" : "Saisir"}</Button> : null}
+          {canEdit ? <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setEditing(current => !current)}><Pencil size={14} />{editing ? "Fermer" : "Saisir"}</Button> : null}
         </div>
       </div>
 
-      {error ? <Card className="border-destructive/30"><CardContent className="pt-6 text-sm text-destructive">{error}</CardContent></Card> : null}
+      {error ? <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2.5 text-xs text-destructive">{error}</div> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          { label: "CAC complet", value: euro(derived.cac), detail: "Paid + coût commercial / loueur activé", icon: Calculator },
-          { label: "LTV 24 mois", value: euro(derived.ltv24), detail: `ARPU ${euro(derived.arpu, 2)}`, icon: TrendingUp },
-          { label: "LTV / CAC", value: derived.ltvCac == null ? "—" : `${decimal(derived.ltvCac, 1)}×`, detail: "Repère : > 3×", icon: TrendingUp },
-          { label: "CA signé → cash", value: percent(derived.collectionRate), detail: `${euro(value.cashCollected)} encaissés`, icon: Wallet },
-        ].map(item => {
-          const Icon = item.icon
-          return (
-            <Card key={item.label} className="shadow-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between gap-3">
-                  <CardDescription className="text-xs">{item.label}</CardDescription>
-                  <div className="grid size-8 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="size-4" /></div>
-                </div>
-              </CardHeader>
-              <CardContent><CardTitle className="text-2xl tabular-nums">{item.value}</CardTitle><p className="mt-2 text-xs text-muted-foreground">{item.detail}</p></CardContent>
-            </Card>
-          )
-        })}
-      </div>
+      <section className="border-b border-border">
+        <div className="border-b border-border px-4 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Économie</div>
+          <div className="mt-0.5 text-sm font-semibold">Unit economics du mois</div>
+        </div>
+        <div className="grid sm:grid-cols-2 xl:grid-cols-4">
+          {economics.map((item, index) => (
+            <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}>
+              <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{item.label}</div>
+              <div className="mt-2 text-[22px] font-semibold tracking-[-0.03em] tabular-nums">{item.value}</div>
+              <div className="mt-1.5 text-[11px] font-medium text-muted-foreground">{item.detail}</div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
-        <Card className="shadow-sm">
-          <CardHeader><CardTitle className="text-base">Funnel commercial & activation</CardTitle><CardDescription>Chaque étape affiche son taux de conversion depuis l’étape précédente.</CardDescription></CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-5">
+      <div className="grid border-b border-border xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.5fr)]">
+        <section className="min-w-0 xl:border-r xl:border-border">
+          <div className="border-b border-border px-4 py-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Conversion</div>
+            <div className="mt-0.5 text-sm font-semibold">Funnel commercial & activation</div>
+          </div>
+          <div className="grid md:grid-cols-5">
             {funnelSteps.map((step, index) => {
               const conversion = index === 0 ? null : ratio(step.value, step.previous)
               return (
-                <div key={step.label} className="rounded-lg border bg-muted/20 p-4">
-                  <div className="flex items-center justify-between gap-2"><span className="text-xs text-muted-foreground">{step.label}</span>{conversion != null ? <Badge variant="outline">{percent(conversion)}</Badge> : null}</div>
-                  <div className="mt-3 text-2xl font-semibold tabular-nums">{integer(step.value)}</div>
-                  {conversion != null ? <Progress className="mt-3 h-1.5" value={Math.max(0, Math.min(100, conversion * 100))} /> : <div className="mt-3 h-1.5" />}
+                <div key={step.label} className={`${index ? "border-t border-border md:border-l md:border-t-0" : ""} px-4 py-4`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{step.label}</span>
+                    {conversion != null ? <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">{percent(conversion)}</span> : null}
+                  </div>
+                  <div className="mt-2 text-[22px] font-semibold tabular-nums">{integer(step.value)}</div>
+                  {conversion != null ? <Progress className="mt-3 h-1" value={Math.max(0, Math.min(100, conversion * 100))} /> : <div className="mt-3 h-1" />}
                 </div>
               )
             })}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card className="shadow-sm">
-          <CardHeader><div className="flex items-center gap-2"><AlertTriangle className="size-4 text-amber-500" /><CardTitle className="text-base">À surveiller</CardTitle></div><CardDescription>Alertes calculées pour le mois.</CardDescription></CardHeader>
-          <CardContent className="space-y-2">
-            {alerts.length ? alerts.map(alert => <div key={alert} className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-xs leading-5 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">{alert}</div>) : <div className="rounded-lg border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">Aucun signal critique avec les données disponibles.</div>}
-          </CardContent>
-        </Card>
+        <section>
+          <div className="flex items-center gap-1.5 border-b border-border px-4 py-3">
+            <AlertTriangle className="size-3.5 text-amber-500" />
+            <span className="text-sm font-semibold">À surveiller</span>
+          </div>
+          <div className="divide-y divide-border">
+            {alerts.length ? alerts.map(alert => <div key={alert} className="px-4 py-3 text-[11px] leading-4 text-amber-800 dark:text-amber-200">{alert}</div>) : <div className="px-4 py-4 text-[11px] text-muted-foreground">Aucun signal critique avec les données disponibles.</div>}
+          </div>
+        </section>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader><div className="flex items-center gap-2"><Megaphone className="size-4 text-primary" /><CardTitle className="text-base">Attribution campagnes → cash</CardTitle></div><CardDescription>Leads, clients, CA signé et cash par campagne.</CardDescription></CardHeader>
-        <CardContent className="p-0">
-          <Table className="min-w-[900px]">
-            <TableHeader className="bg-muted/35"><TableRow><TableHead className="pl-6">Campagne</TableHead><TableHead>Spend</TableHead><TableHead>Leads</TableHead><TableHead>CPL</TableHead><TableHead>RDV</TableHead><TableHead>Clients</TableHead><TableHead>CAC</TableHead><TableHead>CA signé</TableHead><TableHead>Cash</TableHead><TableHead className="w-12" /></TableRow></TableHeader>
-            <TableBody>
-              {campaigns.map(row => (
-                <TableRow key={row.id || `${row.source}-${row.campaign}`}>
-                  <TableCell className="pl-6"><div className="font-medium">{row.campaign}</div><div className="text-xs text-muted-foreground">{row.source}</div></TableCell>
-                  <TableCell>{euro(row.spend)}</TableCell><TableCell>{integer(row.leads)}</TableCell><TableCell>{euro(ratio(row.spend, row.leads), 2)}</TableCell><TableCell>{integer(row.meetings)}</TableCell><TableCell>{integer(row.clients)}</TableCell><TableCell>{euro(ratio(row.spend, row.clients))}</TableCell><TableCell>{euro(row.signedRevenue)}</TableCell><TableCell className="font-medium">{euro(row.cashCollected)}</TableCell>
-                  <TableCell>{canEdit ? <Button type="button" size="icon" variant="ghost" onClick={() => void deleteCampaign(row.id)} aria-label="Supprimer"><Trash2 className="size-4" /></Button> : null}</TableCell>
-                </TableRow>
-              ))}
-              {!campaigns.length ? <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground">Aucune campagne renseignée pour ce mois.</TableCell></TableRow> : null}
-            </TableBody>
-          </Table>
-        </CardContent>
+      <section className="border-b border-border">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Attribution</div>
+            <div className="mt-0.5 text-sm font-semibold">Campagnes → cash</div>
+          </div>
+          <span className="text-[11px] text-muted-foreground">{campaigns.length} campagne{campaigns.length > 1 ? "s" : ""}</span>
+        </div>
+        <Table className="min-w-[900px] text-[11px]">
+          <TableHeader className="bg-muted/35"><TableRow><TableHead className="pl-4">Campagne</TableHead><TableHead>Spend</TableHead><TableHead>Leads</TableHead><TableHead>CPL</TableHead><TableHead>RDV</TableHead><TableHead>Clients</TableHead><TableHead>CAC</TableHead><TableHead>CA signé</TableHead><TableHead>Cash</TableHead><TableHead className="w-12" /></TableRow></TableHeader>
+          <TableBody>
+            {campaigns.map(row => (
+              <TableRow key={row.id || `${row.source}-${row.campaign}`}>
+                <TableCell className="pl-4"><div className="font-semibold">{row.campaign}</div><div className="text-[10px] text-muted-foreground">{row.source}</div></TableCell>
+                <TableCell>{euro(row.spend)}</TableCell><TableCell>{integer(row.leads)}</TableCell><TableCell>{euro(ratio(row.spend, row.leads), 2)}</TableCell><TableCell>{integer(row.meetings)}</TableCell><TableCell>{integer(row.clients)}</TableCell><TableCell>{euro(ratio(row.spend, row.clients))}</TableCell><TableCell>{euro(row.signedRevenue)}</TableCell><TableCell className="font-semibold">{euro(row.cashCollected)}</TableCell>
+                <TableCell>{canEdit ? <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => void deleteCampaign(row.id)} aria-label="Supprimer"><Trash2 size={14} /></Button> : null}</TableCell>
+              </TableRow>
+            ))}
+            {!campaigns.length ? <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground">Aucune campagne renseignée pour ce mois.</TableCell></TableRow> : null}
+          </TableBody>
+        </Table>
+
         {canEdit ? (
-          <div className="border-t p-4">
+          <div className="border-t border-border bg-muted/20 p-3">
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-              <Input placeholder="Source (Meta, SEO…)" value={campaignDraft.source} onChange={event => setCampaignDraft(current => ({ ...current, source: event.target.value }))} />
-              <Input placeholder="Campagne" value={campaignDraft.campaign} onChange={event => setCampaignDraft(current => ({ ...current, campaign: event.target.value }))} />
-              <Input type="number" placeholder="Spend €" value={campaignDraft.spend ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, spend: nullableInput(event.target.value) }))} />
-              <Input type="number" placeholder="Leads" value={campaignDraft.leads ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, leads: nullableInput(event.target.value) }))} />
-              <Input type="number" placeholder="RDV" value={campaignDraft.meetings ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, meetings: nullableInput(event.target.value) }))} />
-              <Input type="number" placeholder="Clients" value={campaignDraft.clients ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, clients: nullableInput(event.target.value) }))} />
-              <Input type="number" placeholder="CA signé €" value={campaignDraft.signedRevenue ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, signedRevenue: nullableInput(event.target.value) }))} />
-              <Input type="number" placeholder="Cash €" value={campaignDraft.cashCollected ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, cashCollected: nullableInput(event.target.value) }))} />
-              <Button className="xl:col-span-2" onClick={() => void saveCampaign()} disabled={saving || !campaignDraft.source.trim() || !campaignDraft.campaign.trim()}><Plus className="size-4" />Ajouter la campagne</Button>
+              <Input className="h-9 text-xs" placeholder="Source (Meta, SEO…)" value={campaignDraft.source} onChange={event => setCampaignDraft(current => ({ ...current, source: event.target.value }))} />
+              <Input className="h-9 text-xs" placeholder="Campagne" value={campaignDraft.campaign} onChange={event => setCampaignDraft(current => ({ ...current, campaign: event.target.value }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Spend €" value={campaignDraft.spend ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, spend: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Leads" value={campaignDraft.leads ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, leads: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="RDV" value={campaignDraft.meetings ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, meetings: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Clients" value={campaignDraft.clients ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, clients: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="CA signé €" value={campaignDraft.signedRevenue ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, signedRevenue: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Cash €" value={campaignDraft.cashCollected ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, cashCollected: nullableInput(event.target.value) }))} />
+              <Button size="sm" className="h-9 gap-1.5 xl:col-span-2" onClick={() => void saveCampaign()} disabled={saving || !campaignDraft.source.trim() || !campaignDraft.campaign.trim()}><Plus size={14} />Ajouter la campagne</Button>
             </div>
           </div>
         ) : null}
-      </Card>
+      </section>
 
       {editing && canEdit && draft ? (
-        <Card className="shadow-sm">
-          <CardHeader><CardTitle className="text-base">Saisir les KPI sources</CardTitle><CardDescription>Les ratios sont calculés automatiquement à partir de ces valeurs.</CardDescription></CardHeader>
-          <CardContent className="space-y-6">
+        <section>
+          <div className="border-b border-border px-4 py-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Sources</div>
+            <div className="mt-0.5 text-sm font-semibold">Saisir les KPI du mois</div>
+          </div>
+          <div className="space-y-5 p-4">
             {["Acquisition", "Activation", "Finance", "Qualité sales"].map(group => (
               <div key={group}>
-                <div className="mb-3 text-xs font-medium text-muted-foreground">{group}</div>
+                <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/70">{group}</div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {VALUE_FIELDS.filter(field => field.group === group).map(field => (
                     <label key={field.key} className="space-y-1.5">
-                      <span className="text-xs font-medium">{field.label}</span>
+                      <span className="text-[11px] font-semibold">{field.label}</span>
                       <div className="relative">
-                        <Input type="number" step="any" value={draft[field.key] ?? ""} onChange={event => setDraft(current => current ? ({ ...current, [field.key]: nullableInput(event.target.value) } as ValueRow) : current)} />
-                        {field.euro || field.days ? <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{field.euro ? "€" : "j"}</span> : null}
+                        <Input className="h-9 text-xs" type="number" step="any" value={draft[field.key] ?? ""} onChange={event => setDraft(current => current ? ({ ...current, [field.key]: nullableInput(event.target.value) } as ValueRow) : current)} />
+                        {field.euro || field.days ? <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">{field.euro ? "€" : "j"}</span> : null}
                       </div>
                     </label>
                   ))}
                 </div>
               </div>
             ))}
-            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEditing(false)}>Annuler</Button><Button onClick={() => void saveValue()} disabled={saving}>{saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}Enregistrer</Button></div>
-          </CardContent>
-        </Card>
+            <div className="flex justify-end gap-2 border-t border-border pt-4"><Button variant="outline" size="sm" className="h-9" onClick={() => setEditing(false)}>Annuler</Button><Button size="sm" className="h-9 gap-1.5" onClick={() => void saveValue()} disabled={saving}>{saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}Enregistrer</Button></div>
+          </div>
+        </section>
       ) : null}
-    </div>
+    </Card>
   )
 }
