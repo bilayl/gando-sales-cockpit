@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Activity } from "lucide-react"
-import { Badge } from "@/components/kpi-shadcn/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/kpi-shadcn/ui/card"
-import { Skeleton } from "@/components/kpi-shadcn/ui/skeleton"
+import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
 
@@ -122,10 +122,8 @@ export function KpiExecutiveOverview() {
     return { value, core, year, monthNumber, cac, ltv24, ltvCac, takeRate, collectionRate, marginRate, closingRate, alerts }
   }, [coreRows, valueRows])
 
-  if (loading) {
-    return <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-24 w-full rounded-lg" />)}</div>
-  }
-  if (error) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-[12px] text-destructive">{error}</div>
+  if (loading) return <Skeleton className="h-[620px] w-full rounded-xl" />
+  if (error) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error}</div>
 
   const { value, core } = snapshot
   const metrics = [
@@ -144,79 +142,79 @@ export function KpiExecutiveOverview() {
   ]
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-[17px] font-semibold tracking-[-0.02em]">Dernier mois</h1>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">Performance actuelle et signaux à surveiller.</p>
+    <Card className="min-w-0 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/20 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="h-6 text-[10px] font-semibold">Dernier mois</Badge>
+          <span className="text-[11px] text-muted-foreground">Santé business actuelle</span>
         </div>
-        <Badge variant="outline" className="h-6 rounded-md px-2 text-[11px] font-normal shadow-none">{MONTHS[snapshot.monthNumber - 1]} {snapshot.year}</Badge>
+        <Badge variant="secondary" className="h-6 text-[10px] font-semibold">{MONTHS[snapshot.monthNumber - 1]} {snapshot.year}</Badge>
       </div>
 
-      <div className="grid overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid border-b border-border sm:grid-cols-2 xl:grid-cols-3">
         {metrics.map(([label, metric, detail], index) => (
           <div key={label} className={`px-4 py-4 ${index > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""} ${index >= 3 ? "xl:border-t" : ""}`}>
-            <div className="text-[11px] text-muted-foreground">{label}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{label}</div>
             <div className="mt-2 text-[24px] font-semibold tracking-[-0.03em] tabular-nums">{metric}</div>
-            <div className="mt-1.5 text-[10px] text-muted-foreground/75">{detail}</div>
+            <div className="mt-1.5 text-[11px] font-medium text-muted-foreground">{detail}</div>
           </div>
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
-        <Card className="overflow-hidden rounded-lg border-border shadow-none">
-          <CardHeader className="space-y-0.5 border-b border-border px-4 py-3">
-            <CardTitle className="text-[13px] font-medium">Funnel de création de valeur</CardTitle>
-            <CardDescription className="text-[11px]">Conversion du prospect jusqu’à la première caution.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid p-0 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid border-b border-border lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
+        <section className="min-w-0 lg:border-r lg:border-border">
+          <div className="border-b border-border px-4 py-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Conversion</div>
+            <div className="mt-0.5 text-sm font-semibold">Funnel de création de valeur</div>
+          </div>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-4">
             {funnel.map((item, index) => {
               const previous = index > 0 ? funnel[index - 1].value : null
               const conversion = index > 0 ? ratio(item.value, previous) : null
               return (
                 <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}>
-                  <div className="text-[11px] text-muted-foreground">{item.label}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{item.label}</div>
                   <div className="mt-2 text-[22px] font-semibold tabular-nums">{integer(item.value)}</div>
-                  <div className="mt-2 text-[10px] text-muted-foreground/70">{conversion == null ? "Entrée" : `${percent(conversion)} conversion`}</div>
+                  <div className="mt-1.5 text-[10px] font-medium text-muted-foreground">{conversion == null ? "Entrée" : `${percent(conversion)} conversion`}</div>
                 </div>
               )
             })}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card className="overflow-hidden rounded-lg border-border shadow-none">
-          <CardHeader className="space-y-0.5 border-b border-border px-4 py-3">
-            <div className="flex items-center gap-1.5"><Activity className="size-3.5 text-primary" /><CardTitle className="text-[13px] font-medium">À surveiller</CardTitle></div>
-            <CardDescription className="text-[11px]">Signaux calculés automatiquement.</CardDescription>
-          </CardHeader>
-          <CardContent className="divide-y divide-border p-0">
+        <section>
+          <div className="flex items-center gap-1.5 border-b border-border px-4 py-3">
+            <Activity className="size-3.5 text-primary" />
+            <span className="text-sm font-semibold">À surveiller</span>
+          </div>
+          <div className="divide-y divide-border">
             {snapshot.alerts.length ? snapshot.alerts.slice(0, 4).map(alert => (
-              <div key={alert} className="px-4 py-3 text-[11px] leading-4 text-amber-800">{alert}</div>
+              <div key={alert} className="px-4 py-3 text-[11px] leading-4 text-amber-800 dark:text-amber-200">{alert}</div>
             )) : (
               <div className="px-4 py-4 text-[11px] text-muted-foreground">Aucun signal critique avec les données disponibles.</div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
 
-      <Card className="overflow-hidden rounded-lg border-border shadow-none">
-        <CardHeader className="space-y-0.5 border-b border-border px-4 py-3">
-          <CardTitle className="text-[13px] font-medium">Unit economics</CardTitle>
-          <CardDescription className="text-[11px]">Efficacité d’acquisition et valeur client sur une LTV plafonnée à 24 mois.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid p-0 sm:grid-cols-3">
+      <section>
+        <div className="border-b border-border px-4 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Économie</div>
+          <div className="mt-0.5 text-sm font-semibold">Unit economics</div>
+        </div>
+        <div className="grid sm:grid-cols-3">
           {[
             ["CAC", euro(snapshot.cac)],
             ["LTV 24 mois", euro(snapshot.ltv24)],
             ["LTV / CAC", snapshot.ltvCac == null ? "—" : `${decimal(snapshot.ltvCac, 1)}×`],
           ].map(([label, metric], index) => (
             <div key={label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""}`}>
-              <div className="text-[11px] text-muted-foreground">{label}</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{label}</div>
               <div className="mt-2 text-[22px] font-semibold tracking-[-0.025em] tabular-nums">{metric}</div>
             </div>
           ))}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </section>
+    </Card>
   )
 }
