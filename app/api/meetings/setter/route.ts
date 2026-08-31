@@ -29,6 +29,7 @@ type StoredReview = {
 const POSITIVE_OUTCOMES = new Set(["QUALIFIED", "INTERESTED", "PROPOSAL", "SECOND_MEETING", "DECISION_MAKER"]);
 const NEGATIVE_OUTCOMES = new Set(["NOT_QUALIFIED", "LOST", "NURTURE", "TOO_EARLY"]);
 const COMMERCIAL_RESULTS = new Set<SetterCommercialResult>(["qualified", "follow_up", "not_qualified", "no_show"]);
+const SETTER_FOCUS_START = Date.parse("2026-07-01T00:00:00+02:00");
 
 function commercialOutcome(notes?: string | null) {
   if (!notes) return null;
@@ -52,6 +53,13 @@ function serializeReview(result: SetterCommercialResult | null, note: string | n
 
 function isSetterMeeting(meeting: EnrichedMeeting) {
   return meeting.derived.isBrevo || meeting.derived.isGandoPresentation;
+}
+
+function isMeetingInFocusPeriod(meeting: EnrichedMeeting) {
+  const rawStart = meeting.derived.startAt || meeting.properties.hs_meeting_start_time || meeting.properties.hs_timestamp;
+  if (!rawStart) return true;
+  const start = Date.parse(rawStart);
+  return !Number.isFinite(start) || start >= SETTER_FOCUS_START;
 }
 
 function inferredQualification(meeting: EnrichedMeeting): {
@@ -127,7 +135,7 @@ export async function GET(request: NextRequest) {
     const bucket = url.searchParams.get("bucket") as SetterMeetingBucket | "all" | null;
 
     const cockpit = await getMeetingsCockpit({ view: "all" });
-    const setterMeetings = cockpit.results.filter(isSetterMeeting);
+    const setterMeetings = cockpit.results.filter(meeting => isSetterMeeting(meeting) && isMeetingInFocusPeriod(meeting));
     const reviews = await readReviews(setterMeetings.map(meeting => meeting.id));
 
     const rows = setterMeetings.map(meeting => {
