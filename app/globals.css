@@ -173,6 +173,40 @@ input:-webkit-autofill:focus {
 .animate-fade-in { animation: fade-in 180ms ease-out both; }
 @keyframes fade-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 
+/* KPI workspace: intentionally flatter and denser, close to modern CRM/reporting tools. */
+.kpi-attio .shadow,
+.kpi-attio .shadow-sm,
+.kpi-attio .shadow-md,
+.kpi-attio .shadow-lg {
+  box-shadow: none !important;
+}
+
+.kpi-attio .rounded-xl,
+.kpi-attio .rounded-2xl,
+.kpi-attio .rounded-3xl {
+  border-radius: 0.5rem !important;
+}
+
+.kpi-attio .bg-gradient-to-t,
+.kpi-attio .bg-gradient-to-b,
+.kpi-attio .bg-gradient-to-r {
+  background-image: none !important;
+}
+
+.kpi-attio table {
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-attio input,
+.kpi-attio button,
+.kpi-attio [role="combobox"] {
+  box-shadow: none !important;
+}
+
+.kpi-attio [role="tablist"] {
+  box-shadow: none !important;
+}
+
 @media (max-width: 900px) {
   .page-content { padding: 1rem; }
 }
