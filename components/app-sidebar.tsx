@@ -33,6 +33,7 @@ const commercialNav: NavSection[] = [
       { href: "/prospection", label: "Appels", icon: PhoneCall },
       { href: "/tasks", label: "Tâches", icon: ListTodo },
       { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
+      { href: "/deal-room", label: "Deal Room", icon: Target },
     ],
   },
   {
@@ -58,6 +59,7 @@ const fullNav: NavSection[] = [
       { href: "/prospection", label: "Prospection", icon: PhoneCall },
       { href: "/tasks", label: "Tâches", icon: ListTodo },
       { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
+      { href: "/deal-room", label: "Deal Room", icon: Target },
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
     ],
   },
@@ -74,7 +76,6 @@ const fullNav: NavSection[] = [
     items: [
       { href: "/emails", label: "Emails envoyés", icon: MailCheck },
       { href: "/analytics", label: "Statistiques", icon: BarChart3 },
-      { href: "/deal-room", label: "Deal Room", icon: Target },
       { href: "/support", label: "Support", icon: LifeBuoy },
     ],
   },
