@@ -7,18 +7,21 @@ import { SidebarTrigger } from "@/components/kpi-shadcn/ui/sidebar"
 
 export function KpiSiteHeader() {
   return (
-    <header className="sticky top-0 z-30 flex h-[var(--header-height,3.5rem)] shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <header className="sticky top-0 z-30 flex h-[var(--header-height,3.5rem)] shrink-0 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:px-4 lg:px-6">
       <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-2 h-4" />
+      <Separator orientation="vertical" className="mr-1 h-4" />
       <div className="flex min-w-0 items-center gap-2">
-        <BarChart3 className="size-4 text-primary" />
+        <BarChart3 className="size-4 shrink-0 text-primary" />
         <div className="truncate text-sm font-semibold">Business KPI</div>
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
-        <Badge variant="outline" className="hidden font-normal sm:inline-flex">Données réelles + calculées</Badge>
-        <Button asChild size="sm" variant="outline">
-          <Link href="/"><ArrowLeft className="size-3.5" />Cockpit</Link>
+      <div className="ml-auto flex min-w-0 items-center gap-2">
+        <Badge variant="outline" className="hidden font-normal md:inline-flex">Données réelles + calculées</Badge>
+        <Button asChild size="sm" variant="outline" className="shrink-0">
+          <Link href="/">
+            <ArrowLeft className="size-3.5" />
+            <span className="hidden sm:inline">Cockpit</span>
+          </Link>
         </Button>
       </div>
     </header>
