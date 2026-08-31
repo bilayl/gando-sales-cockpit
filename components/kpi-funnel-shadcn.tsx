@@ -35,6 +35,10 @@ type ValueRow = {
   firstDepositRenters: number | null
   paidSpend: number | null
   salesCost: number | null
+  toolingCost: number | null
+  agencyCost: number | null
+  creativeCost: number | null
+  otherAcquisitionCost: number | null
   paidLeads: number | null
   organicLeads: number | null
   signedRevenue: number | null
@@ -43,7 +47,10 @@ type ValueRow = {
   refunds: number | null
   netMargin: number | null
   avgClosingDays: number | null
+  medianClosingDays: number | null
   avgDealAgeDays: number | null
+  oldestOpenDealDays: number | null
+  openDealsCount: number | null
   dealsOver40Days: number | null
   decisionsTaken: number | null
 }
@@ -55,6 +62,11 @@ type CampaignRow = {
   source: string
   campaign: string
   spend: number | null
+  salesCost: number | null
+  toolingCost: number | null
+  agencyCost: number | null
+  creativeCost: number | null
+  otherCost: number | null
   leads: number | null
   meetings: number | null
   clients: number | null
@@ -68,10 +80,14 @@ const VALUE_FIELDS: Array<{ key: NumericKey; label: string; group: string; euro?
   { key: "prospectsContacted", label: "Prospects contactés", group: "Acquisition" },
   { key: "callsMade", label: "Appels réalisés", group: "Acquisition" },
   { key: "meetings", label: "RDV qualifiés", group: "Acquisition" },
-  { key: "paidSpend", label: "Dépenses paid", group: "Acquisition", euro: true },
-  { key: "salesCost", label: "Coût commercial", group: "Acquisition", euro: true },
   { key: "paidLeads", label: "Leads paid", group: "Acquisition" },
   { key: "organicLeads", label: "Leads organiques", group: "Acquisition" },
+  { key: "paidSpend", label: "Budget média / Ads", group: "Coûts acquisition", euro: true },
+  { key: "salesCost", label: "Coût commercial", group: "Coûts acquisition", euro: true },
+  { key: "toolingCost", label: "Outils / data", group: "Coûts acquisition", euro: true },
+  { key: "agencyCost", label: "Agence / freelance", group: "Coûts acquisition", euro: true },
+  { key: "creativeCost", label: "Création de contenu", group: "Coûts acquisition", euro: true },
+  { key: "otherAcquisitionCost", label: "Autres coûts acquisition", group: "Coûts acquisition", euro: true },
   { key: "rentersRegistered", label: "Loueurs inscrits", group: "Activation" },
   { key: "rentersActivated", label: "Loueurs activés", group: "Activation" },
   { key: "firstDepositRenters", label: "Loueurs avec 1re caution", group: "Activation" },
@@ -80,10 +96,13 @@ const VALUE_FIELDS: Array<{ key: NumericKey; label: string; group: string; euro?
   { key: "mrr", label: "MRR", group: "Finance", euro: true },
   { key: "refunds", label: "Remboursements", group: "Finance", euro: true },
   { key: "netMargin", label: "Marge nette Gando", group: "Finance", euro: true },
-  { key: "avgClosingDays", label: "Délai moyen de closing", group: "Qualité sales", days: true },
-  { key: "avgDealAgeDays", label: "Âge moyen des deals", group: "Qualité sales", days: true },
-  { key: "dealsOver40Days", label: "Deals > 40 jours", group: "Qualité sales" },
-  { key: "decisionsTaken", label: "Décisions prises grâce aux KPI", group: "Qualité sales" },
+  { key: "avgClosingDays", label: "Closing moyen", group: "Temps des deals", days: true },
+  { key: "medianClosingDays", label: "Closing médian", group: "Temps des deals", days: true },
+  { key: "avgDealAgeDays", label: "Âge moyen deals ouverts", group: "Temps des deals", days: true },
+  { key: "oldestOpenDealDays", label: "Plus vieux deal ouvert", group: "Temps des deals", days: true },
+  { key: "openDealsCount", label: "Deals ouverts", group: "Temps des deals" },
+  { key: "dealsOver40Days", label: "Deals > 40 jours", group: "Temps des deals" },
+  { key: "decisionsTaken", label: "Décisions prises grâce aux KPI", group: "Pilotage" },
 ]
 
 function blankValue(year: number, monthNumber: number): ValueRow {
@@ -98,6 +117,10 @@ function blankValue(year: number, monthNumber: number): ValueRow {
     firstDepositRenters: null,
     paidSpend: null,
     salesCost: null,
+    toolingCost: null,
+    agencyCost: null,
+    creativeCost: null,
+    otherAcquisitionCost: null,
     paidLeads: null,
     organicLeads: null,
     signedRevenue: null,
@@ -106,9 +129,32 @@ function blankValue(year: number, monthNumber: number): ValueRow {
     refunds: null,
     netMargin: null,
     avgClosingDays: null,
+    medianClosingDays: null,
     avgDealAgeDays: null,
+    oldestOpenDealDays: null,
+    openDealsCount: null,
     dealsOver40Days: null,
     decisionsTaken: null,
+  }
+}
+
+function blankCampaign(year: number, monthNumber: number): CampaignRow {
+  return {
+    year,
+    monthNumber,
+    source: "",
+    campaign: "",
+    spend: null,
+    salesCost: null,
+    toolingCost: null,
+    agencyCost: null,
+    creativeCost: null,
+    otherCost: null,
+    leads: null,
+    meetings: null,
+    clients: null,
+    signedRevenue: null,
+    cashCollected: null,
   }
 }
 
@@ -123,6 +169,11 @@ function n(value: number | null | undefined) {
 function ratio(top: number | null | undefined, bottom: number | null | undefined) {
   const b = n(bottom)
   return b > 0 ? n(top) / b : null
+}
+
+function roi(returnValue: number | null | undefined, cost: number | null | undefined) {
+  const c = n(cost)
+  return c > 0 ? (n(returnValue) - c) / c : null
 }
 
 function euro(value: number | null | undefined, digits = 0) {
@@ -151,6 +202,10 @@ function nullableInput(value: string) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function campaignTotalCost(row: CampaignRow) {
+  return n(row.spend) + n(row.salesCost) + n(row.toolingCost) + n(row.agencyCost) + n(row.creativeCost) + n(row.otherCost)
+}
+
 export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
   const [coreRows, setCoreRows] = useState<CoreKpiRow[]>([])
   const [valueRows, setValueRows] = useState<ValueRow[]>([])
@@ -161,18 +216,7 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<ValueRow | null>(null)
-  const [campaignDraft, setCampaignDraft] = useState<CampaignRow>({
-    year: new Date().getFullYear(),
-    monthNumber: new Date().getMonth() + 1,
-    source: "",
-    campaign: "",
-    spend: null,
-    leads: null,
-    meetings: null,
-    clients: null,
-    signedRevenue: null,
-    cashCollected: null,
-  })
+  const [campaignDraft, setCampaignDraft] = useState<CampaignRow>(() => blankCampaign(new Date().getFullYear(), new Date().getMonth() + 1))
 
   async function load() {
     setLoading(true)
@@ -231,12 +275,12 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
 
   useEffect(() => {
     setDraft({ ...value })
-    setCampaignDraft(current => ({ ...current, year, monthNumber, source: "", campaign: "", spend: null, leads: null, meetings: null, clients: null, signedRevenue: null, cashCollected: null }))
+    setCampaignDraft(blankCampaign(year, monthNumber))
   }, [year, monthNumber, valueRows])
 
   const derived = useMemo(() => {
     const totalLeads = n(value.paidLeads) + n(value.organicLeads)
-    const acquisitionCost = n(value.paidSpend) + n(value.salesCost)
+    const acquisitionCost = n(value.paidSpend) + n(value.salesCost) + n(value.toolingCost) + n(value.agencyCost) + n(value.creativeCost) + n(value.otherAcquisitionCost)
     const cac = n(value.rentersActivated) > 0 ? acquisitionCost / n(value.rentersActivated) : null
     const arpu = ratio(core?.revenue, core?.activeRenters)
     const churn = n(core?.churnRate)
@@ -248,6 +292,7 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
     const organicShare = totalLeads > 0 ? n(value.organicLeads) / totalLeads : null
     return {
       totalLeads,
+      acquisitionCost,
       cplPaid: ratio(value.paidSpend, value.paidLeads),
       cac,
       arpu,
@@ -258,15 +303,21 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
       takeRate: ratio(core?.revenue, core?.tdv),
       marginRate,
       organicShare,
+      cashRoi: roi(value.cashCollected, acquisitionCost),
+      signedRoi: roi(value.signedRevenue, acquisitionCost),
+      cashAfterAcquisition: n(value.cashCollected) - acquisitionCost,
+      staleDealShare: ratio(value.dealsOver40Days, value.openDealsCount),
     }
   }, [value, core])
 
   const alerts = useMemo(() => {
     const items: string[] = []
     if (derived.ltvCac != null && derived.ltvCac < 3) items.push(`LTV / CAC à ${decimal(derived.ltvCac, 1)}× : sous le repère 3×.`)
-    if (n(value.avgDealAgeDays) > 40) items.push(`Âge moyen des deals à ${decimal(value.avgDealAgeDays, 0)} jours.`)
+    if (n(value.avgDealAgeDays) > 40) items.push(`Âge moyen des deals ouverts : ${decimal(value.avgDealAgeDays, 0)} jours.`)
+    if (n(value.oldestOpenDealDays) > 40) items.push(`Le plus vieux deal ouvert a ${decimal(value.oldestOpenDealDays, 0)} jours.`)
     if (n(value.dealsOver40Days) > 0) items.push(`${integer(value.dealsOver40Days)} deal(s) ont plus de 40 jours.`)
     if (derived.collectionRate != null && derived.collectionRate < 0.9) items.push(`Seulement ${percent(derived.collectionRate)} du CA signé est encaissé.`)
+    if (derived.cashRoi != null && derived.cashRoi < 0) items.push(`ROI cash négatif : ${percent(derived.cashRoi)} après coûts d’acquisition.`)
     if (derived.organicShare != null && derived.organicShare < 0.2 && n(value.paidLeads) > 0) items.push(`Dépendance paid élevée : ${percent(1 - derived.organicShare)} des leads viennent du paid.`)
     if (derived.marginRate != null && derived.marginRate < 0) items.push("Marge nette négative sur le mois.")
     return items
@@ -306,7 +357,7 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || "Impossible d’enregistrer la campagne.")
       setCampaignRows(Array.isArray(body.rows) ? body.rows : [])
-      setCampaignDraft(current => ({ ...current, source: "", campaign: "", spend: null, leads: null, meetings: null, clients: null, signedRevenue: null, cashCollected: null }))
+      setCampaignDraft(blankCampaign(year, monthNumber))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Impossible d’enregistrer la campagne.")
     } finally {
@@ -336,18 +387,38 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
   ]
 
   const economics = [
-    { label: "CAC complet", value: euro(derived.cac), detail: "Paid + coût commercial / loueur activé" },
-    { label: "LTV 24 mois", value: euro(derived.ltv24), detail: `ARPU ${euro(derived.arpu, 2)}` },
+    { label: "Coût acquisition total", value: euro(derived.acquisitionCost), detail: "Ads + commercial + outils + agence + créa + autres" },
+    { label: "CAC complet", value: euro(derived.cac), detail: "Tous les coûts / loueur activé" },
+    { label: "ROI cash", value: percent(derived.cashRoi), detail: `${euro(derived.cashAfterAcquisition)} après acquisition` },
+    { label: "ROI CA signé", value: percent(derived.signedRoi), detail: `${euro(value.signedRevenue)} de CA signé` },
     { label: "LTV / CAC", value: derived.ltvCac == null ? "—" : `${decimal(derived.ltvCac, 1)}×`, detail: "Repère : > 3×" },
     { label: "CA signé → cash", value: percent(derived.collectionRate), detail: `${euro(value.cashCollected)} encaissés` },
   ]
+
+  const costBreakdown = [
+    ["Ads / média", value.paidSpend],
+    ["Commercial", value.salesCost],
+    ["Outils / data", value.toolingCost],
+    ["Agence", value.agencyCost],
+    ["Créa / contenu", value.creativeCost],
+    ["Autres", value.otherAcquisitionCost],
+  ] as const
+
+  const dealVelocity = [
+    ["Closing moyen", value.avgClosingDays == null ? "—" : `${decimal(value.avgClosingDays)} j`],
+    ["Closing médian", value.medianClosingDays == null ? "—" : `${decimal(value.medianClosingDays)} j`],
+    ["Âge moyen ouverts", value.avgDealAgeDays == null ? "—" : `${decimal(value.avgDealAgeDays)} j`],
+    ["Plus vieux deal", value.oldestOpenDealDays == null ? "—" : `${decimal(value.oldestOpenDealDays)} j`],
+    ["Deals ouverts", integer(value.openDealsCount)],
+    ["> 40 jours", `${integer(value.dealsOver40Days)}${derived.staleDealShare == null ? "" : ` · ${percent(derived.staleDealShare)}`}`],
+  ] as const
 
   return (
     <Card className="min-w-0 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/20 px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="h-6 text-[10px] font-semibold">Funnel business</Badge>
-          <span className="text-[11px] text-muted-foreground">Acquisition → activation → valeur</span>
+          <span className="text-[11px] text-muted-foreground">Acquisition → activation → valeur → ROI</span>
         </div>
         <div className="flex items-center gap-2">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
@@ -368,11 +439,11 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
       <section className="border-b border-border">
         <div className="border-b border-border px-4 py-3">
           <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Économie</div>
-          <div className="mt-0.5 text-sm font-semibold">Unit economics du mois</div>
+          <div className="mt-0.5 text-sm font-semibold">Unit economics réels du mois</div>
         </div>
-        <div className="grid sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3">
           {economics.map((item, index) => (
-            <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}>
+            <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""} ${index >= 3 ? "xl:border-t" : ""}`}>
               <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{item.label}</div>
               <div className="mt-2 text-[22px] font-semibold tracking-[-0.03em] tabular-nums">{item.value}</div>
               <div className="mt-1.5 text-[11px] font-medium text-muted-foreground">{item.detail}</div>
@@ -381,7 +452,22 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
         </div>
       </section>
 
-      <div className="grid border-b border-border xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.5fr)]">
+      <section className="border-b border-border">
+        <div className="border-b border-border px-4 py-3">
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Coûts</div>
+          <div className="mt-0.5 text-sm font-semibold">Ce que l’acquisition nous a réellement coûté</div>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {costBreakdown.map(([label, amount], index) => (
+            <div key={label} className={`${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} px-4 py-3`}>
+              <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{label}</div>
+              <div className="mt-1.5 text-lg font-semibold tabular-nums">{euro(amount)}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid border-b border-border xl:grid-cols-[minmax(0,1.45fr)_minmax(310px,0.55fr)]">
         <section className="min-w-0 xl:border-r xl:border-border">
           <div className="border-b border-border px-4 py-3">
             <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Conversion</div>
@@ -405,50 +491,96 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
         </section>
 
         <section>
-          <div className="flex items-center gap-1.5 border-b border-border px-4 py-3">
-            <AlertTriangle className="size-3.5 text-amber-500" />
-            <span className="text-sm font-semibold">À surveiller</span>
+          <div className="border-b border-border px-4 py-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Vélocité</div>
+            <div className="mt-0.5 text-sm font-semibold">Temps des deals</div>
           </div>
-          <div className="divide-y divide-border">
-            {alerts.length ? alerts.map(alert => <div key={alert} className="px-4 py-3 text-[11px] leading-4 text-amber-800 dark:text-amber-200">{alert}</div>) : <div className="px-4 py-4 text-[11px] text-muted-foreground">Aucun signal critique avec les données disponibles.</div>}
+          <div className="grid grid-cols-2">
+            {dealVelocity.map(([label, metric], index) => (
+              <div key={label} className={`${index % 2 ? "border-l border-border" : ""} ${index >= 2 ? "border-t border-border" : ""} px-3 py-3`}>
+                <div className="text-[10px] text-muted-foreground">{label}</div>
+                <div className="mt-1 text-sm font-semibold tabular-nums">{metric}</div>
+              </div>
+            ))}
           </div>
         </section>
       </div>
 
       <section className="border-b border-border">
+        <div className="flex items-center gap-1.5 border-b border-border px-4 py-3">
+          <AlertTriangle className="size-3.5 text-amber-500" />
+          <span className="text-sm font-semibold">À surveiller</span>
+        </div>
+        <div className="grid divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
+          {alerts.length ? alerts.slice(0, 6).map(alert => <div key={alert} className="px-4 py-3 text-[11px] leading-4 text-amber-800 dark:text-amber-200">{alert}</div>) : <div className="px-4 py-4 text-[11px] text-muted-foreground">Aucun signal critique avec les données disponibles.</div>}
+        </div>
+      </section>
+
+      <section className="border-b border-border">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Attribution</div>
-            <div className="mt-0.5 text-sm font-semibold">Campagnes → cash</div>
+            <div className="mt-0.5 text-sm font-semibold">Campagnes → coût complet → cash → ROI</div>
           </div>
           <span className="text-[11px] text-muted-foreground">{campaigns.length} campagne{campaigns.length > 1 ? "s" : ""}</span>
         </div>
-        <Table className="min-w-[900px] text-[11px]">
-          <TableHeader className="bg-muted/35"><TableRow><TableHead className="pl-4">Campagne</TableHead><TableHead>Spend</TableHead><TableHead>Leads</TableHead><TableHead>CPL</TableHead><TableHead>RDV</TableHead><TableHead>Clients</TableHead><TableHead>CAC</TableHead><TableHead>CA signé</TableHead><TableHead>Cash</TableHead><TableHead className="w-12" /></TableRow></TableHeader>
+        <Table className="min-w-[1120px] text-[11px]">
+          <TableHeader className="bg-muted/35">
+            <TableRow>
+              <TableHead className="pl-4">Campagne</TableHead>
+              <TableHead>Média</TableHead>
+              <TableHead>Coût total</TableHead>
+              <TableHead>Leads</TableHead>
+              <TableHead>RDV</TableHead>
+              <TableHead>Clients</TableHead>
+              <TableHead>CAC complet</TableHead>
+              <TableHead>CA signé</TableHead>
+              <TableHead>Cash</TableHead>
+              <TableHead>ROI cash</TableHead>
+              <TableHead className="w-12" />
+            </TableRow>
+          </TableHeader>
           <TableBody>
-            {campaigns.map(row => (
-              <TableRow key={row.id || `${row.source}-${row.campaign}`}>
-                <TableCell className="pl-4"><div className="font-semibold">{row.campaign}</div><div className="text-[10px] text-muted-foreground">{row.source}</div></TableCell>
-                <TableCell>{euro(row.spend)}</TableCell><TableCell>{integer(row.leads)}</TableCell><TableCell>{euro(ratio(row.spend, row.leads), 2)}</TableCell><TableCell>{integer(row.meetings)}</TableCell><TableCell>{integer(row.clients)}</TableCell><TableCell>{euro(ratio(row.spend, row.clients))}</TableCell><TableCell>{euro(row.signedRevenue)}</TableCell><TableCell className="font-semibold">{euro(row.cashCollected)}</TableCell>
-                <TableCell>{canEdit ? <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => void deleteCampaign(row.id)} aria-label="Supprimer"><Trash2 size={14} /></Button> : null}</TableCell>
-              </TableRow>
-            ))}
-            {!campaigns.length ? <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground">Aucune campagne renseignée pour ce mois.</TableCell></TableRow> : null}
+            {campaigns.map(row => {
+              const totalCost = campaignTotalCost(row)
+              return (
+                <TableRow key={row.id || `${row.source}-${row.campaign}`}>
+                  <TableCell className="pl-4"><div className="font-semibold">{row.campaign}</div><div className="text-[10px] text-muted-foreground">{row.source}</div></TableCell>
+                  <TableCell>{euro(row.spend)}</TableCell>
+                  <TableCell className="font-semibold">{euro(totalCost)}</TableCell>
+                  <TableCell>{integer(row.leads)}</TableCell>
+                  <TableCell>{integer(row.meetings)}</TableCell>
+                  <TableCell>{integer(row.clients)}</TableCell>
+                  <TableCell>{euro(ratio(totalCost, row.clients))}</TableCell>
+                  <TableCell>{euro(row.signedRevenue)}</TableCell>
+                  <TableCell className="font-semibold">{euro(row.cashCollected)}</TableCell>
+                  <TableCell className={roi(row.cashCollected, totalCost) != null && n(roi(row.cashCollected, totalCost)) < 0 ? "font-semibold text-destructive" : "font-semibold"}>{percent(roi(row.cashCollected, totalCost))}</TableCell>
+                  <TableCell>{canEdit ? <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => void deleteCampaign(row.id)} aria-label="Supprimer"><Trash2 size={14} /></Button> : null}</TableCell>
+                </TableRow>
+              )
+            })}
+            {!campaigns.length ? <TableRow><TableCell colSpan={11} className="h-24 text-center text-muted-foreground">Aucune campagne renseignée pour ce mois.</TableCell></TableRow> : null}
           </TableBody>
         </Table>
 
         {canEdit ? (
           <div className="border-t border-border bg-muted/20 p-3">
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            <div className="mb-2 text-[11px] text-muted-foreground">Le coût commercial peut inclure le fixe + variable + commissions attribuables à cette campagne. Les autres coûts permettent d’obtenir un vrai CAC et un vrai ROI.</div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
               <Input className="h-9 text-xs" placeholder="Source (Meta, SEO…)" value={campaignDraft.source} onChange={event => setCampaignDraft(current => ({ ...current, source: event.target.value }))} />
               <Input className="h-9 text-xs" placeholder="Campagne" value={campaignDraft.campaign} onChange={event => setCampaignDraft(current => ({ ...current, campaign: event.target.value }))} />
-              <Input className="h-9 text-xs" type="number" placeholder="Spend €" value={campaignDraft.spend ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, spend: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Ads €" value={campaignDraft.spend ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, spend: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Commercial €" value={campaignDraft.salesCost ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, salesCost: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Outils €" value={campaignDraft.toolingCost ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, toolingCost: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Agence €" value={campaignDraft.agencyCost ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, agencyCost: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Créa €" value={campaignDraft.creativeCost ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, creativeCost: nullableInput(event.target.value) }))} />
+              <Input className="h-9 text-xs" type="number" placeholder="Autres coûts €" value={campaignDraft.otherCost ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, otherCost: nullableInput(event.target.value) }))} />
               <Input className="h-9 text-xs" type="number" placeholder="Leads" value={campaignDraft.leads ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, leads: nullableInput(event.target.value) }))} />
               <Input className="h-9 text-xs" type="number" placeholder="RDV" value={campaignDraft.meetings ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, meetings: nullableInput(event.target.value) }))} />
               <Input className="h-9 text-xs" type="number" placeholder="Clients" value={campaignDraft.clients ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, clients: nullableInput(event.target.value) }))} />
               <Input className="h-9 text-xs" type="number" placeholder="CA signé €" value={campaignDraft.signedRevenue ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, signedRevenue: nullableInput(event.target.value) }))} />
               <Input className="h-9 text-xs" type="number" placeholder="Cash €" value={campaignDraft.cashCollected ?? ""} onChange={event => setCampaignDraft(current => ({ ...current, cashCollected: nullableInput(event.target.value) }))} />
-              <Button size="sm" className="h-9 gap-1.5 xl:col-span-2" onClick={() => void saveCampaign()} disabled={saving || !campaignDraft.source.trim() || !campaignDraft.campaign.trim()}><Plus size={14} />Ajouter la campagne</Button>
+              <Button size="sm" className="h-9 gap-1.5 md:col-span-2 xl:col-span-5" onClick={() => void saveCampaign()} disabled={saving || !campaignDraft.source.trim() || !campaignDraft.campaign.trim()}><Plus size={14} />Ajouter la campagne et calculer le ROI</Button>
             </div>
           </div>
         ) : null}
@@ -461,9 +593,10 @@ export function KpiFunnelShadcn({ canEdit }: { canEdit: boolean }) {
             <div className="mt-0.5 text-sm font-semibold">Saisir les KPI du mois</div>
           </div>
           <div className="space-y-5 p-4">
-            {["Acquisition", "Activation", "Finance", "Qualité sales"].map(group => (
+            {["Acquisition", "Coûts acquisition", "Activation", "Finance", "Temps des deals", "Pilotage"].map(group => (
               <div key={group}>
                 <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/70">{group}</div>
+                {group === "Coûts acquisition" ? <p className="mb-2 text-[11px] text-muted-foreground">Exemple : coût commercial = fixe + variable + commissions du mois. Le ROI cash utilise tous ces coûts.</p> : null}
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {VALUE_FIELDS.filter(field => field.group === group).map(field => (
                     <label key={field.key} className="space-y-1.5">
