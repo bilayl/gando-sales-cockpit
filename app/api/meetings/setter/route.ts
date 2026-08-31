@@ -24,6 +24,23 @@ type StoredReview = {
   result?: SetterCommercialResult | null;
   note?: string | null;
   nextActionAt?: string | null;
+  taskTitle?: string | null;
+};
+
+type MeetingWithTracking = EnrichedMeeting & {
+  setterTracking: {
+    qualificationStatus: SetterQualificationStatus;
+    qualificationReason: string;
+    commercialOutcome: string | null;
+    commercialResult: SetterCommercialResult | null;
+    bucket: SetterMeetingBucket;
+    nextActionAt: string | null;
+    taskTitle: string | null;
+    manuallyReviewed: boolean;
+    reviewNote: string | null;
+    updatedByEmail: string | null;
+    updatedAt: string | null;
+  };
 };
 
 const POSITIVE_OUTCOMES = new Set(["QUALIFIED", "INTERESTED", "PROPOSAL", "SECOND_MEETING", "DECISION_MAKER"]);
@@ -47,8 +64,13 @@ function parseStoredReview(value?: string | null): StoredReview | null {
   }
 }
 
-function serializeReview(result: SetterCommercialResult | null, note: string | null, nextActionAt: string | null) {
-  return JSON.stringify({ version: 1, result, note, nextActionAt } satisfies StoredReview);
+function serializeReview(
+  result: SetterCommercialResult | null,
+  note: string | null,
+  nextActionAt: string | null,
+  taskTitle: string | null,
+) {
+  return JSON.stringify({ version: 1, result, note, nextActionAt, taskTitle } satisfies StoredReview);
 }
 
 function isSetterMeeting(meeting: EnrichedMeeting) {
@@ -92,10 +114,16 @@ function inferredQualification(meeting: EnrichedMeeting): {
     return { status: "not_qualified", reason: `Statut contact : ${contact?.statut_prospection}`, outcome, result: "not_qualified" };
   }
 
-  return { status: "pending", reason: "Résultat commercial à renseigner", outcome, result: null };
+  return { status: "pending", reason: "Action commerciale à renseigner", outcome, result: null };
 }
 
-function meetingBucket(meeting: EnrichedMeeting, result: SetterCommercialResult | null): SetterMeetingBucket {
+function meetingBucket(
+  meeting: EnrichedMeeting,
+  result: SetterCommercialResult | null,
+  nextActionAt: string | null,
+): SetterMeetingBucket {
+  // A follow-up without a scheduled task remains visible in Actions so it cannot be forgotten.
+  if (result === "follow_up" && !nextActionAt) return "to_qualify";
   if (result) return "history";
   const start = meeting.derived.startAt ? Date.parse(meeting.derived.startAt) : NaN;
   if (Number.isFinite(start) && start > Date.now() && !["CANCELED", "NO_SHOW"].includes(meeting.derived.status)) return "upcoming";
@@ -127,6 +155,91 @@ function meetingSource(meeting: EnrichedMeeting) {
   };
 }
 
+function roundOne(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+async function readCallAttemptMetrics(rows: MeetingWithTracking[]) {
+  const qualifiedMeetings = rows.filter(meeting => meeting.setterTracking.commercialResult === "qualified");
+  const hubspotContactIds = [...new Set(qualifiedMeetings.flatMap(meeting => meeting.associations.contacts.map(contact => contact.id)))];
+  if (!hubspotContactIds.length) {
+    return { avgAttemptsBeforeQualified: null as number | null, avgFollowUpsBeforeQualified: null as number | null, qualifiedWithCallData: 0 };
+  }
+
+  try {
+    const admin = getSupabaseAdmin();
+    const contacts: Array<{ id: string; hubspot_id: string }> = [];
+    for (let index = 0; index < hubspotContactIds.length; index += 500) {
+      const chunk = hubspotContactIds.slice(index, index + 500);
+      const { data, error } = await admin.from("contacts").select("id,hubspot_id").in("hubspot_id", chunk);
+      if (error) throw error;
+      contacts.push(...((data || []) as Array<{ id: string; hubspot_id: string }>));
+    }
+
+    const localIds = contacts.map(contact => contact.id);
+    if (!localIds.length) {
+      return { avgAttemptsBeforeQualified: null as number | null, avgFollowUpsBeforeQualified: null as number | null, qualifiedWithCallData: 0 };
+    }
+
+    const callRows: Array<{ contact_id: string; updated_at: string }> = [];
+    for (let index = 0; index < localIds.length; index += 500) {
+      const chunk = localIds.slice(index, index + 500);
+      const { data, error } = await admin
+        .from("sales_call_session_items")
+        .select("contact_id,updated_at")
+        .in("contact_id", chunk)
+        .eq("status", "CALLED");
+      if (error) throw error;
+      callRows.push(...((data || []) as Array<{ contact_id: string; updated_at: string }>));
+    }
+
+    const hubspotByLocalId = new Map(contacts.map(contact => [contact.id, String(contact.hubspot_id)]));
+    const attemptsByHubspotId = new Map<string, number[]>();
+    for (const call of callRows) {
+      const hubspotId = hubspotByLocalId.get(call.contact_id);
+      const timestamp = Date.parse(call.updated_at);
+      if (!hubspotId || !Number.isFinite(timestamp)) continue;
+      const values = attemptsByHubspotId.get(hubspotId) || [];
+      values.push(timestamp);
+      attemptsByHubspotId.set(hubspotId, values);
+    }
+
+    const trackedAttempts: number[] = [];
+    for (const meeting of qualifiedMeetings) {
+      const meetingTime = meeting.derived.startAt ? Date.parse(meeting.derived.startAt) : NaN;
+      if (!Number.isFinite(meetingTime)) continue;
+      const contactIds = new Set(meeting.associations.contacts.map(contact => contact.id));
+      const attempts = [...contactIds].reduce((total, contactId) => {
+        const timestamps = attemptsByHubspotId.get(contactId) || [];
+        return total + timestamps.filter(timestamp => timestamp <= meetingTime).length;
+      }, 0);
+      if (attempts > 0) trackedAttempts.push(attempts);
+    }
+
+    if (!trackedAttempts.length) {
+      return { avgAttemptsBeforeQualified: null as number | null, avgFollowUpsBeforeQualified: null as number | null, qualifiedWithCallData: 0 };
+    }
+
+    const totalAttempts = trackedAttempts.reduce((sum, value) => sum + value, 0);
+    const totalFollowUps = trackedAttempts.reduce((sum, value) => sum + Math.max(0, value - 1), 0);
+    return {
+      avgAttemptsBeforeQualified: roundOne(totalAttempts / trackedAttempts.length),
+      avgFollowUpsBeforeQualified: roundOne(totalFollowUps / trackedAttempts.length),
+      qualifiedWithCallData: trackedAttempts.length,
+    };
+  } catch {
+    // Meeting actions must remain usable even if historical call tracking is temporarily unavailable.
+    return { avgAttemptsBeforeQualified: null as number | null, avgFollowUpsBeforeQualified: null as number | null, qualifiedWithCallData: 0 };
+  }
+}
+
+function defaultTaskDueAt() {
+  const date = new Date();
+  date.setDate(date.getDate() + 3);
+  date.setHours(9, 0, 0, 0);
+  return date;
+}
+
 export async function GET(request: NextRequest) {
   try {
     await requireCockpitAccess();
@@ -138,7 +251,7 @@ export async function GET(request: NextRequest) {
     const setterMeetings = cockpit.results.filter(meeting => isSetterMeeting(meeting) && isMeetingInFocusPeriod(meeting));
     const reviews = await readReviews(setterMeetings.map(meeting => meeting.id));
 
-    const rows = setterMeetings.map(meeting => {
+    const rows: MeetingWithTracking[] = setterMeetings.map(meeting => {
       const inferred = inferredQualification(meeting);
       const review = reviews.get(meeting.id);
       const stored = parseStoredReview(review?.review_note);
@@ -149,10 +262,14 @@ export async function GET(request: NextRequest) {
             ? "not_qualified"
             : inferred.result);
       const qualificationStatus = review?.qualification_status || inferred.status;
+      const nextActionAt = stored?.nextActionAt || meeting.derived.nextActionAt || null;
       const qualificationReason = review
-        ? stored?.note || (commercialResult === "follow_up" ? "Relance commerciale programmée" : "Résultat commercial renseigné")
+        ? stored?.note
+          || (commercialResult === "follow_up"
+            ? nextActionAt ? "Relance avec tâche programmée" : "À relancer — aucune tâche programmée"
+            : "Résultat commercial renseigné")
         : inferred.reason;
-      const workflowBucket = meetingBucket(meeting, commercialResult);
+      const workflowBucket = meetingBucket(meeting, commercialResult, nextActionAt);
 
       return {
         ...meeting,
@@ -162,7 +279,8 @@ export async function GET(request: NextRequest) {
           commercialOutcome: inferred.outcome,
           commercialResult,
           bucket: workflowBucket,
-          nextActionAt: stored?.nextActionAt || meeting.derived.nextActionAt || null,
+          nextActionAt,
+          taskTitle: stored?.taskTitle || null,
           manuallyReviewed: Boolean(review),
           reviewNote: stored?.note || (review && !stored ? review.review_note : null),
           updatedByEmail: review?.updated_by_email || null,
@@ -172,7 +290,7 @@ export async function GET(request: NextRequest) {
     });
 
     rows.sort((a, b) => {
-      const priority = (value: typeof rows[number]) => value.setterTracking.bucket === "to_qualify" ? 0 : value.setterTracking.bucket === "upcoming" ? 1 : 2;
+      const priority = (value: MeetingWithTracking) => value.setterTracking.bucket === "to_qualify" ? 0 : value.setterTracking.bucket === "upcoming" ? 1 : 2;
       const priorityDiff = priority(a) - priority(b);
       if (priorityDiff) return priorityDiff;
       const aTime = a.derived.startAt ? Date.parse(a.derived.startAt) : 0;
@@ -197,7 +315,11 @@ export async function GET(request: NextRequest) {
     const followUp = rows.filter(meeting => meeting.setterTracking.commercialResult === "follow_up").length;
     const notQualified = rows.filter(meeting => meeting.setterTracking.commercialResult === "not_qualified").length;
     const noShow = rows.filter(meeting => meeting.setterTracking.commercialResult === "no_show").length;
+    const followUpWithoutTask = rows.filter(meeting => meeting.setterTracking.commercialResult === "follow_up" && !meeting.setterTracking.nextActionAt).length;
+    const followUpWithTask = rows.filter(meeting => meeting.setterTracking.commercialResult === "follow_up" && Boolean(meeting.setterTracking.nextActionAt)).length;
     const decided = qualified + notQualified + noShow;
+    const treated = qualified + followUp + notQualified + noShow;
+    const callAttemptMetrics = await readCallAttemptMetrics(rows);
 
     return NextResponse.json({
       results: filtered,
@@ -211,7 +333,13 @@ export async function GET(request: NextRequest) {
         followUp,
         notQualified,
         noShow,
+        followUpWithTask,
+        followUpWithoutTask,
         qualificationRate: decided ? Math.round((qualified / decided) * 100) : 0,
+        bounceRate: treated ? Math.round(((followUp + noShow) / treated) * 100) : 0,
+        noShowRate: treated ? Math.round((noShow / treated) * 100) : 0,
+        followUpRate: treated ? Math.round((followUp / treated) * 100) : 0,
+        ...callAttemptMetrics,
       },
     });
   } catch (error) {
@@ -235,46 +363,40 @@ export async function POST(request: NextRequest) {
 
     const reviewNote = String(body?.reviewNote || "").trim().slice(0, 1000) || null;
     const setterOwnerId = String(body?.setterOwnerId || "").trim().slice(0, 120) || null;
-    let nextActionAt = String(body?.nextActionAt || "").trim() || null;
+    const legacyNextActionAt = String(body?.nextActionAt || "").trim() || null;
+    const createTask = body?.createTask === true
+      || (typeof body?.createTask === "undefined" && (commercialResult === "no_show" || Boolean(legacyNextActionAt)));
+    const taskTitle = String(body?.taskTitle || "").trim().slice(0, 180)
+      || (commercialResult === "qualified" ? "Prochaine action après RDV qualifié" : "Relancer après le rendez-vous");
+    let nextActionAt: string | null = null;
 
     let qualificationStatus: SetterQualificationStatus = legacyQualification || "pending";
     if (commercialResult === "qualified") qualificationStatus = "qualified";
     if (commercialResult === "not_qualified" || commercialResult === "no_show") qualificationStatus = "not_qualified";
     if (commercialResult === "follow_up") qualificationStatus = "pending";
 
-    if (commercialResult === "follow_up") {
-      const parsed = nextActionAt ? new Date(nextActionAt) : null;
+    if (createTask) {
+      const rawTaskDueAt = String(body?.taskDueAt || legacyNextActionAt || "").trim();
+      const parsed = rawTaskDueAt ? new Date(rawTaskDueAt) : commercialResult === "no_show" ? defaultTaskDueAt() : null;
       if (!parsed || Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
-        throw Object.assign(new Error("Choisis une date de relance dans le futur."), { status: 400 });
+        throw Object.assign(new Error("Choisis une date de tâche dans le futur."), { status: 400 });
       }
       nextActionAt = parsed.toISOString();
-    } else {
-      nextActionAt = null;
-    }
 
-    if (commercialResult === "follow_up" || commercialResult === "no_show") {
       const cockpit = await getMeetingsCockpit({ view: "all" });
       const meeting = cockpit.results.find(item => item.id === meetingId);
-      if (commercialResult === "follow_up") {
-        await processMeetingAction(meetingId, {
-          action: "next_action",
-          nextAction: "Relancer après le rendez-vous",
-          dueAt: nextActionAt!,
-          ...(meeting ? { source: meetingSource(meeting) } : {}),
-        });
-      } else {
-        const actionResult = await processMeetingAction(meetingId, {
-          action: "no_show",
-          notes: reviewNote || "No-show enregistré depuis les rendez-vous setter",
-          ...(meeting ? { source: meetingSource(meeting) } : {}),
-        });
-        nextActionAt = typeof actionResult?.nextActionAt === "string" ? actionResult.nextActionAt : null;
-      }
+      const actionResult = await processMeetingAction(meetingId, {
+        action: "next_action",
+        nextAction: taskTitle,
+        dueAt: nextActionAt,
+        ...(meeting ? { source: meetingSource(meeting) } : {}),
+      });
+      nextActionAt = typeof actionResult?.nextActionAt === "string" ? actionResult.nextActionAt : nextActionAt;
     }
 
     const now = new Date().toISOString();
     const storedNote = commercialResult
-      ? serializeReview(commercialResult, reviewNote, nextActionAt)
+      ? serializeReview(commercialResult, reviewNote, nextActionAt, createTask ? taskTitle : null)
       : reviewNote;
 
     const { data, error } = await getSupabaseAdmin()
@@ -291,7 +413,7 @@ export async function POST(request: NextRequest) {
       .single();
     if (error) throw error;
 
-    return NextResponse.json({ review: data, commercialResult, nextActionAt });
+    return NextResponse.json({ review: data, commercialResult, taskCreated: createTask, nextActionAt });
   } catch (error) {
     return apiError(error);
   }
