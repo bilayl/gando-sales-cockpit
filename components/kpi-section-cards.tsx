@@ -42,19 +42,14 @@ export function KpiSectionCards({ summary }: { summary: KpiDashboardSummary }) {
   ]
 
   return (
-    <div id="kpi-overview-cards" className="grid border-b border-border bg-card sm:grid-cols-2 xl:grid-cols-4">
-      {cards.map((card, index) => (
-        <section
-          key={card.label}
-          className={`min-w-0 px-4 py-4 lg:px-5 ${index > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}
-        >
+    <div id="kpi-overview-cards" className="grid gap-px border-b border-border bg-border sm:grid-cols-2 xl:grid-cols-4">
+      {cards.map(card => (
+        <section key={card.label} className="min-w-0 bg-card px-4 py-4 lg:px-5">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/75">{card.label}</span>
             <TrendBadge value={card.trend} />
           </div>
-          <div className="mt-3 truncate text-[26px] font-semibold leading-none tracking-[-0.035em] text-foreground tabular-nums">
-            {card.value}
-          </div>
+          <div className="mt-3 truncate text-[26px] font-semibold leading-none tracking-[-0.035em] text-foreground tabular-nums">{card.value}</div>
           <div className="mt-3 truncate text-[11px] font-medium text-muted-foreground">{card.helper}</div>
         </section>
       ))}
