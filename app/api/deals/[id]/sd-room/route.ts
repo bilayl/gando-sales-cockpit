@@ -129,7 +129,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const roomBrandTheme = brandTheme(body.brandTheme);
     const selectedRoomMode = roomMode(body.roomMode);
     const brandTitle = String(body.brandTitle || title || created.title).trim().slice(0, 240) || null;
-    const brandSubtitle = String(body.brandSubtitle || "Espace de collaboration").trim().slice(0, 500) || null;
+    const brandSubtitle = String(body.brandSubtitle || (selectedRoomMode === "standard" ? "Proposition commerciale" : "Espace de collaboration")).trim().slice(0, 500) || null;
     const meetingBookingUrl = String(body.meetingBookingUrl || "").trim().slice(0, 2000) || null;
 
     const updates: Record<string, unknown> = {
@@ -137,6 +137,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       brand_title: brandTitle,
       brand_subtitle: brandSubtitle,
       room_mode: selectedRoomMode,
+      first_contact_at: created.first_contact_at || deal.createdDate || created.created_at,
     };
     if (title) updates.title = title;
     if (companyName) updates.company_name = companyName;
