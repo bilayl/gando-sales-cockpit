@@ -26,7 +26,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (document.status !== "published") return Response.json({ error: "Cette étape doit être publiée avant validation." }, { status: 409 });
 
     const now = new Date().toISOString();
-    const { data, error } = await getSupabaseAdmin()
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
       .from("sd_documents")
       .update({
         status: "validated",
@@ -41,6 +42,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .select("*")
       .single();
     if (error) throw error;
+
+    if (code === "SD04") {
+      const { error: roomError } = await admin
+        .from("deal_rooms")
+        .update({ proposal_agreed_at: now })
+        .eq("id", publicRoom.room.id);
+      if (roomError) throw roomError;
+    }
 
     return Response.json({ document: data });
   } catch (error) {

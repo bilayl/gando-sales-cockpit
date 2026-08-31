@@ -5,6 +5,7 @@ import { requireSDInternalAccess } from "@/lib/sd-room-access";
 import { normalizeStageContent } from "@/lib/sd-stage-content";
 import { normalizeSD05NativeContent } from "@/lib/sd05-contract";
 import { SD_CODES, type SDCode } from "@/lib/sd-room-types";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       status: publish ? "published" : "draft",
       changeSummary: publish ? `${code} relu et publié` : `Mise à jour manuelle ${code}`,
     });
+
+    if (publish && code === "SD04") {
+      const { error } = await getSupabaseAdmin()
+        .from("deal_rooms")
+        .update({ proposal_sent_at: new Date().toISOString() })
+        .eq("id", bundle.room.id)
+        .is("proposal_sent_at", null);
+      if (error) throw error;
+    }
+
     return Response.json({ document });
   } catch (error) {
     return apiError(error);

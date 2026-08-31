@@ -9,6 +9,9 @@ import { SD03SolutionBuilder } from "@/components/sd03-solution-builder";
 import { SD04OfferBuilder } from "@/components/sd04-offer-builder";
 import { SD05ContractBuilder } from "@/components/sd05-contract-builder";
 import { SDDocumentAnalyticsStrip } from "@/components/sd-document-analytics-strip";
+import { SDQuickContractManager } from "@/components/sd-quick-contract-manager";
+import { SDQuickDealTimeline } from "@/components/sd-quick-deal-timeline";
+import { SDQuickProposalBuilder } from "@/components/sd-quick-proposal-builder";
 import { SDRoomBrandingEditorV2 } from "@/components/sd-room-branding-editor-v2";
 import { SDRoomEditor } from "@/components/sd-room-editor";
 import { SDRoomPreview } from "@/components/sd-room-preview";
@@ -31,12 +34,13 @@ const enterpriseTabs: Array<{ value: WorkspaceTab; label: string; icon: typeof F
 
 const quickTabs: Array<{ value: WorkspaceTab; label: string; icon: typeof FileText }> = [
   { value: "offer", label: "Propal", icon: Presentation },
-  { value: "contract", label: "Contrat & signature", icon: FileSignature },
+  { value: "contract", label: "Contrat", icon: FileSignature },
 ];
 
 export function SDRoomWorkspace({ dealId }: { dealId: string }) {
   const [tab, setTab] = useState<WorkspaceTab>("content");
   const [roomMode, setRoomMode] = useState<SDRoomMode | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,15 +49,8 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
         const response = await fetch("/api/sd-rooms", { cache: "no-store" });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.message || payload.error || "Chargement impossible");
-        const room = (payload.results || []).find((item: { id?: string; hubspot_deal_id?: string; room_mode?: SDRoomMode }) => item.hubspot_deal_id === dealId);
+        const room = (payload.results || []).find((item: { hubspot_deal_id?: string; room_mode?: SDRoomMode }) => item.hubspot_deal_id === dealId);
         const mode: SDRoomMode = room?.room_mode === "enterprise" ? "enterprise" : "standard";
-        if (mode === "standard" && room?.id) {
-          await fetch("/api/sd-rooms", {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ roomId: room.id, roomMode: "standard" }),
-          });
-        }
         if (cancelled) return;
         setRoomMode(mode);
         const requested = new URLSearchParams(window.location.search).get("tab") as WorkspaceTab | null;
@@ -70,6 +67,7 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
   const tabs = useMemo(() => roomMode === "standard" ? quickTabs : enterpriseTabs, [roomMode]);
   const analyticsCode = CODE_BY_TAB[tab];
   const quickDeal = roomMode === "standard";
+  const changed = () => setRefreshKey(value => value + 1);
 
   return <div className="min-h-screen bg-background">
     <div className="sticky top-0 z-[60] border-b border-border bg-background/95 backdrop-blur">
@@ -85,8 +83,14 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
         <span className="ml-auto hidden shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:block">{quickDeal ? "Deal rapide" : "Deal entreprise"} · Gando</span>
       </div>
     </div>
-    {analyticsCode ? <SDDocumentAnalyticsStrip dealId={dealId} code={analyticsCode} /> : null}
-    {tab === "contract" ? <FortuneoTestResign dealId={dealId} /> : null}
-    {tab === "content" ? <div className="sd01-workspace w-full min-w-0"><SDRoomEditor dealId={dealId} /><style jsx global>{`.sd01-workspace nav[aria-label="Parcours SD"] { display: none !important; }`}</style></div> : tab === "plan" ? <SD02PlanBuilder dealId={dealId} /> : tab === "solution" ? <SD03SolutionBuilder dealId={dealId} /> : tab === "offer" ? <SD04OfferBuilder dealId={dealId} /> : tab === "contract" ? <SD05ContractBuilder dealId={dealId} /> : tab === "branding" ? <SDRoomBrandingEditorV2 dealId={dealId} /> : <SDRoomPreview dealId={dealId} />}
+
+    {quickDeal ? <SDQuickDealTimeline dealId={dealId} refreshKey={refreshKey} /> : analyticsCode ? <SDDocumentAnalyticsStrip dealId={dealId} code={analyticsCode} /> : null}
+    {!quickDeal && tab === "contract" ? <FortuneoTestResign dealId={dealId} /> : null}
+
+    {quickDeal ? (
+      tab === "contract" ? <SDQuickContractManager dealId={dealId} onChanged={changed} /> : <SDQuickProposalBuilder dealId={dealId} onChanged={changed} />
+    ) : tab === "content" ? (
+      <div className="sd01-workspace w-full min-w-0"><SDRoomEditor dealId={dealId} /><style jsx global>{`.sd01-workspace nav[aria-label="Parcours SD"] { display: none !important; } .sd01-workspace a[href^="/deal-room/"] { display: none !important; }`}</style></div>
+    ) : tab === "plan" ? <SD02PlanBuilder dealId={dealId} /> : tab === "solution" ? <SD03SolutionBuilder dealId={dealId} /> : tab === "offer" ? <SD04OfferBuilder dealId={dealId} /> : tab === "contract" ? <SD05ContractBuilder dealId={dealId} /> : tab === "branding" ? <SDRoomBrandingEditorV2 dealId={dealId} /> : <SDRoomPreview dealId={dealId} />}
   </div>;
 }
