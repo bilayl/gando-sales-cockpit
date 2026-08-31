@@ -5,6 +5,7 @@ export type SDDocumentStatus = "draft" | "review" | "published" | "validated";
 export type SDRoomStatus = "draft" | "published" | "archived";
 export type SDRoomAccessMode = "email" | "allowlist";
 export type SDRoomBrandTheme = "gando" | "gradient" | "dark" | "light";
+export type SDRoomMode = "standard" | "enterprise";
 
 export const SD_STAGE_META: Record<SDCode, { title: string; subtitle: string }> = {
   SD01: { title: "Synthèse", subtitle: "Contexte, enjeux, processus, décisions et prochaines étapes" },
@@ -74,6 +75,7 @@ export type SDRoomRecord = {
   brand_title: string | null;
   brand_subtitle: string | null;
   meeting_booking_url: string | null;
+  room_mode: SDRoomMode;
   share_token: string;
   access_mode: SDRoomAccessMode;
   allowed_emails: string[];
