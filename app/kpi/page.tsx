@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { KpiAppSidebar } from "@/components/kpi-app-sidebar"
 import { KpiSiteHeader } from "@/components/kpi-site-header"
 import { KpiWorkspace } from "@/components/kpi-workspace"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { SidebarInset, SidebarProvider } from "@/components/kpi-shadcn/ui/sidebar"
 import { getCockpitAccess } from "@/lib/cockpit-access"
 
 export const dynamic = "force-dynamic"
@@ -15,15 +15,15 @@ export default async function KpiPage() {
     <SidebarProvider
       style={
         {
-          "--sidebar-width": "18rem",
-          "--header-height": "3.25rem",
+          "--sidebar-width": "16rem",
+          "--header-height": "3.5rem",
         } as React.CSSProperties
       }
     >
       <KpiAppSidebar email={access.email} role={access.role} />
-      <SidebarInset>
+      <SidebarInset className="min-w-0 overflow-hidden md:peer-data-[variant=inset]:border md:peer-data-[variant=inset]:border-border">
         <KpiSiteHeader />
-        <div className="@container/main flex flex-1 flex-col">
+        <div className="@container/main flex min-w-0 flex-1 flex-col">
           <KpiWorkspace canEdit={access.role !== "commercial"} />
         </div>
       </SidebarInset>
