@@ -1,11 +1,10 @@
 "use client"
 
-import { BarChart3, ChartNoAxesCombined, Gauge, History, Infinity } from "lucide-react"
+import { ChartNoAxesCombined, Gauge, History, Infinity } from "lucide-react"
 import { BusinessKpiDashboard } from "@/components/business-kpi-dashboard"
 import { KpiDashboardOverview } from "@/components/kpi-dashboard-overview"
 import { KpiExecutiveOverview } from "@/components/kpi-executive-overview"
 import { ValueKpiFunnel } from "@/components/value-kpi-funnel"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/kpi-shadcn/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/kpi-shadcn/ui/tabs"
 
 const VIEWS = [
@@ -15,16 +14,30 @@ const VIEWS = [
   { id: "history", label: "Mensuel & simulation", icon: History },
 ] as const
 
+const LEGACY_CLEANUP = [
+  "[&_.rounded-3xl]:!rounded-xl",
+  "[&_.rounded-2xl]:!rounded-xl",
+  "[&_.border-slate-200]:!border-border",
+  "[&_.bg-white]:!bg-card",
+  "[&_.bg-slate-50]:!bg-muted/40",
+  "[&_.text-slate-950]:!text-foreground",
+  "[&_.text-slate-900]:!text-foreground",
+  "[&_.text-slate-600]:!text-muted-foreground",
+  "[&_.text-slate-500]:!text-muted-foreground",
+  "[&_.text-slate-400]:!text-muted-foreground",
+  "[&_.shadow-sm]:!shadow-none",
+].join(" ")
+
 export function KpiWorkspace({ canEdit }: { canEdit: boolean }) {
   return (
     <Tabs defaultValue="lifetime" className="flex min-w-0 flex-1 flex-col">
-      <div className="border-b bg-background px-4 py-3 lg:px-6">
-        <TabsList className="h-auto max-w-full justify-start overflow-x-auto bg-muted/60 p-1">
+      <div className="sticky top-[var(--header-height,3.5rem)] z-20 border-b bg-background/95 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:px-6">
+        <TabsList className="h-9 max-w-full justify-start overflow-x-auto bg-muted/60 p-1">
           {VIEWS.map(item => {
             const Icon = item.icon
             return (
-              <TabsTrigger key={item.id} value={item.id} className="gap-2 px-3 py-2 text-xs sm:text-sm">
-                <Icon className="size-4" />
+              <TabsTrigger key={item.id} value={item.id} className="h-7 gap-1.5 px-2.5 text-xs">
+                <Icon className="size-3.5" />
                 {item.label}
               </TabsTrigger>
             )
@@ -41,32 +54,13 @@ export function KpiWorkspace({ canEdit }: { canEdit: boolean }) {
       </TabsContent>
 
       <TabsContent value="funnel" className="m-0 min-w-0 p-4 lg:p-6">
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-4">
-              <div className="flex items-center gap-2">
-                <ChartNoAxesCombined className="size-4 text-primary" />
-                <CardTitle className="text-base">Funnel & économie</CardTitle>
-              </div>
-              <CardDescription>Conversions, unit economics, campagnes et saisie des KPI opérationnels.</CardDescription>
-            </CardHeader>
-          </Card>
+        <div className={LEGACY_CLEANUP}>
           <ValueKpiFunnel canEdit={canEdit} />
         </div>
       </TabsContent>
 
       <TabsContent value="history" className="m-0 min-w-0 p-4 lg:p-6">
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-4">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="size-4 text-primary" />
-                <CardTitle className="text-base">Mensuel & simulation</CardTitle>
-              </div>
-              <CardDescription>Saisie mensuelle, ratios calculés automatiquement et projections à partir des données réelles.</CardDescription>
-            </CardHeader>
-            <CardContent className="hidden" />
-          </Card>
+        <div className={LEGACY_CLEANUP}>
           <BusinessKpiDashboard canEdit={canEdit} />
         </div>
       </TabsContent>
