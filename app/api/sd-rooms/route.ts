@@ -23,37 +23,13 @@ function bookingUrl(value: unknown) {
   return url;
 }
 
-async function syncQuickPrerequisites(roomId: string, mode: SDRoomMode) {
-  const admin = getSupabaseAdmin();
-  if (mode === "standard") {
-    const { error } = await admin
-      .from("sd_documents")
-      .update({ status: "validated" })
-      .eq("room_id", roomId)
-      .in("code", ["SD01", "SD02"])
-      .eq("version", 1)
-      .is("published_version", null);
-    if (error) throw error;
-    return;
-  }
-
-  const { error } = await admin
-    .from("sd_documents")
-    .update({ status: "draft" })
-    .eq("room_id", roomId)
-    .in("code", ["SD01", "SD02"])
-    .eq("version", 1)
-    .is("published_version", null);
-  if (error) throw error;
-}
-
 export async function GET() {
   try {
     await requireSDInternalAccess();
     const admin = getSupabaseAdmin();
     const { data: rooms, error: roomsError } = await admin
       .from("deal_rooms")
-      .select("id,hubspot_deal_id,title,company_name,crm_link,prospect_logo_url,brand_banner_image_url,brand_theme,brand_title,brand_subtitle,meeting_booking_url,room_mode,share_token,status,current_stage,published_at,last_shared_at,created_at,updated_at")
+      .select("id,hubspot_deal_id,title,company_name,crm_link,prospect_logo_url,brand_banner_image_url,brand_theme,brand_title,brand_subtitle,meeting_booking_url,room_mode,share_token,status,current_stage,published_at,last_shared_at,first_contact_at,proposal_sent_at,proposal_agreed_at,contract_uploaded_at,contract_signed_at,contract_signed_by_email,created_at,updated_at")
       .order("updated_at", { ascending: false })
       .limit(250);
 
@@ -139,7 +115,8 @@ export async function POST(request: NextRequest) {
     const selectedRoomMode = roomMode(body?.roomMode);
     const meetingBookingUrl = bookingUrl(body?.meetingBookingUrl);
     const brandTitle = companyName;
-    const brandSubtitle = "Espace de collaboration";
+    const brandSubtitle = selectedRoomMode === "standard" ? "Proposition commerciale" : "Espace de collaboration";
+    const now = new Date().toISOString();
 
     if (!companyName) throw Object.assign(new Error("Le nom de l’organisation est obligatoire."), { status: 400 });
     if (!title) throw Object.assign(new Error("Le nom de la dealroom est obligatoire."), { status: 400 });
@@ -164,6 +141,7 @@ export async function POST(request: NextRequest) {
         room_mode: selectedRoomMode,
         share_token: shareToken,
         created_by_email: createdByEmail,
+        first_contact_at: now,
       })
       .select("*")
       .single();
@@ -179,7 +157,6 @@ export async function POST(request: NextRequest) {
       })),
     );
     if (documentsError) throw documentsError;
-    await syncQuickPrerequisites(room.id, selectedRoomMode);
 
     return Response.json({ room, editorKey, crmConnected: false }, { status: 201 });
   } catch (error) {
@@ -203,7 +180,6 @@ export async function PATCH(request: NextRequest) {
       .single();
     if (error) throw error;
 
-    await syncQuickPrerequisites(roomId, selectedRoomMode);
     return Response.json({ room });
   } catch (error) {
     return apiError(error);
