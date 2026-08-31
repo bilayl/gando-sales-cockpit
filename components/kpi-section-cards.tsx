@@ -1,6 +1,5 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react"
 import { Badge } from "@/components/kpi-shadcn/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/kpi-shadcn/ui/card"
 import type { KpiDashboardSummary } from "@/lib/kpi-dashboard"
 
 function euro(value: number | null | undefined, digits = 0) {
@@ -20,11 +19,18 @@ function percent(value: number | null | undefined, digits = 1) {
 
 function TrendBadge({ value }: { value: number | null }) {
   if (value == null) {
-    return <Badge variant="outline" className="h-6 rounded-md px-2 text-[11px] font-medium text-muted-foreground">—</Badge>
+    return <span className="text-[10px] text-muted-foreground/60">Pas de comparaison</span>
   }
   const up = value >= 0
   return (
-    <Badge variant="outline" className="h-6 gap-1 rounded-md px-2 text-[11px] font-medium tabular-nums">
+    <Badge
+      variant="outline"
+      className={
+        up
+          ? "h-5 gap-0.5 rounded-[5px] border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-medium text-emerald-700 shadow-none"
+          : "h-5 gap-0.5 rounded-[5px] border-rose-200 bg-rose-50 px-1.5 text-[10px] font-medium text-rose-700 shadow-none"
+      }
+    >
       {up ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
       {up ? "+" : "-"}{percent(Math.abs(value))}
     </Badge>
@@ -33,28 +39,31 @@ function TrendBadge({ value }: { value: number | null }) {
 
 export function KpiSectionCards({ summary }: { summary: KpiDashboardSummary }) {
   const cards = [
-    { label: "CA Gando cumulé", value: euro(summary.totalRevenue), trend: summary.revenueGrowth, helper: `Take rate ${percent(summary.weightedTakeRate, 2)}` },
+    { label: "CA Gando", value: euro(summary.totalRevenue), trend: summary.revenueGrowth, helper: `Take rate ${percent(summary.weightedTakeRate, 2)}` },
     { label: "TDV sécurisé", value: euro(summary.totalTdv), trend: summary.tdvGrowth, helper: `Caution moyenne ${euro(summary.avgDeposit)}` },
-    { label: "Cautions activées", value: integer(summary.totalDeposits), trend: summary.depositGrowth, helper: `${euro(summary.totalDeposits ? summary.totalRevenue / summary.totalDeposits : null, 2)} / caution` },
+    { label: "Cautions", value: integer(summary.totalDeposits), trend: summary.depositGrowth, helper: `${euro(summary.totalDeposits ? summary.totalRevenue / summary.totalDeposits : null, 2)} de CA / caution` },
     { label: "Loueurs actifs", value: integer(summary.currentMau), trend: summary.mauGrowth, helper: `ARPU ${euro(summary.weightedArpu, 2)}` },
   ]
 
   return (
-    <div id="kpi-overview-cards" className="grid gap-4 px-4 sm:grid-cols-2 lg:px-6 xl:grid-cols-4">
-      {cards.map(card => (
-        <Card key={card.label} className="shadow-sm">
-          <CardHeader className="space-y-0 pb-2">
-            <div className="flex items-center justify-between gap-3">
-              <CardDescription className="truncate text-xs font-medium">{card.label}</CardDescription>
+    <div className="px-4 lg:px-5">
+      <div id="kpi-overview-cards" className="grid overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card, index) => (
+          <section
+            key={card.label}
+            className={`group min-w-0 px-4 py-4 transition-colors hover:bg-muted/25 ${index > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-l-0 sm:border-t xl:border-l xl:border-t-0" : ""}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="truncate text-[11px] font-medium text-muted-foreground">{card.label}</div>
               <TrendBadge value={card.trend} />
             </div>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{card.value}</CardTitle>
-            <p className="mt-2 text-xs text-muted-foreground">{card.helper}</p>
-          </CardContent>
-        </Card>
-      ))}
+            <div className="mt-3 truncate text-[28px] font-semibold leading-none tracking-[-0.035em] text-foreground tabular-nums">
+              {card.value}
+            </div>
+            <div className="mt-3 truncate text-[11px] text-muted-foreground/80">{card.helper}</div>
+          </section>
+        ))}
+      </div>
     </div>
   )
 }
