@@ -23,7 +23,7 @@ function ChangeBadge({ value }: { value: number | null }) {
   if (value == null) return <span className="text-xs text-muted-foreground">—</span>
   const up = value >= 0
   return (
-    <Badge variant="outline" className="rounded-full font-normal tabular-nums">
+    <Badge variant="outline" className="h-6 gap-1 rounded-md px-2 text-[11px] font-medium tabular-nums">
       {up ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
       {up ? "+" : "-"}{percent(Math.abs(value))}
     </Badge>
@@ -34,16 +34,16 @@ export function KpiDataTable({ data }: { data: KpiMonthlyPoint[] }) {
   const rows = [...data].reverse()
 
   return (
-    <Card id="kpi-history" className="shadow-sm">
+    <Card id="kpi-history" className="overflow-hidden shadow-sm">
       <CardHeader className="border-b">
         <CardTitle className="text-base">Chiffres mensuels</CardTitle>
         <CardDescription>Données brutes et ratios calculés automatiquement, mois par mois.</CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        <Table>
-          <TableHeader>
+        <Table className="min-w-[980px]">
+          <TableHeader className="bg-muted/35">
             <TableRow>
-              <TableHead className="pl-6">Mois</TableHead>
+              <TableHead className="sticky left-0 z-10 min-w-[120px] bg-muted/95 pl-6">Mois</TableHead>
               <TableHead>CA Gando</TableHead>
               <TableHead>Δ CA</TableHead>
               <TableHead>TDV</TableHead>
@@ -58,7 +58,7 @@ export function KpiDataTable({ data }: { data: KpiMonthlyPoint[] }) {
           <TableBody>
             {rows.map(row => (
               <TableRow key={row.key}>
-                <TableCell className="pl-6 font-medium">{row.label}</TableCell>
+                <TableCell className="sticky left-0 z-[1] bg-card pl-6 font-medium">{row.label}</TableCell>
                 <TableCell className="font-medium tabular-nums">{euro(row.revenue, 2)}</TableCell>
                 <TableCell><ChangeBadge value={row.revenueGrowth} /></TableCell>
                 <TableCell className="tabular-nums">{euro(row.tdv)}</TableCell>
