@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, FileSignature, FileText, ListChecks, Palette, Presentation, Settings2 } from "lucide-react";
 import { FortuneoTestResign } from "@/components/fortuneo-test-resign";
 import { SD02PlanBuilder } from "@/components/sd02-plan-builder";
@@ -16,9 +16,16 @@ import { cn } from "@/lib/utils";
 
 type WorkspaceTab = "content" | "plan" | "solution" | "offer" | "contract" | "branding" | "preview";
 const CODE_BY_TAB: Partial<Record<WorkspaceTab, SDCode>> = { content: "SD01", plan: "SD02", solution: "SD03", offer: "SD04", contract: "SD05" };
+const WORKSPACE_TABS: WorkspaceTab[] = ["content", "plan", "solution", "offer", "contract", "branding", "preview"];
 
 export function SDRoomWorkspace({ dealId }: { dealId: string }) {
   const [tab, setTab] = useState<WorkspaceTab>("content");
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab") as WorkspaceTab | null;
+    if (requested && WORKSPACE_TABS.includes(requested)) setTab(requested);
+  }, []);
+
   const tabs: Array<{ value: WorkspaceTab; label: string; icon: typeof FileText }> = [
     { value: "content", label: "SD01 · Synthèse", icon: FileText },
     { value: "plan", label: "SD02 · Plan d’action", icon: ListChecks },
