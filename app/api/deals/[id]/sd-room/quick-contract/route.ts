@@ -54,6 +54,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!file.size || file.size > MAX_FILE_SIZE) throw Object.assign(new Error("Le contrat doit faire moins de 20 Mo."), { status: 400 });
 
     const admin = getSupabaseAdmin();
+    const previous = currentContent(bundle);
+    const previousPath = storagePath(previous.contractUrl);
     const path = `sd05/${safeSegment(id)}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
     const uploaded = await admin.storage.from(BUCKET).upload(path, new Uint8Array(await file.arrayBuffer()), {
       contentType: file.type || (ext === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
@@ -61,10 +63,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       upsert: false,
     });
     if (uploaded.error) throw uploaded.error;
+    if (previousPath) await admin.storage.from(BUCKET).remove([previousPath]);
     const { data: publicUrl } = admin.storage.from(BUCKET).getPublicUrl(uploaded.data.path);
 
     const content: SD05Content = {
-      ...currentContent(bundle),
+      ...previous,
       contractTitle: file.name,
       contractUrl: publicUrl.publicUrl,
       contractStatus: "client_review",
@@ -81,7 +84,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const now = new Date().toISOString();
     const { data: room, error: roomError } = await admin
       .from("deal_rooms")
-      .update({ contract_uploaded_at: now })
+      .update({ contract_uploaded_at: now, contract_signed_at: null, contract_signed_by_email: null })
       .eq("id", bundle.room.id)
       .select("*")
       .single();
@@ -135,10 +138,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
-    const userEmail = await requireSDInternalAccess();
+    await requireSDInternalAccess();
     const bundle = await getSDRoomBundle(id);
     if (!bundle.room) throw Object.assign(new Error("Deal Room introuvable."), { status: 404 });
     const current = currentContent(bundle);
@@ -148,15 +151,15 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       const removed = await admin.storage.from(BUCKET).remove([path]);
       if (removed.error) throw removed.error;
     }
-    const document = await saveSDDocument({
-      roomId: bundle.room.id,
-      code: "SD05",
-      content: createEmptySD05(),
-      sourceMode: "manual",
-      updatedByEmail: userEmail,
-      status: "draft",
-      changeSummary: "Contrat retiré du Deal rapide",
-    });
+    const empty = createEmptySD05();
+    const { data: document, error: documentError } = await admin
+      .from("sd_documents")
+      .update({ content: empty, published_content: null, status: "draft", published_at: null, published_version: null, validated_at: null, validated_by_email: null, validated_by_first_name: null, validated_by_last_name: null })
+      .eq("room_id", bundle.room.id)
+      .eq("code", "SD05")
+      .select("*")
+      .single();
+    if (documentError) throw documentError;
     const { data: room, error } = await admin
       .from("deal_rooms")
       .update({ contract_uploaded_at: null, contract_signed_at: null, contract_signed_by_email: null })
