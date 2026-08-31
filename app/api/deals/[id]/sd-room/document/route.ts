@@ -35,7 +35,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const publish = Boolean(body?.publish);
     if (publish) {
-      const requiredCodes = REQUIRED_BEFORE_PUBLISH[code] || [];
+      const quickDeal = bundle.room.room_mode === "standard";
+      const requiredCodes = quickDeal ? [] : REQUIRED_BEFORE_PUBLISH[code] || [];
       const missing = requiredCodes.filter(requiredCode => bundle.documents.find(document => document.code === requiredCode)?.status !== "validated");
       if (missing.length) {
         throw Object.assign(new Error(`${missing.join(" et ")} doivent être validés par le client avant de publier ${code}.`), { status: 409 });

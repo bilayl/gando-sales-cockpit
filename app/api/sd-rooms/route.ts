@@ -23,6 +23,30 @@ function bookingUrl(value: unknown) {
   return url;
 }
 
+async function syncQuickPrerequisites(roomId: string, mode: SDRoomMode) {
+  const admin = getSupabaseAdmin();
+  if (mode === "standard") {
+    const { error } = await admin
+      .from("sd_documents")
+      .update({ status: "validated" })
+      .eq("room_id", roomId)
+      .in("code", ["SD01", "SD02"])
+      .eq("version", 1)
+      .is("published_version", null);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await admin
+    .from("sd_documents")
+    .update({ status: "draft" })
+    .eq("room_id", roomId)
+    .in("code", ["SD01", "SD02"])
+    .eq("version", 1)
+    .is("published_version", null);
+  if (error) throw error;
+}
+
 export async function GET() {
   try {
     await requireSDInternalAccess();
@@ -155,6 +179,7 @@ export async function POST(request: NextRequest) {
       })),
     );
     if (documentsError) throw documentsError;
+    await syncQuickPrerequisites(room.id, selectedRoomMode);
 
     return Response.json({ room, editorKey, crmConnected: false }, { status: 201 });
   } catch (error) {
@@ -169,14 +194,16 @@ export async function PATCH(request: NextRequest) {
     const roomId = String(body?.roomId || "").trim();
     if (!roomId) throw Object.assign(new Error("La dealroom est obligatoire."), { status: 400 });
 
+    const selectedRoomMode = roomMode(body?.roomMode);
     const { data: room, error } = await getSupabaseAdmin()
       .from("deal_rooms")
-      .update({ room_mode: roomMode(body?.roomMode) })
+      .update({ room_mode: selectedRoomMode })
       .eq("id", roomId)
       .select("id,room_mode")
       .single();
     if (error) throw error;
 
+    await syncQuickPrerequisites(roomId, selectedRoomMode);
     return Response.json({ room });
   } catch (error) {
     return apiError(error);
