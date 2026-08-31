@@ -67,7 +67,9 @@ export type KpiDashboardSummary = {
   weightedArpu: number | null
   avgDeposit: number | null
   revenueGrowth: number | null
+  tdvGrowth: number | null
   depositGrowth: number | null
+  mauGrowth: number | null
   prospects: number
   meetings: number
   rentersActivated: number
@@ -165,6 +167,9 @@ export function buildKpiDashboardSummary(
   const firstDeposits = core.find(row => known(row.deposits) && n(row.deposits) > 0)
   const lastDeposits = [...core].reverse().find(row => known(row.deposits) && n(row.deposits) > 0)
 
+  const last = core[core.length - 1]
+  const previous = core.length > 1 ? core[core.length - 2] : null
+
   const prospects = valueRows.reduce((sum, row) => sum + n(row.prospectsContacted), 0)
   const meetings = valueRows.reduce((sum, row) => sum + n(row.meetings), 0)
   const rentersActivated = valueRows.reduce((sum, row) => sum + n(row.rentersActivated), 0)
@@ -177,7 +182,6 @@ export function buildKpiDashboardSummary(
   const campaignCash = campaignRows.reduce((sum, row) => sum + n(row.cashCollected), 0)
 
   const first = core[0]
-  const last = core[core.length - 1]
   const spanMonths = Math.max(1, key(last.year, last.monthNumber) - key(first.year, first.monthNumber) + 1)
 
   return {
@@ -192,7 +196,9 @@ export function buildKpiDashboardSummary(
     weightedArpu: ratio(arpuRevenue, renterMonths),
     avgDeposit: ratio(totalTdv, totalDeposits),
     revenueGrowth: firstRevenue && lastRevenue ? geometricMonthlyGrowth(firstRevenue.revenue, lastRevenue.revenue, key(lastRevenue.year, lastRevenue.monthNumber) - key(firstRevenue.year, firstRevenue.monthNumber)) : null,
+    tdvGrowth: previous ? growth(last.tdv, previous.tdv) : null,
     depositGrowth: firstDeposits && lastDeposits ? geometricMonthlyGrowth(firstDeposits.deposits, lastDeposits.deposits, key(lastDeposits.year, lastDeposits.monthNumber) - key(firstDeposits.year, firstDeposits.monthNumber)) : null,
+    mauGrowth: previous ? growth(last.activeRenters, previous.activeRenters) : null,
     prospects,
     meetings,
     rentersActivated,
