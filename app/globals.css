@@ -173,7 +173,53 @@ input:-webkit-autofill:focus {
 .animate-fade-in { animation: fade-in 180ms ease-out both; }
 @keyframes fade-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 
-/* KPI workspace: intentionally flatter and denser, close to modern CRM/reporting tools. */
+/* KPI workspace: a flatter, denser reporting surface inspired by modern CRM workspaces. */
+.kpi-attio-shell {
+  --background: #ffffff;
+  --foreground: #25262a;
+  --card: #ffffff;
+  --card-foreground: #25262a;
+  --popover: #ffffff;
+  --popover-foreground: #25262a;
+  --secondary: #f5f5f6;
+  --secondary-foreground: #333438;
+  --muted: #f6f6f7;
+  --muted-foreground: #777981;
+  --accent: #efeff1;
+  --accent-foreground: #2c2d31;
+  --border: #e6e6e8;
+  --input: #dddddf;
+  --sidebar: #f5f5f6;
+  --sidebar-foreground: #37383d;
+  --sidebar-accent: #eaeaed;
+  --sidebar-accent-foreground: #222328;
+  --sidebar-border: #e1e1e4;
+  background: #f5f5f6;
+}
+
+.dark .kpi-attio-shell {
+  --background: #171719;
+  --foreground: #eeeeef;
+  --card: #1c1c1f;
+  --card-foreground: #eeeeef;
+  --popover: #202024;
+  --popover-foreground: #eeeeef;
+  --secondary: #27272b;
+  --secondary-foreground: #ececef;
+  --muted: #242428;
+  --muted-foreground: #9a9aa2;
+  --accent: #2b2b30;
+  --accent-foreground: #f2f2f3;
+  --border: #303036;
+  --input: #3a3a40;
+  --sidebar: #141416;
+  --sidebar-foreground: #d9d9dd;
+  --sidebar-accent: #252529;
+  --sidebar-accent-foreground: #f0f0f2;
+  --sidebar-border: #2a2a2f;
+  background: #141416;
+}
+
 .kpi-attio .shadow,
 .kpi-attio .shadow-sm,
 .kpi-attio .shadow-md,
@@ -193,6 +239,13 @@ input:-webkit-autofill:focus {
   background-image: none !important;
 }
 
+.kpi-attio h1 {
+  font-size: 1.0625rem !important;
+  line-height: 1.5rem !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.02em !important;
+}
+
 .kpi-attio table {
   font-variant-numeric: tabular-nums;
 }
@@ -205,6 +258,10 @@ input:-webkit-autofill:focus {
 
 .kpi-attio [role="tablist"] {
   box-shadow: none !important;
+}
+
+.kpi-attio .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1rem !important;
 }
 
 @media (max-width: 900px) {
