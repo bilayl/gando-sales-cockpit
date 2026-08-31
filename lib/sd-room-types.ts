@@ -11,8 +11,8 @@ export const SD_STAGE_META: Record<SDCode, { title: string; subtitle: string }> 
   SD01: { title: "Synthèse", subtitle: "Contexte, enjeux, processus, décisions et prochaines étapes" },
   SD02: { title: "Plan d’action", subtitle: "Étapes partagées · ordre, responsables, échéances et statut" },
   SD03: { title: "Solution & intégration", subtitle: "Étape facultative · périmètre, pilote, données et déploiement" },
-  SD04: { title: "Pitch deck commercial", subtitle: "Étape facultative · récit commercial, ROI, preuves, offre et décision" },
-  SD05: { title: "Contrat & signature", subtitle: "Étape obligatoire · version contractuelle, points juridiques et circuit de signature" },
+  SD04: { title: "Proposition commerciale", subtitle: "Offre en ligne, prix, conditions et accord client" },
+  SD05: { title: "Contrat & signature", subtitle: "Contrat, fichier signé et suivi de signature" },
 };
 
 export type SD01Stakeholder = {
@@ -84,6 +84,12 @@ export type SDRoomRecord = {
   created_by_email: string | null;
   published_at: string | null;
   last_shared_at: string | null;
+  first_contact_at: string | null;
+  proposal_sent_at: string | null;
+  proposal_agreed_at: string | null;
+  contract_uploaded_at: string | null;
+  contract_signed_at: string | null;
+  contract_signed_by_email: string | null;
   created_at: string;
   updated_at: string;
 };
