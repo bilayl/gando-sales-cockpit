@@ -1,7 +1,7 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/kpi-shadcn/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/kpi-shadcn/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/kpi-shadcn/ui/table"
 import type { KpiMonthlyPoint } from "@/lib/kpi-dashboard"
 
 function euro(value: number | null | undefined, digits = 0) {
@@ -23,9 +23,9 @@ function ChangeBadge({ value }: { value: number | null }) {
   if (value == null) return <span className="text-xs text-muted-foreground">—</span>
   const up = value >= 0
   return (
-    <Badge variant="outline" className={up ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}>
-      {up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-      {percent(Math.abs(value))}
+    <Badge variant="outline" className="rounded-full font-normal tabular-nums">
+      {up ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
+      {up ? "+" : "-"}{percent(Math.abs(value))}
     </Badge>
   )
 }
@@ -34,16 +34,16 @@ export function KpiDataTable({ data }: { data: KpiMonthlyPoint[] }) {
   const rows = [...data].reverse()
 
   return (
-    <Card className="border-border/80 shadow-sm">
-      <CardHeader className="border-b border-border/70">
+    <Card id="kpi-history" className="shadow-sm">
+      <CardHeader className="border-b">
         <CardTitle className="text-base">Chiffres mensuels</CardTitle>
-        <CardDescription>Les données brutes et les ratios calculés automatiquement, mois par mois.</CardDescription>
+        <CardDescription>Données brutes et ratios calculés automatiquement, mois par mois.</CardDescription>
       </CardHeader>
       <CardContent className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="pl-5">Mois</TableHead>
+              <TableHead className="pl-6">Mois</TableHead>
               <TableHead>CA Gando</TableHead>
               <TableHead>Δ CA</TableHead>
               <TableHead>TDV</TableHead>
@@ -52,22 +52,22 @@ export function KpiDataTable({ data }: { data: KpiMonthlyPoint[] }) {
               <TableHead>Δ cautions</TableHead>
               <TableHead>MAU</TableHead>
               <TableHead>ARPU</TableHead>
-              <TableHead className="pr-5">Caution moy.</TableHead>
+              <TableHead className="pr-6">Caution moy.</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map(row => (
               <TableRow key={row.key}>
-                <TableCell className="pl-5 font-semibold">{row.label}</TableCell>
-                <TableCell className="font-semibold">{euro(row.revenue, 2)}</TableCell>
+                <TableCell className="pl-6 font-medium">{row.label}</TableCell>
+                <TableCell className="font-medium tabular-nums">{euro(row.revenue, 2)}</TableCell>
                 <TableCell><ChangeBadge value={row.revenueGrowth} /></TableCell>
-                <TableCell>{euro(row.tdv)}</TableCell>
-                <TableCell>{percent(row.takeRate, 2)}</TableCell>
-                <TableCell>{integer(row.deposits)}</TableCell>
+                <TableCell className="tabular-nums">{euro(row.tdv)}</TableCell>
+                <TableCell className="tabular-nums">{percent(row.takeRate, 2)}</TableCell>
+                <TableCell className="tabular-nums">{integer(row.deposits)}</TableCell>
                 <TableCell><ChangeBadge value={row.depositGrowth} /></TableCell>
-                <TableCell>{integer(row.activeRenters)}</TableCell>
-                <TableCell>{euro(row.arpu, 2)}</TableCell>
-                <TableCell className="pr-5">{euro(row.avgDeposit, 0)}</TableCell>
+                <TableCell className="tabular-nums">{integer(row.activeRenters)}</TableCell>
+                <TableCell className="tabular-nums">{euro(row.arpu, 2)}</TableCell>
+                <TableCell className="pr-6 tabular-nums">{euro(row.avgDeposit)}</TableCell>
               </TableRow>
             ))}
             {!rows.length ? <TableRow><TableCell colSpan={10} className="h-28 text-center text-muted-foreground">Aucune donnée mensuelle.</TableCell></TableRow> : null}
