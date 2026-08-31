@@ -34,7 +34,7 @@ function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6 py-6">
       <div className="space-y-2 px-4 lg:px-6"><Skeleton className="h-4 w-28" /><Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-full max-w-xl" /></div>
-      <div className="grid grid-cols-1 gap-4 px-4 lg:px-6 @xl/main:grid-cols-2">{[0, 1, 2, 3].map(item => <Skeleton key={item} className="h-44 rounded-xl" />)}</div>
+      <div className="grid gap-4 px-4 sm:grid-cols-2 lg:px-6 xl:grid-cols-4">{[0, 1, 2, 3].map(item => <Skeleton key={item} className="h-28 rounded-xl" />)}</div>
       <div className="grid gap-4 px-4 lg:px-6 @5xl/main:grid-cols-[minmax(0,1.6fr)_360px]"><Skeleton className="h-[420px] rounded-xl" /><Skeleton className="h-[420px] rounded-xl" /></div>
     </div>
   )
@@ -73,11 +73,14 @@ export function KpiDashboardOverview() {
   if (error) return <div className="m-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive lg:m-6">{error}</div>
   if (!summary) return <div className="p-12 text-center text-sm text-muted-foreground">Aucune donnée KPI disponible.</div>
 
-  const coverageAverage = (summary.coverage.revenue + summary.coverage.tdv + summary.coverage.deposits + summary.coverage.activeRenters) / (summary.coverage.total * 4)
+  const coverageDenominator = summary.coverage.total * 4
+  const coverageAverage = coverageDenominator > 0
+    ? (summary.coverage.revenue + summary.coverage.tdv + summary.coverage.deposits + summary.coverage.activeRenters) / coverageDenominator
+    : 0
 
   return (
     <div id="kpi-dashboard" className="flex min-w-0 scroll-mt-20 flex-col gap-6 py-6">
-      <div className="flex flex-col gap-4 px-4 lg:px-6 md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-col gap-4 px-4 md:flex-row md:items-end md:justify-between lg:px-6">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2"><Badge variant="outline">Depuis le début</Badge><span className="text-xs text-muted-foreground">{summary.firstLabel} → {summary.lastLabel}</span></div>
           <div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Pilotage business Gando</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Volume, usage, revenu, cash et conversion dans une seule lecture.</p></div>
