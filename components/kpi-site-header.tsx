@@ -1,8 +1,6 @@
 import Link from "next/link"
-import { ArrowLeft, MoreHorizontal } from "lucide-react"
-import { Button } from "@/components/kpi-shadcn/ui/button"
-import { Separator } from "@/components/kpi-shadcn/ui/separator"
-import { SidebarTrigger } from "@/components/kpi-shadcn/ui/sidebar"
+import { ArrowLeft, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import type { KpiView } from "@/lib/kpi-views"
 
 const VIEW_LABEL: Record<KpiView, string> = {
@@ -12,28 +10,35 @@ const VIEW_LABEL: Record<KpiView, string> = {
   history: "Mensuel & projection",
 }
 
+const VIEW_COPY: Record<KpiView, string> = {
+  lifetime: "Lisez la trajectoire de Gando depuis le début de l’activité.",
+  overview: "Comprenez immédiatement la santé du dernier mois renseigné.",
+  funnel: "Reliez acquisition, activation, revenu, cash et marge.",
+  history: "Saisissez les données sources et projetez les prochains mois.",
+}
+
 export function KpiSiteHeader({ view }: { view: KpiView }) {
   return (
-    <header className="sticky top-0 z-30 flex h-[var(--header-height,2.875rem)] shrink-0 items-center gap-2 border-b border-border bg-background px-2.5 sm:px-3">
-      <SidebarTrigger className="-ml-0.5 size-7 rounded-md text-muted-foreground hover:bg-muted" />
-      <Separator orientation="vertical" className="mx-0.5 h-4" />
+    <header className="shrink-0 border-b border-border bg-card px-5 py-3 lg:px-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">KPI</span>
+            <span className="text-[10px] text-muted-foreground">{VIEW_LABEL[view]}</span>
+          </div>
+          <p className="mt-0.5 text-sm font-semibold text-foreground">{VIEW_COPY[view]}</p>
+        </div>
 
-      <div className="flex min-w-0 items-center gap-1.5 text-[12px]">
-        <span className="text-muted-foreground">KPI</span>
-        <span className="text-muted-foreground/45">/</span>
-        <span className="truncate font-medium text-foreground">{VIEW_LABEL[view]}</span>
-      </div>
-
-      <div className="ml-auto flex items-center gap-1">
-        <Button asChild size="sm" variant="ghost" className="h-7 gap-1.5 rounded-md px-2 text-[11px] text-muted-foreground">
-          <Link href="/">
-            <ArrowLeft className="size-3.5" />
-            <span className="hidden sm:inline">Cockpit</span>
-          </Link>
-        </Button>
-        <Button size="icon" variant="ghost" className="size-7 rounded-md text-muted-foreground" aria-label="Plus d’options">
-          <MoreHorizontal className="size-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="h-9 gap-1.5" asChild>
+            <Link href="/">
+              <ArrowLeft size={14} /> Cockpit
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => window.location.reload()}>
+            <RefreshCw size={14} /> Actualiser
+          </Button>
+        </div>
       </div>
     </header>
   )
