@@ -18,36 +18,17 @@ export function KpiClientShell({
 
   return (
     <SidebarProvider
-      className="bg-[#f5f5f6]"
+      className="kpi-attio-shell"
       style={
         {
           "--sidebar-width": "14.75rem",
           "--header-height": "2.875rem",
           "--radius": "0.5rem",
-          "--background": "#ffffff",
-          "--foreground": "#25262a",
-          "--card": "#ffffff",
-          "--card-foreground": "#25262a",
-          "--popover": "#ffffff",
-          "--popover-foreground": "#25262a",
           "--primary": "#735DF3",
           "--primary-foreground": "#ffffff",
-          "--secondary": "#f5f5f6",
-          "--secondary-foreground": "#333438",
-          "--muted": "#f6f6f7",
-          "--muted-foreground": "#777981",
-          "--accent": "#efeff1",
-          "--accent-foreground": "#2c2d31",
-          "--border": "#e6e6e8",
-          "--input": "#dddddf",
           "--ring": "#735DF3",
-          "--sidebar": "#f5f5f6",
-          "--sidebar-foreground": "#37383d",
           "--sidebar-primary": "#735DF3",
           "--sidebar-primary-foreground": "#ffffff",
-          "--sidebar-accent": "#eaeaed",
-          "--sidebar-accent-foreground": "#222328",
-          "--sidebar-border": "#e1e1e4",
           "--sidebar-ring": "#735DF3",
           "--chart-1": "#735DF3",
         } as React.CSSProperties
