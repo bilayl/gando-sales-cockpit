@@ -1,10 +1,10 @@
 "use client"
 
 import { ChartNoAxesCombined, Gauge, History, Infinity } from "lucide-react"
-import { BusinessKpiDashboard } from "@/components/business-kpi-dashboard"
 import { KpiDashboardOverview } from "@/components/kpi-dashboard-overview"
 import { KpiExecutiveOverview } from "@/components/kpi-executive-overview"
-import { ValueKpiFunnel } from "@/components/value-kpi-funnel"
+import { KpiFunnelShadcn } from "@/components/kpi-funnel-shadcn"
+import { KpiMonthlyShadcn } from "@/components/kpi-monthly-shadcn"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/kpi-shadcn/ui/tabs"
 
 const VIEWS = [
@@ -13,20 +13,6 @@ const VIEWS = [
   { id: "funnel", label: "Funnel & économie", icon: ChartNoAxesCombined },
   { id: "history", label: "Mensuel & simulation", icon: History },
 ] as const
-
-const LEGACY_CLEANUP = [
-  "[&_.rounded-3xl]:!rounded-xl",
-  "[&_.rounded-2xl]:!rounded-xl",
-  "[&_.border-slate-200]:!border-border",
-  "[&_.bg-white]:!bg-card",
-  "[&_.bg-slate-50]:!bg-muted/40",
-  "[&_.text-slate-950]:!text-foreground",
-  "[&_.text-slate-900]:!text-foreground",
-  "[&_.text-slate-600]:!text-muted-foreground",
-  "[&_.text-slate-500]:!text-muted-foreground",
-  "[&_.text-slate-400]:!text-muted-foreground",
-  "[&_.shadow-sm]:!shadow-none",
-].join(" ")
 
 export function KpiWorkspace({ canEdit }: { canEdit: boolean }) {
   return (
@@ -54,15 +40,11 @@ export function KpiWorkspace({ canEdit }: { canEdit: boolean }) {
       </TabsContent>
 
       <TabsContent value="funnel" className="m-0 min-w-0 p-4 lg:p-6">
-        <div className={LEGACY_CLEANUP}>
-          <ValueKpiFunnel canEdit={canEdit} />
-        </div>
+        <KpiFunnelShadcn canEdit={canEdit} />
       </TabsContent>
 
       <TabsContent value="history" className="m-0 min-w-0 p-4 lg:p-6">
-        <div className={LEGACY_CLEANUP}>
-          <BusinessKpiDashboard canEdit={canEdit} />
-        </div>
+        <KpiMonthlyShadcn canEdit={canEdit} />
       </TabsContent>
     </Tabs>
   )
