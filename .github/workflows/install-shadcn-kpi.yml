@@ -21,17 +21,30 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Install official shadcn components
+      - name: Install official shadcn components in KPI namespace
         env:
           npm_config_legacy_peer_deps: "true"
         run: |
-          rm -f components/ui/sidebar.tsx
-          npx shadcn@latest add sidebar chart tabs progress --yes
+          cp components.json /tmp/components.json
+          node <<'NODE'
+          const fs = require('fs')
+          const config = JSON.parse(fs.readFileSync('components.json', 'utf8'))
+          config.aliases = {
+            ...config.aliases,
+            components: '@/components/kpi-shadcn',
+            ui: '@/components/kpi-shadcn/ui',
+            hooks: '@/components/kpi-shadcn/hooks'
+          }
+          fs.writeFileSync('components.json', JSON.stringify(config, null, 2) + '\n')
+          NODE
+          rm -rf components/kpi-shadcn
+          npx shadcn@latest add sidebar chart tabs progress card badge button table select separator skeleton sheet tooltip input --yes --overwrite
+          cp /tmp/components.json components.json
       - name: Commit generated shadcn files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add components.json package.json package-lock.json components/ui hooks || true
+          git add -A
           git diff --cached --quiet && exit 0
-          git commit -m "Install official shadcn KPI primitives"
+          git commit -m "Install official shadcn KPI component kit"
           git push origin HEAD:refactor/kpi-shadcn-dashboard-v2
