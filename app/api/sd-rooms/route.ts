@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
 import { requireSDInternalAccess } from "@/lib/sd-room-access";
-import { SD_CODES, SD_STAGE_META, createEmptySD01, type SDRoomBrandTheme } from "@/lib/sd-room-types";
+import { SD_CODES, SD_STAGE_META, createEmptySD01, type SDRoomBrandTheme, type SDRoomMode } from "@/lib/sd-room-types";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -11,13 +11,25 @@ function brandTheme(value: unknown): SDRoomBrandTheme {
   return value === "gradient" || value === "dark" || value === "light" ? value : "gando";
 }
 
+function roomMode(value: unknown): SDRoomMode {
+  return value === "enterprise" ? "enterprise" : "standard";
+}
+
+function bookingUrl(value: unknown) {
+  const url = String(value || "").trim().slice(0, 2000) || null;
+  if (url && !/^https?:\/\/\S+$/i.test(url)) {
+    throw Object.assign(new Error("Le lien de rendez-vous doit commencer par http:// ou https://."), { status: 400 });
+  }
+  return url;
+}
+
 export async function GET() {
   try {
     await requireSDInternalAccess();
     const admin = getSupabaseAdmin();
     const { data: rooms, error: roomsError } = await admin
       .from("deal_rooms")
-      .select("id,hubspot_deal_id,title,company_name,crm_link,prospect_logo_url,brand_banner_image_url,brand_theme,brand_title,brand_subtitle,share_token,status,current_stage,published_at,last_shared_at,created_at,updated_at")
+      .select("id,hubspot_deal_id,title,company_name,crm_link,prospect_logo_url,brand_banner_image_url,brand_theme,brand_title,brand_subtitle,meeting_booking_url,room_mode,share_token,status,current_stage,published_at,last_shared_at,created_at,updated_at")
       .order("updated_at", { ascending: false })
       .limit(250);
 
@@ -74,6 +86,7 @@ export async function GET() {
       const analytics = analyticsByRoom.get(room.id);
       return {
         ...room,
+        room_mode: roomMode(room.room_mode),
         crmConnected: !room.hubspot_deal_id.startsWith("standalone:"),
         documents: documentsByRoom.get(room.id) || [],
         opens: analytics?.opens || 0,
@@ -99,6 +112,8 @@ export async function POST(request: NextRequest) {
     const prospectLogoUrl = String(body?.prospectLogoUrl || "").trim().slice(0, 2000) || null;
     const brandBannerImageUrl = String(body?.brandBannerImageUrl || "").trim().slice(0, 2000) || null;
     const roomBrandTheme = brandTheme(body?.brandTheme);
+    const selectedRoomMode = roomMode(body?.roomMode);
+    const meetingBookingUrl = bookingUrl(body?.meetingBookingUrl);
     const brandTitle = companyName;
     const brandSubtitle = "Espace de collaboration";
 
@@ -121,6 +136,8 @@ export async function POST(request: NextRequest) {
         brand_theme: roomBrandTheme,
         brand_title: brandTitle,
         brand_subtitle: brandSubtitle,
+        meeting_booking_url: meetingBookingUrl,
+        room_mode: selectedRoomMode,
         share_token: shareToken,
         created_by_email: createdByEmail,
       })
@@ -140,6 +157,27 @@ export async function POST(request: NextRequest) {
     if (documentsError) throw documentsError;
 
     return Response.json({ room, editorKey, crmConnected: false }, { status: 201 });
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    await requireSDInternalAccess();
+    const body = await request.json();
+    const roomId = String(body?.roomId || "").trim();
+    if (!roomId) throw Object.assign(new Error("La dealroom est obligatoire."), { status: 400 });
+
+    const { data: room, error } = await getSupabaseAdmin()
+      .from("deal_rooms")
+      .update({ room_mode: roomMode(body?.roomMode) })
+      .eq("id", roomId)
+      .select("id,room_mode")
+      .single();
+    if (error) throw error;
+
+    return Response.json({ room });
   } catch (error) {
     return apiError(error);
   }
