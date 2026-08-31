@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ArrowRight, CheckCircle2, CircleDollarSign, Database, Target, UsersRound } from "lucide-react"
+import { Database } from "lucide-react"
 import { Badge } from "@/components/kpi-shadcn/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/kpi-shadcn/ui/card"
 import { Progress } from "@/components/kpi-shadcn/ui/progress"
@@ -32,10 +32,11 @@ function ratio(top: number, bottom: number) { return bottom > 0 ? top / bottom :
 
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-6 py-6">
-      <div className="space-y-2 px-4 lg:px-6"><Skeleton className="h-4 w-28" /><Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-full max-w-xl" /></div>
-      <div className="grid gap-4 px-4 sm:grid-cols-2 lg:px-6 xl:grid-cols-4">{[0, 1, 2, 3].map(item => <Skeleton key={item} className="h-28 rounded-xl" />)}</div>
-      <div className="grid gap-4 px-4 lg:px-6 @5xl/main:grid-cols-[minmax(0,1.6fr)_360px]"><Skeleton className="h-[420px] rounded-xl" /><Skeleton className="h-[420px] rounded-xl" /></div>
+    <div className="flex flex-col gap-4 py-4">
+      <div className="flex items-center justify-between px-4 lg:px-5"><div className="space-y-2"><Skeleton className="h-5 w-40" /><Skeleton className="h-3 w-64" /></div><Skeleton className="h-7 w-36" /></div>
+      <div className="px-4 lg:px-5"><Skeleton className="h-28 w-full rounded-lg" /></div>
+      <div className="grid gap-4 px-4 lg:px-5 @5xl/main:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.65fr)]"><Skeleton className="h-[330px] rounded-lg" /><Skeleton className="h-[330px] rounded-lg" /></div>
+      <div className="px-4 lg:px-5"><Skeleton className="h-44 rounded-lg" /></div>
     </div>
   )
 }
@@ -64,65 +65,102 @@ export function KpiDashboardOverview() {
         setCampaignRows(Array.isArray(campaignBody.rows) ? campaignBody.rows : [])
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Impossible de charger le dashboard KPI.")
-      } finally { setLoading(false) }
+      } finally {
+        setLoading(false)
+      }
     })()
   }, [])
 
   const summary = useMemo(() => buildKpiDashboardSummary(coreRows, valueRows, campaignRows), [coreRows, valueRows, campaignRows])
   if (loading) return <DashboardSkeleton />
-  if (error) return <div className="m-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive lg:m-6">{error}</div>
-  if (!summary) return <div className="p-12 text-center text-sm text-muted-foreground">Aucune donnée KPI disponible.</div>
+  if (error) return <div className="m-4 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-[12px] text-destructive lg:m-5">{error}</div>
+  if (!summary) return <div className="p-12 text-center text-[12px] text-muted-foreground">Aucune donnée KPI disponible.</div>
 
   const coverageDenominator = summary.coverage.total * 4
   const coverageAverage = coverageDenominator > 0
     ? (summary.coverage.revenue + summary.coverage.tdv + summary.coverage.deposits + summary.coverage.activeRenters) / coverageDenominator
     : 0
 
+  const funnel = [
+    { label: "Prospects contactés", value: summary.prospects, conversion: null as number | null },
+    { label: "Rendez-vous", value: summary.meetings, conversion: ratio(summary.meetings, summary.prospects) },
+    { label: "Loueurs activés", value: summary.rentersActivated, conversion: ratio(summary.rentersActivated, summary.meetings) },
+    { label: "1re caution", value: summary.firstDepositRenters, conversion: ratio(summary.firstDepositRenters, summary.rentersActivated) },
+  ]
+
+  const finance = [
+    { label: "Cash collecté", value: euro(summary.cashCollected), detail: `${percent(summary.collectionRate)} du CA signé` },
+    { label: "Marge nette", value: euro(summary.netMargin), detail: `Marge ${percent(summary.marginRate)}` },
+    { label: "ROAS cash", value: summary.cashRoas == null ? "—" : `${summary.cashRoas.toFixed(1)}×`, detail: `${euro(summary.campaignSpend)} de spend` },
+  ]
+
   return (
-    <div id="kpi-dashboard" className="flex min-w-0 scroll-mt-20 flex-col gap-6 py-6">
-      <div className="flex flex-col gap-4 px-4 md:flex-row md:items-end md:justify-between lg:px-6">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2"><Badge variant="outline">Depuis le début</Badge><span className="text-xs text-muted-foreground">{summary.firstLabel} → {summary.lastLabel}</span></div>
-          <div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Pilotage business Gando</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Volume, usage, revenu, cash et conversion dans une seule lecture.</p></div>
+    <div id="kpi-dashboard" className="flex min-w-0 flex-col gap-4 py-4">
+      <div className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between lg:px-5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-[17px] font-semibold tracking-[-0.02em]">Vue d’ensemble</h1>
+            <Badge variant="outline" className="h-5 rounded-[5px] px-1.5 text-[10px] font-normal text-muted-foreground shadow-none">{summary.firstLabel} → {summary.lastLabel}</Badge>
+          </div>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Les principaux drivers business de Gando, depuis le début de l’activité.</p>
         </div>
-        <Card className="w-full shadow-none md:w-72">
-          <CardContent className="space-y-2 p-4">
-            <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-2 font-medium"><Database className="size-3.5 text-primary" /> Qualité des données</span><span className="font-mono tabular-nums">{percent(coverageAverage, 0)}</span></div>
-            <Progress value={coverageAverage * 100} className="h-1.5" />
-            <p className="text-[11px] text-muted-foreground">Complétude moyenne des métriques clés sur {summary.spanMonths} mois.</p>
-          </CardContent>
-        </Card>
+
+        <div className="flex w-full items-center gap-2 sm:w-[225px]">
+          <Database className="size-3.5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground"><span>Qualité des données</span><span className="font-medium tabular-nums text-foreground">{percent(coverageAverage, 0)}</span></div>
+            <Progress value={coverageAverage * 100} className="h-1" />
+          </div>
+        </div>
       </div>
 
       <KpiSectionCards summary={summary} />
 
-      <div className="grid min-w-0 gap-4 px-4 lg:px-6 @5xl/main:grid-cols-[minmax(0,1.6fr)_360px]">
+      <div className="grid min-w-0 gap-4 px-4 lg:px-5 @5xl/main:grid-cols-[minmax(0,1.65fr)_minmax(280px,0.65fr)]">
         <KpiChartAreaInteractive data={summary.points} />
-        <Card id="kpi-funnel" className="scroll-mt-20 shadow-sm">
-          <CardHeader className="border-b"><CardTitle className="text-base">Value funnel</CardTitle><CardDescription>Du prospect à la première caution activée.</CardDescription></CardHeader>
-          <CardContent className="space-y-1 pt-4">
-            {[
-              { label: "Prospects contactés", value: summary.prospects, next: ratio(summary.meetings, summary.prospects), icon: UsersRound },
-              { label: "Rendez-vous", value: summary.meetings, next: ratio(summary.rentersActivated, summary.meetings), icon: Target },
-              { label: "Loueurs activés", value: summary.rentersActivated, next: ratio(summary.firstDepositRenters, summary.rentersActivated), icon: CheckCircle2 },
-              { label: "1re caution", value: summary.firstDepositRenters, next: null, icon: CircleDollarSign },
-            ].map((step, index, all) => {
-              const Icon = step.icon
-              return <div key={step.label} className="relative flex gap-3 rounded-lg px-2 py-3 hover:bg-muted/50"><div className="grid size-9 shrink-0 place-items-center rounded-md border bg-background"><Icon className="size-4 text-primary" /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><div className="text-xs text-muted-foreground">{step.label}</div><div className="mt-0.5 text-xl font-semibold tabular-nums">{integer(step.value)}</div></div>{step.next != null ? <Badge variant="secondary" className="font-mono tabular-nums">{percent(step.next)}</Badge> : null}</div>{index < all.length - 1 ? <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground"><ArrowRight className="size-3" /> conversion vers l’étape suivante</div> : null}</div></div>
-            })}
+
+        <Card id="kpi-funnel" className="overflow-hidden rounded-lg border-border shadow-none">
+          <CardHeader className="space-y-0.5 border-b border-border px-4 py-3">
+            <CardTitle className="text-[13px] font-medium">Value funnel</CardTitle>
+            <CardDescription className="text-[11px]">Du prospect à la première caution.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {funnel.map((step, index) => (
+              <div key={step.label} className={`flex items-center justify-between gap-3 px-4 py-3 ${index ? "border-t border-border" : ""}`}>
+                <div className="min-w-0">
+                  <div className="truncate text-[11px] text-muted-foreground">{step.label}</div>
+                  <div className="mt-0.5 text-[18px] font-semibold tracking-[-0.02em] tabular-nums">{integer(step.value)}</div>
+                </div>
+                {step.conversion != null ? (
+                  <Badge variant="secondary" className="h-5 rounded-[5px] px-1.5 text-[10px] font-medium tabular-nums shadow-none">{percent(step.conversion)}</Badge>
+                ) : <span className="text-[10px] text-muted-foreground/45">Entrée</span>}
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
 
-      <div id="kpi-finance" className="grid scroll-mt-20 gap-4 px-4 lg:px-6 @3xl/main:grid-cols-3">
-        {[
-          { label: "Cash collecté", value: euro(summary.cashCollected), detail: `${percent(summary.collectionRate)} du CA signé · ${euro(summary.signedRevenue)} signé` },
-          { label: "Marge nette", value: euro(summary.netMargin), detail: `Taux de marge consolidé ${percent(summary.marginRate)}` },
-          { label: "ROAS cash", value: summary.cashRoas == null ? "—" : `${summary.cashRoas.toFixed(1)}×`, detail: `${euro(summary.campaignSpend)} dépensés → ${euro(summary.campaignCash)} encaissés` },
-        ].map(item => <Card key={item.label} className="shadow-sm"><CardHeader className="pb-3"><CardDescription>{item.label}</CardDescription><CardTitle className="text-2xl tabular-nums">{item.value}</CardTitle></CardHeader><CardContent className="text-xs text-muted-foreground">{item.detail}</CardContent></Card>)}
+      <div id="kpi-finance" className="px-4 lg:px-5">
+        <Card className="overflow-hidden rounded-lg border-border shadow-none">
+          <CardHeader className="space-y-0.5 border-b border-border px-4 py-3">
+            <CardTitle className="text-[13px] font-medium">Finance & efficacité</CardTitle>
+            <CardDescription className="text-[11px]">Cash, marge et efficacité des campagnes consolidés.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid p-0 sm:grid-cols-3">
+            {finance.map((item, index) => (
+              <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""}`}>
+                <div className="text-[11px] text-muted-foreground">{item.label}</div>
+                <div className="mt-2 text-[22px] font-semibold tracking-[-0.03em] tabular-nums">{item.value}</div>
+                <div className="mt-1.5 text-[10px] text-muted-foreground/75">{item.detail}</div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="px-4 lg:px-6"><KpiDataTable data={summary.points} /></div>
+      <div className="px-4 lg:px-5">
+        <KpiDataTable data={summary.points} />
+      </div>
     </div>
   )
 }
