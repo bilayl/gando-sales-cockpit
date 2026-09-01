@@ -6,12 +6,24 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { SDRoomBrandingEditorV2 } from "@/components/sd-room-branding-editor-v2";
 import { createEmptySD04, type SD04Content } from "@/lib/sd-stage-content";
 import type { SDDocumentRecord, SDRoomMode } from "@/lib/sd-room-types";
 
 type RoomResponse = { documents: SDDocumentRecord[]; room: { id: string; title: string; room_mode?: SDRoomMode } | null };
 const isPdfUrl = (value: string) => /^https?:\/\//i.test(value || "");
 const cleanPdfViewerUrl = (url: string) => url ? `${url.split("#")[0]}#toolbar=0&navpanes=0&scrollbar=1&view=FitH` : "";
+
+function pricingText(rows: SD04Content["pricing"]) {
+  return rows.map(row => [row.item, row.price, row.notes].filter(Boolean).join(" | ")).join("\n");
+}
+
+function parsePricing(value: string): SD04Content["pricing"] {
+  return value.split("\n").map(row => row.trim()).filter(Boolean).map(row => {
+    const [item = "", price = "", notes = ""] = row.split("|").map(part => part.trim());
+    return { item, price, notes, model: "" };
+  }).filter(row => row.item);
+}
 
 export function SD04OfferBuilder({ dealId }: { dealId: string }) {
   const [data, setData] = useState<RoomResponse | null>(null);
@@ -50,7 +62,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
       const formData = new FormData(); formData.append("file", file);
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/sd04-pdf`, { method: "POST", body: formData });
       const payload = await response.json(); if (!response.ok) throw new Error(payload.message || payload.error || "Import du PDF impossible");
-      setValue({ ...createEmptySD04(), deckTitle: payload.name || file.name, deckSubtitle: payload.url || "" });
+      setValue(current => ({ ...current, deckTitle: payload.name || file.name, deckSubtitle: payload.url || "" }));
       toast.success("PDF importé. Relisez-le avant publication.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Import impossible"); }
     finally { setUploading(false); if (inputRef.current) inputRef.current.value = ""; }
@@ -60,7 +72,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     if (!pdfUrl) return toast.error("Ajoutez d’abord le PDF de la propal.");
     setWorking(true);
     try {
-      const content: SD04Content = { ...createEmptySD04(), deckTitle: pdfName, deckSubtitle: pdfUrl };
+      const content: SD04Content = { ...value, deckTitle: pdfName, deckSubtitle: pdfUrl };
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/document`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "SD04", content, publish }) });
       const payload = await response.json(); if (!response.ok) throw new Error(payload.message || payload.error || "Enregistrement impossible");
       setData(current => current ? { ...current, documents: current.documents.map(document => document.code === "SD04" ? payload.document : document) } : current);
@@ -76,14 +88,19 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     try {
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/sd04-pdf`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: pdfUrl }) });
       const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.message || payload.error || "Suppression impossible");
-      setValue(createEmptySD04()); toast.success("PDF supprimé"); await load();
+      setValue(current => ({ ...current, deckTitle: "", deckSubtitle: "" })); toast.success("PDF supprimé"); await load();
     } catch (error) { toast.error(error instanceof Error ? error.message : "Suppression impossible"); }
     finally { setWorking(false); }
   }
 
   if (loading && !data) return <div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   return <div className="page-shell min-h-screen p-5 lg:p-7"><div className="mx-auto max-w-[1180px] space-y-5">
-    <Card className="overflow-hidden p-0"><div className="flex flex-col gap-4 border-b border-border bg-primary/[0.04] p-5 lg:flex-row lg:items-center"><div className="flex items-start gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><FileText className="h-5 w-5" /></div><div><div className="text-xs font-bold uppercase tracking-[0.14em] text-primary">{quickDeal ? "Deal rapide · Propal" : "SD04 · PDF commercial"}</div><h1 className="mt-1 text-2xl font-bold tracking-[-0.03em]">Offre commerciale</h1><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Importez le PDF, vérifiez-le puis envoyez-le au client.</p></div></div><div className="flex flex-wrap items-center gap-2 lg:ml-auto">{sd04?.status === "validated" ? <Badge variant="outline" className="border-emerald-500/30 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Validé client</Badge> : null}<Button variant="outline" onClick={() => void save(false)} disabled={working || uploading || !pdfUrl}><Save className="mr-2 h-4 w-4" /> Enregistrer</Button><Button onClick={() => void save(true)} disabled={working || uploading || !pdfUrl || !canPublish}><Send className="mr-2 h-4 w-4" /> Publier</Button></div></div>{!quickDeal && !sd02Validated ? <div className="border-b border-amber-500/20 bg-amber-500/[0.06] px-5 py-3 text-xs text-amber-700">SD02 doit être validé avant de publier la propal sur un Deal entreprise.</div> : null}</Card>
+    <Card className="overflow-hidden p-0"><div className="flex flex-col gap-4 border-b border-border bg-primary/[0.04] p-5 lg:flex-row lg:items-center"><div className="flex items-start gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><FileText className="h-5 w-5" /></div><div><div className="text-xs font-bold uppercase tracking-[0.14em] text-primary">{quickDeal ? "Deal rapide · Propal" : "SD04 · Proposition grand compte"}</div><h1 className="mt-1 text-2xl font-bold tracking-[-0.03em]">Offre commerciale</h1><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Branding, tarification clé et PDF commercial sont regroupés ici.</p></div></div><div className="flex flex-wrap items-center gap-2 lg:ml-auto">{sd04?.status === "validated" ? <Badge variant="outline" className="border-emerald-500/30 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Validé client</Badge> : null}<Button variant="outline" onClick={() => void save(false)} disabled={working || uploading || !pdfUrl}><Save className="mr-2 h-4 w-4" /> Enregistrer</Button><Button onClick={() => void save(true)} disabled={working || uploading || !pdfUrl || !canPublish}><Send className="mr-2 h-4 w-4" /> Publier</Button></div></div>{!quickDeal && !sd02Validated ? <div className="border-b border-amber-500/20 bg-amber-500/[0.06] px-5 py-3 text-xs text-amber-700">SD02 doit être validé avant de publier la propal sur un Deal entreprise.</div> : null}</Card>
+
+    {!quickDeal ? <Card className="p-5 sm:p-6"><div className="text-xs font-bold uppercase tracking-[0.12em] text-primary">Tarification clé</div><h2 className="mt-1 text-lg font-bold">Résumé commercial visible en un coup d’œil</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Structure recommandée : tarif Gando, marge partenaire, durée/condition principale. Les exemples détaillés peuvent rester dans le PDF.</p><textarea value={pricingText(value.pricing)} onChange={event => setValue(current => ({ ...current, pricing: parsePricing(event.target.value) }))} rows={5} placeholder={'Tarif Gando | 2,7 % HT | par caution\nMarge partenaire | +0,7 % HT | conservée par le loueur\nDurée de sécurisation | 60 jours | par caution activée'} className="mt-4 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm leading-6 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" /><div className="mt-4 grid gap-3 sm:grid-cols-3">{value.pricing.slice(0, 3).map((row, index) => <div key={`${row.item}-${index}`} className="rounded-xl border border-primary/15 bg-primary/[0.035] p-4"><div className="text-[10px] font-bold uppercase tracking-[0.1em] text-primary">{row.item}</div><div className="mt-1 text-xl font-black tracking-[-0.03em]">{row.price || "À définir"}</div><div className="mt-1 text-xs text-muted-foreground">{row.notes}</div></div>)}</div></Card> : null}
+
+    {!quickDeal ? <Card className="p-5 sm:p-6"><SDRoomBrandingEditorV2 dealId={dealId} embedded /></Card> : null}
+
     <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void uploadPdf(file); }} />
     {!pdfUrl ? <Card className="p-5 sm:p-7"><button type="button" onClick={() => inputRef.current?.click()} disabled={uploading} className="flex min-h-[260px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/20 px-6 text-center transition hover:border-primary/50 hover:bg-primary/[0.03] disabled:opacity-60">{uploading ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <UploadCloud className="h-9 w-9 text-primary" />}<div className="mt-4 text-base font-semibold">{uploading ? "Import du PDF…" : "Importer la propal PDF"}</div><div className="mt-1 text-sm text-muted-foreground">PDF uniquement · 20 Mo maximum</div></button></Card> : null}
     {pdfUrl ? <Card className="overflow-hidden p-0"><div className="flex flex-col gap-3 border-b border-border bg-slate-950 px-4 py-3 text-white sm:flex-row sm:items-center"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10"><FileText className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{pdfName}</div><div className="text-[11px] text-slate-400">Aperçu du document partagé au client</div></div><Button size="sm" variant="secondary" asChild><a href={pdfUrl} target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Ouvrir</a></Button><Button size="sm" variant="secondary" onClick={() => inputRef.current?.click()} disabled={uploading}>Remplacer</Button><Button size="sm" variant="destructive" onClick={() => void removePdf()} disabled={working}><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Supprimer</Button></div><div className="bg-[#eef0f2] p-3 sm:p-5"><div className="mx-auto max-w-[940px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm"><iframe src={cleanPdfViewerUrl(pdfUrl)} title={pdfName} className="h-[760px] w-full bg-white" /></div></div></Card> : null}

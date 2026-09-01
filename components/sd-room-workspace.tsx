@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Eye, FileSignature, FileText, ListChecks, Palette, Presentation, Settings2 } from "lucide-react";
+import { ArrowLeft, Eye, FileSignature, FileText, ListChecks, Presentation, Settings2 } from "lucide-react";
 import { FortuneoTestResign } from "@/components/fortuneo-test-resign";
 import { SD02PlanBuilder } from "@/components/sd02-plan-builder";
 import { SD03SolutionBuilder } from "@/components/sd03-solution-builder";
@@ -12,15 +12,14 @@ import { SDDocumentAnalyticsStrip } from "@/components/sd-document-analytics-str
 import { SDQuickContractManager } from "@/components/sd-quick-contract-manager";
 import { SDQuickDealTimeline } from "@/components/sd-quick-deal-timeline";
 import { SDQuickProposalBuilder } from "@/components/sd-quick-proposal-builder";
-import { SDRoomBrandingEditorV2 } from "@/components/sd-room-branding-editor-v2";
 import { SDRoomEditor } from "@/components/sd-room-editor";
 import { SDRoomPreview } from "@/components/sd-room-preview";
 import type { SDCode, SDRoomMode } from "@/lib/sd-room-types";
 import { cn } from "@/lib/utils";
 
-type WorkspaceTab = "content" | "plan" | "solution" | "offer" | "contract" | "branding" | "preview";
+type WorkspaceTab = "content" | "plan" | "solution" | "offer" | "contract" | "preview";
 const CODE_BY_TAB: Partial<Record<WorkspaceTab, SDCode>> = { content: "SD01", plan: "SD02", solution: "SD03", offer: "SD04", contract: "SD05" };
-const WORKSPACE_TABS: WorkspaceTab[] = ["content", "plan", "solution", "offer", "contract", "branding", "preview"];
+const WORKSPACE_TABS: WorkspaceTab[] = ["content", "plan", "solution", "offer", "contract", "preview"];
 
 const enterpriseTabs: Array<{ value: WorkspaceTab; label: string; icon: typeof FileText }> = [
   { value: "content", label: "SD01 · Synthèse", icon: FileText },
@@ -28,7 +27,6 @@ const enterpriseTabs: Array<{ value: WorkspaceTab; label: string; icon: typeof F
   { value: "solution", label: "SD03 · Solution", icon: Settings2 },
   { value: "offer", label: "SD04 · Propal", icon: Presentation },
   { value: "contract", label: "SD05 · Contrat & signature", icon: FileSignature },
-  { value: "branding", label: "Branding", icon: Palette },
   { value: "preview", label: "Prévisualisation", icon: Eye },
 ];
 
@@ -94,6 +92,6 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
       tab === "contract" ? <SDQuickContractManager dealId={dealId} onChanged={changed} /> : <SDQuickProposalBuilder dealId={dealId} onChanged={changed} />
     ) : tab === "content" ? (
       <div className="sd01-workspace w-full min-w-0"><SDRoomEditor dealId={dealId} /><style jsx global>{`.sd01-workspace nav[aria-label="Parcours SD"] { display: none !important; } .sd01-workspace a[href^="/deal-room/"] { display: none !important; }`}</style></div>
-    ) : tab === "plan" ? <SD02PlanBuilder dealId={dealId} /> : tab === "solution" ? <SD03SolutionBuilder dealId={dealId} /> : tab === "offer" ? <SD04OfferBuilder dealId={dealId} /> : tab === "contract" ? <SD05ContractBuilder dealId={dealId} /> : tab === "branding" ? <SDRoomBrandingEditorV2 dealId={dealId} /> : <SDRoomPreview dealId={dealId} />}
+    ) : tab === "plan" ? <SD02PlanBuilder dealId={dealId} /> : tab === "solution" ? <SD03SolutionBuilder dealId={dealId} /> : tab === "offer" ? <SD04OfferBuilder dealId={dealId} /> : tab === "contract" ? <SD05ContractBuilder dealId={dealId} /> : <SDRoomPreview dealId={dealId} />}
   </div>;
 }

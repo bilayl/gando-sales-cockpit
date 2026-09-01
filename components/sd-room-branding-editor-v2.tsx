@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 type BrandingResponse = { room: SDRoomRecord | null };
 
-export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
+export function SDRoomBrandingEditorV2({ dealId, embedded = false }: { dealId: string; embedded?: boolean }) {
   const [room, setRoom] = useState<SDRoomRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,17 +92,17 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
     }
   };
 
-  if (loading) return <div className="grid min-h-[70vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
-  if (error || !room) return <div className="mx-auto max-w-2xl p-6"><Card className="p-8 text-center"><p className="text-sm text-destructive">{error || "Room introuvable"}</p><Button variant="outline" className="mt-4" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" /> Réessayer</Button></Card></div>;
+  if (loading) return <div className={cn("grid place-items-center", embedded ? "min-h-[280px]" : "min-h-[70vh]")}><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  if (error || !room) return <div className={cn("mx-auto max-w-2xl", embedded ? "py-4" : "p-6")}><Card className="p-8 text-center"><p className="text-sm text-destructive">{error || "Room introuvable"}</p><Button variant="outline" className="mt-4" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" /> Réessayer</Button></Card></div>;
 
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/r/${room.share_token}` : "";
 
   return (
-    <div className="page-shell min-h-screen p-5 lg:p-7">
-      <div className="mx-auto max-w-[1280px] space-y-5">
+    <div className={cn(embedded ? "" : "page-shell min-h-screen p-5 lg:p-7")}>
+      <div className={cn("mx-auto space-y-5", embedded ? "max-w-none" : "max-w-[1280px]")}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">Site client</div><h1 className="mt-1 text-2xl font-black tracking-[-0.035em]">Branding de la Deal Room</h1><p className="mt-1 text-sm text-muted-foreground">Cette bannière est exactement celle affichée sur le lien public de la Deal Room.</p></div>
-          <div className="flex gap-2"><Button variant="outline" disabled={room.status !== "published" || !shareUrl} onClick={async () => { await navigator.clipboard.writeText(shareUrl); toast.success("Lien client copié"); }}><Copy className="mr-2 h-4 w-4" /> Lien client</Button><Button onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Enregistrer</Button></div>
+          <div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">{embedded ? "Branding de la propal" : "Site client"}</div><h1 className={cn("mt-1 font-black tracking-[-0.035em]", embedded ? "text-xl" : "text-2xl")}>{embedded ? "Bannière client" : "Branding de la Deal Room"}</h1><p className="mt-1 text-sm text-muted-foreground">La même bannière est affichée sur la proposition et dans la Deal Room grand compte.</p></div>
+          <div className="flex gap-2">{!embedded ? <Button variant="outline" disabled={room.status !== "published" || !shareUrl} onClick={async () => { await navigator.clipboard.writeText(shareUrl); toast.success("Lien client copié"); }}><Copy className="mr-2 h-4 w-4" /> Lien client</Button> : null}<Button onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Enregistrer le branding</Button></div>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)]">
@@ -120,15 +120,8 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
 
           <div className="space-y-5">
             <Card className="p-5">
-              <h2 className="font-bold">Contenu de la hero</h2>
-              <div className="mt-4 space-y-4"><div><Label>Titre affiché</Label><Input className="mt-2" value={title} onChange={event => setTitle(event.target.value)} placeholder={`${companyName || "Client"} × Gando`} /></div><div><Label>Sous-titre de la bannière</Label><textarea value={subtitle} onChange={event => setSubtitle(event.target.value)} rows={3} className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" placeholder="Espace de collaboration" /></div></div>
-            </Card>
-
-            <Card className="p-5">
-              <div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /><h2 className="font-bold">Prise de rendez-vous</h2></div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">Ce lien affiche un CTA juste après le SD01 sur le site public. Tu peux utiliser un lien HubSpot Meetings, Calendly ou tout autre outil de réservation.</p>
-              <div className="mt-4"><Label>Lien de réservation</Label><Input type="url" className="mt-2" value={meetingBookingUrl} onChange={event => setMeetingBookingUrl(event.target.value)} placeholder="https://meetings.hubspot.com/..." /></div>
-              {meetingBookingUrl.trim() ? <div className="mt-4 rounded-xl border border-border bg-muted/30 p-3"><div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Aperçu du CTA</div><div className="mt-1 text-sm font-bold">Vous souhaitez prendre rendez-vous avec nous ?</div><div className="mt-1 text-xs text-muted-foreground">Le visiteur pourra cliquer pour choisir directement un créneau.</div></div> : null}
+              <h2 className="font-bold">Contenu de la bannière</h2>
+              <div className="mt-4 space-y-4"><div><Label>Titre affiché</Label><Input className="mt-2" value={title} onChange={event => setTitle(event.target.value)} placeholder={`${companyName || "Client"} × Gando`} /></div><div><Label>Sous-titre</Label><textarea value={subtitle} onChange={event => setSubtitle(event.target.value)} rows={3} className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" placeholder="Proposition commerciale" /></div></div>
             </Card>
 
             <Card className="p-5">
@@ -136,8 +129,13 @@ export function SDRoomBrandingEditorV2({ dealId }: { dealId: string }) {
               <div className="mt-4 grid grid-cols-2 gap-3">
                 {SD_ROOM_BANNER_THEMES.map(item => <button key={item.value} type="button" onClick={() => setTheme(item.value)} className={cn("rounded-xl border p-2 text-left transition", theme === item.value ? "border-primary bg-primary/[0.05] ring-2 ring-primary/10" : "border-border hover:border-primary/40")}><div className={cn("h-14 rounded-lg bg-gradient-to-br", item.preview)} /><div className="mt-2 flex items-center justify-between text-xs font-semibold"><span>{item.label}</span>{theme === item.value ? <Check className="h-3.5 w-3.5 text-primary" /> : null}</div></button>)}
               </div>
-              <p className="mt-3 text-[11px] leading-5 text-muted-foreground">Le site public réutilise maintenant ce composant à l’identique : même thème, même image, même voile, mêmes logos, même titre et même sous-titre.</p>
             </Card>
+
+            {!embedded ? <Card className="p-5">
+              <div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-primary" /><h2 className="font-bold">Prise de rendez-vous</h2></div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">Ce lien affiche un CTA juste après le SD01 sur le site public.</p>
+              <div className="mt-4"><Label>Lien de réservation</Label><Input type="url" className="mt-2" value={meetingBookingUrl} onChange={event => setMeetingBookingUrl(event.target.value)} placeholder="https://meetings.hubspot.com/..." /></div>
+            </Card> : null}
           </div>
         </div>
       </div>
