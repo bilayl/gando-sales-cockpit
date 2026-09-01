@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, ExternalLink, FileText, Loader2, Save, Send, Trash2, UploadCloud } from "lucide-react";
+import { CheckCircle2, ExternalLink, FileText, Loader2, Palette, Save, Send, Trash2, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,9 +42,13 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
       setData(payload);
       const document = payload.documents.find((item: SDDocumentRecord) => item.code === "SD04");
       setValue({ ...createEmptySD04(), ...((document?.content || {}) as Partial<SD04Content>) });
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Chargement impossible"); }
-    finally { setLoading(false); }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Chargement impossible");
+    } finally {
+      setLoading(false);
+    }
   }, [dealId]);
+
   useEffect(() => { void load(); }, [load]);
 
   const quickDeal = data?.room?.room_mode === "standard";
@@ -59,13 +63,19 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     if (file.size > 20 * 1024 * 1024) return toast.error("Le PDF doit faire moins de 20 Mo.");
     setUploading(true);
     try {
-      const formData = new FormData(); formData.append("file", file);
+      const formData = new FormData();
+      formData.append("file", file);
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/sd04-pdf`, { method: "POST", body: formData });
-      const payload = await response.json(); if (!response.ok) throw new Error(payload.message || payload.error || "Import du PDF impossible");
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || payload.error || "Import du PDF impossible");
       setValue(current => ({ ...current, deckTitle: payload.name || file.name, deckSubtitle: payload.url || "" }));
       toast.success("PDF importé. Relisez-le avant publication.");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Import impossible"); }
-    finally { setUploading(false); if (inputRef.current) inputRef.current.value = ""; }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Import impossible");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
   }
 
   async function save(publish: boolean) {
@@ -73,36 +83,115 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     setWorking(true);
     try {
       const content: SD04Content = { ...value, deckTitle: pdfName, deckSubtitle: pdfUrl };
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/document`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "SD04", content, publish }) });
-      const payload = await response.json(); if (!response.ok) throw new Error(payload.message || payload.error || "Enregistrement impossible");
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/document`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "SD04", content, publish }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || payload.error || "Enregistrement impossible");
       setData(current => current ? { ...current, documents: current.documents.map(document => document.code === "SD04" ? payload.document : document) } : current);
       setValue({ ...createEmptySD04(), ...(payload.document?.content || {}) });
       toast.success(publish ? "Propal publiée dans la Deal Room" : "Propal enregistrée");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Enregistrement impossible"); }
-    finally { setWorking(false); }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Enregistrement impossible");
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function removePdf() {
     if (!pdfUrl || working || !window.confirm("Supprimer ce PDF de la propal ? Il ne sera plus visible dans la Room.")) return;
     setWorking(true);
     try {
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/sd04-pdf`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: pdfUrl }) });
-      const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.message || payload.error || "Suppression impossible");
-      setValue(current => ({ ...current, deckTitle: "", deckSubtitle: "" })); toast.success("PDF supprimé"); await load();
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Suppression impossible"); }
-    finally { setWorking(false); }
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/sd04-pdf`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: pdfUrl }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || payload.error || "Suppression impossible");
+      setValue(current => ({ ...current, deckTitle: "", deckSubtitle: "" }));
+      toast.success("PDF supprimé");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Suppression impossible");
+    } finally {
+      setWorking(false);
+    }
   }
 
   if (loading && !data) return <div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
-  return <div className="page-shell min-h-screen p-5 lg:p-7"><div className="mx-auto max-w-[1180px] space-y-5">
-    <Card className="overflow-hidden p-0"><div className="flex flex-col gap-4 border-b border-border bg-primary/[0.04] p-5 lg:flex-row lg:items-center"><div className="flex items-start gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><FileText className="h-5 w-5" /></div><div><div className="text-xs font-bold uppercase tracking-[0.14em] text-primary">{quickDeal ? "Deal rapide · Propal" : "SD04 · Proposition grand compte"}</div><h1 className="mt-1 text-2xl font-bold tracking-[-0.03em]">Offre commerciale</h1><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Branding, tarification clé et PDF commercial sont regroupés ici.</p></div></div><div className="flex flex-wrap items-center gap-2 lg:ml-auto">{sd04?.status === "validated" ? <Badge variant="outline" className="border-emerald-500/30 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Validé client</Badge> : null}<Button variant="outline" onClick={() => void save(false)} disabled={working || uploading || !pdfUrl}><Save className="mr-2 h-4 w-4" /> Enregistrer</Button><Button onClick={() => void save(true)} disabled={working || uploading || !pdfUrl || !canPublish}><Send className="mr-2 h-4 w-4" /> Publier</Button></div></div>{!quickDeal && !sd02Validated ? <div className="border-b border-amber-500/20 bg-amber-500/[0.06] px-5 py-3 text-xs text-amber-700">SD02 doit être validé avant de publier la propal sur un Deal entreprise.</div> : null}</Card>
 
-    {!quickDeal ? <Card className="p-5 sm:p-6"><div className="text-xs font-bold uppercase tracking-[0.12em] text-primary">Tarification clé</div><h2 className="mt-1 text-lg font-bold">Résumé commercial visible en un coup d’œil</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Structure recommandée : tarif Gando, marge partenaire, durée/condition principale. Les exemples détaillés peuvent rester dans le PDF.</p><textarea value={pricingText(value.pricing)} onChange={event => setValue(current => ({ ...current, pricing: parsePricing(event.target.value) }))} rows={5} placeholder={'Tarif Gando | 2,7 % HT | par caution\nMarge partenaire | +0,7 % HT | conservée par le loueur\nDurée de sécurisation | 60 jours | par caution activée'} className="mt-4 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm leading-6 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" /><div className="mt-4 grid gap-3 sm:grid-cols-3">{value.pricing.slice(0, 3).map((row, index) => <div key={`${row.item}-${index}`} className="rounded-xl border border-primary/15 bg-primary/[0.035] p-4"><div className="text-[10px] font-bold uppercase tracking-[0.1em] text-primary">{row.item}</div><div className="mt-1 text-xl font-black tracking-[-0.03em]">{row.price || "À définir"}</div><div className="mt-1 text-xs text-muted-foreground">{row.notes}</div></div>)}</div></Card> : null}
+  return <div className="page-shell min-h-screen p-5 lg:p-7">
+    <div className="mx-auto max-w-[1180px] space-y-5">
+      <Card className="overflow-hidden p-0">
+        <div className="flex flex-col gap-4 border-b border-border bg-primary/[0.04] p-5 lg:flex-row lg:items-center">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-primary/10 p-2.5 text-primary"><FileText className="h-5 w-5" /></div>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-primary">{quickDeal ? "Deal rapide · Propal" : "SD04 · Proposition grand compte"}</div>
+              <h1 className="mt-1 text-2xl font-bold tracking-[-0.03em]">Offre commerciale</h1>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{quickDeal ? "Préparez et publiez la proposition commerciale." : "1. Branding · 2. Tarification · 3. PDF commercial"}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+            {sd04?.status === "validated" ? <Badge variant="outline" className="border-emerald-500/30 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Validé client</Badge> : null}
+            <Button variant="outline" onClick={() => void save(false)} disabled={working || uploading || !pdfUrl}><Save className="mr-2 h-4 w-4" /> Enregistrer</Button>
+            <Button onClick={() => void save(true)} disabled={working || uploading || !pdfUrl || !canPublish}><Send className="mr-2 h-4 w-4" /> Publier</Button>
+          </div>
+        </div>
+        {!quickDeal && !sd02Validated ? <div className="border-b border-amber-500/20 bg-amber-500/[0.06] px-5 py-3 text-xs text-amber-700">SD02 doit être validé avant de publier la propal sur un Deal entreprise.</div> : null}
+      </Card>
 
-    {!quickDeal ? <Card className="p-5 sm:p-6"><SDRoomBrandingEditorV2 dealId={dealId} embedded /></Card> : null}
+      {!quickDeal ? <section id="propal-branding" className="overflow-hidden rounded-2xl border-2 border-primary/20 bg-background shadow-sm">
+        <div className="flex items-center gap-3 border-b border-primary/15 bg-primary/[0.06] px-5 py-4 sm:px-6">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Palette className="h-4.5 w-4.5" /></div>
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.15em] text-primary">01 · Branding</div>
+            <h2 className="mt-0.5 text-lg font-black tracking-[-0.025em]">Branding de la propal</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Configure ici la bannière que le grand compte verra sur sa proposition : logo, titre, sous-titre, image et style.</p>
+          </div>
+        </div>
+        <div className="p-5 sm:p-6"><SDRoomBrandingEditorV2 dealId={dealId} embedded /></div>
+      </section> : null}
 
-    <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void uploadPdf(file); }} />
-    {!pdfUrl ? <Card className="p-5 sm:p-7"><button type="button" onClick={() => inputRef.current?.click()} disabled={uploading} className="flex min-h-[260px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/20 px-6 text-center transition hover:border-primary/50 hover:bg-primary/[0.03] disabled:opacity-60">{uploading ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <UploadCloud className="h-9 w-9 text-primary" />}<div className="mt-4 text-base font-semibold">{uploading ? "Import du PDF…" : "Importer la propal PDF"}</div><div className="mt-1 text-sm text-muted-foreground">PDF uniquement · 20 Mo maximum</div></button></Card> : null}
-    {pdfUrl ? <Card className="overflow-hidden p-0"><div className="flex flex-col gap-3 border-b border-border bg-slate-950 px-4 py-3 text-white sm:flex-row sm:items-center"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10"><FileText className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{pdfName}</div><div className="text-[11px] text-slate-400">Aperçu du document partagé au client</div></div><Button size="sm" variant="secondary" asChild><a href={pdfUrl} target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Ouvrir</a></Button><Button size="sm" variant="secondary" onClick={() => inputRef.current?.click()} disabled={uploading}>Remplacer</Button><Button size="sm" variant="destructive" onClick={() => void removePdf()} disabled={working}><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Supprimer</Button></div><div className="bg-[#eef0f2] p-3 sm:p-5"><div className="mx-auto max-w-[940px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm"><iframe src={cleanPdfViewerUrl(pdfUrl)} title={pdfName} className="h-[760px] w-full bg-white" /></div></div></Card> : null}
-  </div></div>;
+      {!quickDeal ? <Card className="p-5 sm:p-6">
+        <div className="text-[10px] font-black uppercase tracking-[0.15em] text-primary">02 · Tarification</div>
+        <h2 className="mt-1 text-lg font-bold">Résumé commercial visible en un coup d’œil</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">Tarif Gando, marge partenaire et durée/condition principale. Les exemples détaillés restent dans le PDF.</p>
+        <textarea
+          value={pricingText(value.pricing)}
+          onChange={event => setValue(current => ({ ...current, pricing: parsePricing(event.target.value) }))}
+          rows={5}
+          placeholder={'Tarif Gando | 2,7 % HT | par caution\nMarge partenaire | +0,7 % HT | conservée par le loueur\nDurée de sécurisation | 60 jours | par caution activée'}
+          className="mt-4 w-full resize-y rounded-xl border border-input bg-background px-3 py-3 text-sm leading-6 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+        />
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">{value.pricing.slice(0, 3).map((row, index) => <div key={`${row.item}-${index}`} className="rounded-xl border border-primary/15 bg-primary/[0.035] p-4"><div className="text-[10px] font-bold uppercase tracking-[0.1em] text-primary">{row.item}</div><div className="mt-1 text-xl font-black tracking-[-0.03em]">{row.price || "À définir"}</div><div className="mt-1 text-xs text-muted-foreground">{row.notes}</div></div>)}</div>
+      </Card> : null}
+
+      <input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void uploadPdf(file); }} />
+
+      {!pdfUrl ? <Card className="p-5 sm:p-7">
+        {!quickDeal ? <div className="mb-4"><div className="text-[10px] font-black uppercase tracking-[0.15em] text-primary">03 · PDF commercial</div><h2 className="mt-1 text-lg font-bold">Document commercial complet</h2></div> : null}
+        <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading} className="flex min-h-[260px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/20 px-6 text-center transition hover:border-primary/50 hover:bg-primary/[0.03] disabled:opacity-60">
+          {uploading ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <UploadCloud className="h-9 w-9 text-primary" />}
+          <div className="mt-4 text-base font-semibold">{uploading ? "Import du PDF…" : "Importer la propal PDF"}</div>
+          <div className="mt-1 text-sm text-muted-foreground">PDF uniquement · 20 Mo maximum</div>
+        </button>
+      </Card> : null}
+
+      {pdfUrl ? <Card className="overflow-hidden p-0">
+        {!quickDeal ? <div className="border-b border-border bg-background px-5 py-4"><div className="text-[10px] font-black uppercase tracking-[0.15em] text-primary">03 · PDF commercial</div><h2 className="mt-1 text-lg font-bold">Document commercial complet</h2></div> : null}
+        <div className="flex flex-col gap-3 border-b border-border bg-slate-950 px-4 py-3 text-white sm:flex-row sm:items-center">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10"><FileText className="h-4 w-4" /></div>
+          <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{pdfName}</div><div className="text-[11px] text-slate-400">Aperçu du document partagé au client</div></div>
+          <Button size="sm" variant="secondary" asChild><a href={pdfUrl} target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Ouvrir</a></Button>
+          <Button size="sm" variant="secondary" onClick={() => inputRef.current?.click()} disabled={uploading}>Remplacer</Button>
+          <Button size="sm" variant="destructive" onClick={() => void removePdf()} disabled={working}><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Supprimer</Button>
+        </div>
+        <div className="bg-[#eef0f2] p-3 sm:p-5"><div className="mx-auto max-w-[940px] overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm"><iframe src={cleanPdfViewerUrl(pdfUrl)} title={pdfName} className="h-[760px] w-full bg-white" /></div></div>
+      </Card> : null}
+    </div>
+  </div>;
 }
