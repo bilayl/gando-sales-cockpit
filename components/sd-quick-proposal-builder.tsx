@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { SDRoomBrandingEditorV2 } from "@/components/sd-room-branding-editor-v2";
 import { createEmptySD04, type SD04Content } from "@/lib/sd-stage-content";
 import type { SDDocumentRecord, SDRoomRecord } from "@/lib/sd-room-types";
 
@@ -167,6 +168,15 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         <p className="mt-2 text-[11px] text-muted-foreground">Après l’avoir réellement partagé, renseigne la date et l’heure dans « Propal envoyée » au-dessus.</p>
       </div> : null}
     </Card>
+
+    <section className="overflow-hidden rounded-2xl border-2 border-primary/20 bg-background shadow-sm">
+      <div className="border-b border-primary/15 bg-primary/[0.06] px-5 py-4 sm:px-6">
+        <div className="text-[10px] font-black uppercase tracking-[0.15em] text-primary">Branding du Deal rapide</div>
+        <h2 className="mt-1 text-lg font-black tracking-[-0.025em]">Bannière de la proposition</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Configure ici le logo, le titre, le sous-titre, l’image et le style visibles sur le lien public de cette propal.</p>
+      </div>
+      <div className="p-5 sm:p-6"><SDRoomBrandingEditorV2 dealId={dealId} embedded /></div>
+    </section>
 
     <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
       <Card className="space-y-5 p-5 lg:p-6">
