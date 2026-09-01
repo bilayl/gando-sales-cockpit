@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { SDRoomBrandingEditorV2 } from "@/components/sd-room-branding-editor-v2";
+import { SDQuickProposalBranding } from "@/components/sd-quick-proposal-branding";
 import { createEmptySD04, type SD04Content } from "@/lib/sd-stage-content";
 import type { SDDocumentRecord, SDRoomRecord } from "@/lib/sd-room-types";
 
@@ -175,7 +175,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         <h2 className="mt-1 text-lg font-black tracking-[-0.025em]">Bannière de la proposition</h2>
         <p className="mt-1 text-xs text-muted-foreground">Configure ici le logo, le titre, le sous-titre, l’image et le style visibles sur le lien public de cette propal.</p>
       </div>
-      <div className="p-5 sm:p-6"><SDRoomBrandingEditorV2 dealId={dealId} embedded /></div>
+      <div className="p-5 sm:p-6"><SDQuickProposalBranding dealId={dealId} /></div>
     </section>
 
     <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
