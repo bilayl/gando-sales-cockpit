@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Eye, FileSignature, FileText, ListChecks, Palette, Presentation, Settings2 } from "lucide-react";
+import { ArrowLeft, Eye, FileSignature, FileText, ListChecks, Loader2, Palette, Presentation, Settings2 } from "lucide-react";
 import { FortuneoTestResign } from "@/components/fortuneo-test-resign";
 import { SD02PlanBuilder } from "@/components/sd02-plan-builder";
 import { SD03SolutionBuilder } from "@/components/sd03-solution-builder";
@@ -42,34 +42,67 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
   const [roomMode, setRoomMode] = useState<SDRoomMode | null>(null);
   const [dealName, setDealName] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [modeError, setModeError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
+
+    // Critical: never reuse the previous deal's UI mode while the next deal is loading.
+    setRoomMode(null);
+    setDealName("");
+    setTab("content");
+    setRefreshKey(0);
+    setModeError("");
+
     async function loadRoomMode() {
       try {
-        const response = await fetch("/api/sd-rooms", { cache: "no-store" });
+        // Resolve the mode from the deal-specific room, never from the global rooms list.
+        const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, { cache: "no-store" });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.message || payload.error || "Chargement impossible");
-        const room = (payload.results || []).find((item: { hubspot_deal_id?: string; room_mode?: SDRoomMode; title?: string }) => item.hubspot_deal_id === dealId);
-        const mode: SDRoomMode = room?.room_mode === "enterprise" ? "enterprise" : "standard";
+        if (!payload.room) throw new Error("Deal Room introuvable");
+
+        // Only an explicit `standard` value is a quick deal. Everything else stays enterprise.
+        const mode: SDRoomMode = payload.room.room_mode === "standard" ? "standard" : "enterprise";
         if (cancelled) return;
+
         setRoomMode(mode);
-        setDealName(String(room?.title || ""));
+        setDealName(String(payload.deal?.name || payload.room.title || ""));
+
         const requested = new URLSearchParams(window.location.search).get("tab") as WorkspaceTab | null;
-        if (mode === "standard") setTab(requested === "contract" ? "contract" : "offer");
-        else if (requested && WORKSPACE_TABS.includes(requested)) setTab(requested);
-      } catch {
-        if (!cancelled) setRoomMode("enterprise");
+        if (mode === "standard") {
+          setTab(requested === "contract" ? "contract" : "offer");
+        } else {
+          setTab(requested && WORKSPACE_TABS.includes(requested) ? requested : "content");
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setRoomMode(null);
+        setModeError(error instanceof Error ? error.message : "Impossible de déterminer le type de Deal Room");
       }
     }
+
     void loadRoomMode();
     return () => { cancelled = true; };
   }, [dealId]);
 
-  const tabs = useMemo(() => roomMode === "standard" ? quickTabs : enterpriseTabs, [roomMode]);
+  const tabs = useMemo(() => roomMode === "standard" ? quickTabs : roomMode === "enterprise" ? enterpriseTabs : [], [roomMode]);
   const analyticsCode = CODE_BY_TAB[tab];
   const quickDeal = roomMode === "standard";
   const changed = () => setRefreshKey(value => value + 1);
+
+  if (!roomMode) {
+    return <div className="min-h-screen bg-background">
+      <div className="sticky top-0 z-[60] border-b border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex max-w-[1500px] items-center gap-2 px-5 py-2 lg:px-7">
+          <Link href="/deal-room" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" /> Retour</Link>
+        </div>
+      </div>
+      <div className="grid min-h-[60vh] place-items-center px-5 text-center">
+        {modeError ? <div><div className="text-sm font-bold text-destructive">Impossible d’ouvrir cette Deal Room</div><div className="mt-2 text-xs text-muted-foreground">{modeError}</div></div> : <div><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><div className="mt-3 text-sm font-semibold text-muted-foreground">Chargement du deal…</div></div>}
+      </div>
+    </div>;
+  }
 
   return <div className="min-h-screen bg-background">
     <div className="sticky top-0 z-[60] border-b border-border bg-background/95 backdrop-blur">
