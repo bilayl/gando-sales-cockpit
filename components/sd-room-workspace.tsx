@@ -40,6 +40,7 @@ const quickTabs: Array<{ value: WorkspaceTab; label: string; icon: typeof FileTe
 export function SDRoomWorkspace({ dealId }: { dealId: string }) {
   const [tab, setTab] = useState<WorkspaceTab>("content");
   const [roomMode, setRoomMode] = useState<SDRoomMode | null>(null);
+  const [dealName, setDealName] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -49,10 +50,11 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
         const response = await fetch("/api/sd-rooms", { cache: "no-store" });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.message || payload.error || "Chargement impossible");
-        const room = (payload.results || []).find((item: { hubspot_deal_id?: string; room_mode?: SDRoomMode }) => item.hubspot_deal_id === dealId);
+        const room = (payload.results || []).find((item: { hubspot_deal_id?: string; room_mode?: SDRoomMode; title?: string }) => item.hubspot_deal_id === dealId);
         const mode: SDRoomMode = room?.room_mode === "enterprise" ? "enterprise" : "standard";
         if (cancelled) return;
         setRoomMode(mode);
+        setDealName(String(room?.title || ""));
         const requested = new URLSearchParams(window.location.search).get("tab") as WorkspaceTab | null;
         if (mode === "standard") setTab(requested === "contract" ? "contract" : "offer");
         else if (requested && WORKSPACE_TABS.includes(requested)) setTab(requested);
@@ -75,6 +77,7 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
         <Link href="/deal-room" className="mr-2 flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
           <ArrowLeft className="h-3.5 w-3.5" /> Retour
         </Link>
+        {dealName ? <div className="mr-2 max-w-[280px] shrink-0 truncate text-xs font-black text-foreground" title={dealName}>{dealName}</div> : null}
         <span className="mr-2 h-6 w-px shrink-0 bg-border" />
         {tabs.map(item => {
           const Icon = item.icon;
