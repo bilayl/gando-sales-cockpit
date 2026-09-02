@@ -72,6 +72,7 @@ async function listRowsWithDealVelocity() {
     const snapshot = await getHubSpotDealVelocitySnapshot();
     const retrieved = new Date(snapshot.retrievedAt);
     const currentKey = rowKey(retrieved.getUTCFullYear(), retrieved.getUTCMonth() + 1);
+    const currentClosing = snapshot.monthlyClosing[currentKey] ?? null;
 
     return {
       rows: rows.map(row => {
@@ -95,6 +96,8 @@ async function listRowsWithDealVelocity() {
       dealVelocity: {
         source: "hubspot",
         retrievedAt: snapshot.retrievedAt,
+        currentMonthKey: currentKey,
+        currentMonthClosing: currentClosing,
         currentOpenPipeline: snapshot.openPipeline,
       },
     };
@@ -105,6 +108,9 @@ async function listRowsWithDealVelocity() {
       dealVelocity: {
         source: "stored",
         retrievedAt: null,
+        currentMonthKey: null,
+        currentMonthClosing: null,
+        currentOpenPipeline: null,
         error: error instanceof Error ? error.message : "HubSpot indisponible",
       },
     };

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Database } from "lucide-react"
+import { Clock3, Database } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,6 +16,24 @@ import {
   type ValueKpiRow,
 } from "@/lib/kpi-dashboard"
 
+type DealVelocitySnapshot = {
+  source?: "hubspot" | "stored" | string
+  retrievedAt?: string | null
+  currentMonthKey?: string | null
+  currentMonthClosing?: {
+    avgClosingDays: number | null
+    medianClosingDays: number | null
+    closedWonCount: number
+  } | null
+  currentOpenPipeline?: {
+    avgDealAgeDays: number | null
+    oldestOpenDealDays: number | null
+    openDealsCount: number
+    dealsOver40Days: number
+  } | null
+  error?: string
+}
+
 function euro(value: number | null | undefined, digits = 0) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: digits }).format(value)
@@ -27,6 +45,10 @@ function integer(value: number | null | undefined) {
 function percent(value: number | null | undefined, digits = 1) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { style: "percent", maximumFractionDigits: digits }).format(value)
+}
+function days(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(value)} j`
 }
 function ratio(top: number, bottom: number) { return bottom > 0 ? top / bottom : null }
 
@@ -42,6 +64,7 @@ export function KpiDashboardOverview() {
   const [coreRows, setCoreRows] = useState<CoreKpiRow[]>([])
   const [valueRows, setValueRows] = useState<ValueKpiRow[]>([])
   const [campaignRows, setCampaignRows] = useState<CampaignKpiRow[]>([])
+  const [dealVelocity, setDealVelocity] = useState<DealVelocitySnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
@@ -60,6 +83,7 @@ export function KpiDashboardOverview() {
         setCoreRows(Array.isArray(coreBody.rows) ? coreBody.rows : [])
         setValueRows(Array.isArray(valueBody.rows) ? valueBody.rows : [])
         setCampaignRows(Array.isArray(campaignBody.rows) ? campaignBody.rows : [])
+        setDealVelocity(valueBody.dealVelocity && typeof valueBody.dealVelocity === "object" ? valueBody.dealVelocity : null)
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Impossible de charger le dashboard KPI.")
       } finally {
@@ -90,6 +114,22 @@ export function KpiDashboardOverview() {
     { label: "Marge nette", value: euro(summary.netMargin), detail: `Taux de marge ${percent(summary.marginRate)}` },
     { label: "ROI cash acquisition", value: percent(summary.cashRoi), detail: `${euro(summary.campaignTotalCost)} de coûts complets · ROAS ${summary.cashRoas == null ? "—" : `${summary.cashRoas.toFixed(1)}×`}` },
   ]
+
+  const closing = dealVelocity?.currentMonthClosing ?? null
+  const openPipeline = dealVelocity?.currentOpenPipeline ?? null
+  const staleShare = openPipeline && openPipeline.openDealsCount > 0
+    ? openPipeline.dealsOver40Days / openPipeline.openDealsCount
+    : null
+  const dealDurationMetrics = [
+    { label: "Closing moyen", value: days(closing?.avgClosingDays), detail: `${integer(closing?.closedWonCount)} deal(s) gagnés ce mois` },
+    { label: "Closing médian", value: days(closing?.medianClosingDays), detail: "Moins sensible aux deals très longs" },
+    { label: "Âge moyen des deals ouverts", value: days(openPipeline?.avgDealAgeDays), detail: `${integer(openPipeline?.openDealsCount)} deals ouverts` },
+    { label: "Plus vieux deal ouvert", value: days(openPipeline?.oldestOpenDealDays), detail: "À challenger en priorité" },
+    { label: "Deals > 40 jours", value: integer(openPipeline?.dealsOver40Days), detail: staleShare == null ? "—" : `${percent(staleShare)} du pipeline ouvert` },
+  ]
+  const velocityUpdatedAt = dealVelocity?.retrievedAt
+    ? new Date(dealVelocity.retrievedAt).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+    : null
 
   return (
     <div id="kpi-dashboard" className="min-w-0 p-4 lg:px-6 lg:py-5">
@@ -152,6 +192,34 @@ export function KpiDashboardOverview() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section id="kpi-deal-duration" className="border-b border-border bg-card">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Vélocité commerciale</div>
+              <div className="mt-0.5 flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Clock3 className="size-3.5 text-muted-foreground" />
+                Durée des deals
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant={dealVelocity?.source === "hubspot" ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px] font-semibold">
+                {dealVelocity?.source === "hubspot" ? "HubSpot live" : "Données enregistrées"}
+              </Badge>
+              {velocityUpdatedAt ? <span className="text-[10px] text-muted-foreground">Maj {velocityUpdatedAt}</span> : null}
+            </div>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5">
+            {dealDurationMetrics.map((item, index) => (
+              <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index >= 2 ? "sm:border-t lg:border-t-0" : ""}`}>
+                <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{item.label}</div>
+                <div className="mt-2 text-[22px] font-semibold tracking-[-0.03em] tabular-nums">{item.value}</div>
+                <div className="mt-1.5 text-[11px] font-medium text-muted-foreground">{item.detail}</div>
+              </div>
+            ))}
+          </div>
+          {dealVelocity?.error ? <div className="border-t border-border px-4 py-2 text-[10px] text-muted-foreground">HubSpot indisponible : {dealVelocity.error}</div> : null}
         </section>
 
         <KpiDataTable data={summary.points} />
