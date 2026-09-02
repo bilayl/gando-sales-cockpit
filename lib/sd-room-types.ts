@@ -41,6 +41,15 @@ export type SD01Evidence = {
   quote: string;
 };
 
+export type SD01Metric = {
+  lever: string;
+  mechanism: string;
+  value: string;
+  confirmedBy?: string | null;
+  confirmedEmail?: string | null;
+  confirmedAt?: string | null;
+};
+
 export type SD01Content = {
   executiveSummary: string;
   companyProfile: { sector: string; description: string; context: string };
@@ -52,7 +61,7 @@ export type SD01Content = {
   painPoints: SD01PainPoint[];
   solutionFit: Array<{ need: string; response: string }>;
   roi: {
-    valueLevers: Array<{ lever: string; mechanism: string; value: string }>;
+    valueLevers: SD01Metric[];
     metricsRequired: string[];
   };
   urgency: string[];
