@@ -12,6 +12,7 @@ export type MutualActionItem = {
 
 export type SD02Content = {
   objective: string;
+  workingNotes: string;
   successDefinition: string;
   decisionDate: string;
   targetGoLiveDate: string;
@@ -95,6 +96,7 @@ type EmptyStage = Record<string, unknown>;
 export function createEmptySD02(): SD02Content {
   return {
     objective: "",
+    workingNotes: "",
     successDefinition: "",
     decisionDate: "",
     targetGoLiveDate: "",
@@ -184,6 +186,7 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
   if (code === "SD02") {
     const result: SD02Content = {
       objective: text(source.objective),
+      workingNotes: text(source.workingNotes, 12000),
       successDefinition: text(source.successDefinition),
       decisionDate: text(source.decisionDate, 40),
       targetGoLiveDate: text(source.targetGoLiveDate, 40),

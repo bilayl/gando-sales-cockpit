@@ -8,8 +8,8 @@ export type SDRoomBrandTheme = "gando" | "gradient" | "dark" | "light";
 export type SDRoomMode = "standard" | "enterprise";
 
 export const SD_STAGE_META: Record<SDCode, { title: string; subtitle: string }> = {
-  SD01: { title: "Synthèse", subtitle: "Contexte, enjeux, processus, décisions et prochaines étapes" },
-  SD02: { title: "Plan d’action", subtitle: "Étapes partagées · ordre, responsables, échéances et statut" },
+  SD01: { title: "Synthèse", subtitle: "Compréhension commune · entreprise, contexte, enjeux, processus et solution fit" },
+  SD02: { title: "Prochaines étapes", subtitle: "Décisions, points à trancher et plan d’action partagé" },
   SD03: { title: "Solution & intégration", subtitle: "Étape facultative · périmètre, pilote, données et déploiement" },
   SD04: { title: "Proposition commerciale", subtitle: "Offre en ligne, prix, conditions et accord client" },
   SD05: { title: "Contrat & signature", subtitle: "Contrat, fichier signé et suivi de signature" },
