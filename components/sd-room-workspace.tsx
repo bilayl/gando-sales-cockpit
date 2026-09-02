@@ -11,7 +11,6 @@ import { SD04OfferBuilder } from "@/components/sd04-offer-builder";
 import { SD05ContractBuilder } from "@/components/sd05-contract-builder";
 import { SDDocumentAnalyticsStrip } from "@/components/sd-document-analytics-strip";
 import { SDEnterpriseRoomToolbar } from "@/components/sd-enterprise-room-toolbar";
-import { SDLatestConsultationsCard } from "@/components/sd-latest-consultations-card";
 import { SDQuickContractManager } from "@/components/sd-quick-contract-manager";
 import { SDQuickDealTimeline } from "@/components/sd-quick-deal-timeline";
 import { SDQuickProposalBuilder } from "@/components/sd-quick-proposal-builder";
@@ -84,7 +83,6 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
   return <div className="min-h-screen bg-background">
     <div className="sticky top-0 z-[60] border-b border-border bg-background/95 backdrop-blur"><div className="mx-auto flex max-w-[1500px] items-center gap-2 overflow-x-auto px-5 py-2 lg:px-7"><Link href="/deal-room" className="mr-2 flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" /> Retour</Link>{dealName ? <div className="mr-2 max-w-[280px] shrink-0 truncate text-xs font-black text-foreground" title={dealName}>{dealName}</div> : null}<span className="mr-2 h-6 w-px shrink-0 bg-border" />{tabs.map(item => { const Icon = item.icon; return <button key={item.value} type="button" onClick={() => setTab(item.value)} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-colors", tab === item.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Icon className="h-3.5 w-3.5" /> {item.label}</button>; })}<span className="ml-auto hidden shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:block">{quickDeal ? "Deal rapide" : "Deal entreprise"} · Gando</span></div></div>
     {quickDeal ? <SDQuickDealTimeline dealId={dealId} refreshKey={refreshKey} /> : <SDEnterpriseRoomToolbar dealId={dealId} />}
-    {!quickDeal && tab !== "visitors" ? <SDLatestConsultationsCard dealId={dealId} /> : null}
     {!quickDeal && analyticsCode ? <SDDocumentAnalyticsStrip dealId={dealId} code={analyticsCode} /> : null}
     {!quickDeal && tab === "contract" ? <FortuneoTestResign dealId={dealId} /> : null}
     {quickDeal ? (tab === "contract" ? <SDQuickContractManager dealId={dealId} onChanged={changed} /> : <SDQuickProposalBuilder dealId={dealId} onChanged={changed} />) : tab === "content" ? <SD01EnterpriseWorkspace dealId={dealId} /> : tab === "plan" ? <SD02PlanBuilder dealId={dealId} /> : tab === "solution" ? <SD03SolutionBuilder dealId={dealId} /> : tab === "offer" ? <SD04OfferBuilder dealId={dealId} /> : tab === "contract" ? <SD05ContractBuilder dealId={dealId} /> : tab === "visitors" ? <SDRoomVisitorsPanel dealId={dealId} /> : tab === "branding" ? <SDRoomBrandingEditorV2 dealId={dealId} /> : <SDRoomPreview dealId={dealId} />}
