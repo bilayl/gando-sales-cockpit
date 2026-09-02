@@ -156,7 +156,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         opens,
         uniqueVisitors: visitors.length,
         activeSeconds,
-        sessions: sessions.length,
+        sessions: sessionMap.size,
         lastViewedAt: events[0]?.created_at || null,
       },
       visitors,
