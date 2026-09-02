@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, Clock3, History, Loader2, MessageSquareText, Plus, RefreshCw, RotateCcw, Save, Sparkles, Target, Trash2, Users } from "lucide-react";
+import { Check, ChevronDown, Clock3, Eye, History, Loader2, MessageSquareText, Plus, RefreshCw, RotateCcw, Save, Sparkles, Target, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,15 @@ function formatDate(value?: string | null) {
   if (!value) return "Date inconnue";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Date inconnue" : new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+function formatDuration(seconds: number) {
+  const safe = Math.max(0, Math.round(seconds || 0));
+  if (safe < 60) return `${safe}s`;
+  const minutes = Math.floor(safe / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
 }
 
 function FreeTextarea({ value, onChange, rows = 4, placeholder }: { value: string; onChange: (value: string) => void; rows?: number; placeholder?: string }) {
@@ -203,6 +213,8 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
   if (!data?.room) return <div className="p-6"><Card className="mx-auto max-w-xl p-8 text-center"><div className="font-bold">SD01 indisponible</div><Button className="mt-4" variant="outline" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" />Réessayer</Button></Card></div>;
 
   const safeRoom = data.room;
+  const analytics = data.analytics;
+  const recentVisitors = analytics?.recentVisitors || [];
   const addStakeholder = () => update("stakeholders", [...content.stakeholders, { name: "", role: "", organization: companyName, notes: "" }]);
   const addPain = () => update("painPoints", [...content.painPoints, { priority: content.painPoints.length + 1, title: "", details: [] }]);
   const addFit = () => update("solutionFit", [...content.solutionFit, { need: "", response: "" }]);
@@ -259,6 +271,19 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
           </Card>
 
           <Card className="p-5"><div className="flex items-center gap-2"><MessageSquareText className="h-4 w-4 text-primary" /><h3 className="font-bold">Remarques</h3><Badge variant="outline">{openComments.length}</Badge></div><div className="mt-3 space-y-2">{openComments.slice(0, 6).map(comment => <div key={comment.id} className="rounded-lg border border-border bg-muted/20 p-3 text-xs"><div className="font-semibold">{comment.author_email}</div><p className="mt-1 whitespace-pre-line leading-5 text-muted-foreground">{comment.body}</p><div className="mt-2 flex items-center justify-between"><span className="text-[10px] text-muted-foreground">{comment.document_code} · {formatDate(comment.created_at)}</span><Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => void resolveComment(comment.id)} disabled={working === `comment:${comment.id}`}><Check className="mr-1 h-3 w-3" />Traité</Button></div></div>)}{!openComments.length ? <p className="text-xs text-muted-foreground">Aucune remarque ouverte.</p> : null}</div></Card>
+
+          <Card className="rounded-[22px] border-border/80 bg-card p-5 shadow-sm">
+            <div className="flex items-center gap-3"><Eye className="h-5 w-5 text-primary" /><h3 className="text-lg font-black tracking-[-0.025em]">Dernières consultations</h3></div>
+            <p className="mt-2 text-sm text-muted-foreground">Dernière activité : {analytics?.lastViewedAt ? formatDate(analytics.lastViewedAt) : "Jamais"}</p>
+            {recentVisitors.length ? <div className="mt-4 divide-y divide-border">{recentVisitors.slice(0, 5).map(visitor => {
+              const name = [visitor.firstName, visitor.lastName].filter(Boolean).join(" ") || visitor.email || "Visiteur";
+              return <div key={visitor.email || `${visitor.firstName}-${visitor.lastName}`} className="py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-bold">{name}</div><div className="mt-0.5 truncate text-xs text-muted-foreground">{visitor.email || "Email inconnu"}</div></div><div className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary"><Clock3 className="mr-1 inline h-3 w-3" />{formatDuration(visitor.activeSeconds)}</div></div>
+                <div className="mt-2 text-[11px] text-muted-foreground">Consulté le {formatDate(visitor.lastSeenAt)}</div>
+              </div>;
+            })}</div> : <p className="mt-5 text-sm text-muted-foreground">Aucune consultation pour le moment.</p>}
+            <Link href="?tab=visitors" className="mt-4 inline-flex text-xs font-bold text-primary hover:underline">Voir tout l’historique</Link>
+          </Card>
 
           <details className="group overflow-hidden rounded-xl border border-border bg-card"><summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 [&::-webkit-details-marker]:hidden"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><span className="text-sm font-bold">Sources & mise à jour</span></div><ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" /></summary><div className="border-t border-border p-5"><div className="space-y-2">{(data.linkedConversations || []).slice(0, 10).map(call => <label key={call.id} className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5 text-xs"><input type="checkbox" className="mt-0.5" checked={selectedCalls.includes(call.id)} onChange={event => setSelectedCalls(current => event.target.checked ? [...new Set([...current, call.id])] : current.filter(id => id !== call.id))} /><span><span className="font-semibold">{call.title}</span><span className="mt-0.5 block text-muted-foreground">{formatDate(call.occurredAt)}</span></span></label>)}</div><Input className="mt-4" value={manualTitle} onChange={event => setManualTitle(event.target.value)} placeholder="Titre de la note" /><textarea className="mt-2 w-full rounded-lg border border-border bg-background p-3 text-xs outline-none" rows={4} value={manualTranscript} onChange={event => setManualTranscript(event.target.value)} placeholder="Colle un compte rendu ou une note…" /><Button className="mt-3 w-full" variant="outline" onClick={() => void generateFromSources()} disabled={working === "generate"}>{working === "generate" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}Mettre à jour le SD01</Button></div></details>
 
