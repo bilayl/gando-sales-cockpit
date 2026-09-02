@@ -10,6 +10,7 @@ import { SD03SolutionBuilder } from "@/components/sd03-solution-builder";
 import { SD04OfferBuilder } from "@/components/sd04-offer-builder";
 import { SD05ContractBuilder } from "@/components/sd05-contract-builder";
 import { SDDocumentAnalyticsStrip } from "@/components/sd-document-analytics-strip";
+import { SDEnterpriseRoomToolbar } from "@/components/sd-enterprise-room-toolbar";
 import { SDQuickContractManager } from "@/components/sd-quick-contract-manager";
 import { SDQuickDealTimeline } from "@/components/sd-quick-deal-timeline";
 import { SDQuickProposalBuilder } from "@/components/sd-quick-proposal-builder";
@@ -23,7 +24,7 @@ const CODE_BY_TAB: Partial<Record<WorkspaceTab, SDCode>> = { content: "SD01", pl
 const WORKSPACE_TABS: WorkspaceTab[] = ["content", "plan", "solution", "offer", "contract", "branding", "preview"];
 
 const enterpriseTabs: Array<{ value: WorkspaceTab; label: string; icon: typeof FileText }> = [
-  { value: "content", label: "SD01 · Cadrage", icon: FileText },
+  { value: "content", label: "SD01 · Synthèse", icon: FileText },
   { value: "plan", label: "SD02 · Plan d’action", icon: ListChecks },
   { value: "solution", label: "SD03 · Solution", icon: Settings2 },
   { value: "offer", label: "SD04 · Propal", icon: Presentation },
@@ -105,7 +106,8 @@ export function SDRoomWorkspace({ dealId }: { dealId: string }) {
       </div>
     </div>
 
-    {quickDeal ? <SDQuickDealTimeline dealId={dealId} refreshKey={refreshKey} /> : analyticsCode ? <SDDocumentAnalyticsStrip dealId={dealId} code={analyticsCode} /> : null}
+    {quickDeal ? <SDQuickDealTimeline dealId={dealId} refreshKey={refreshKey} /> : <SDEnterpriseRoomToolbar dealId={dealId} />}
+    {!quickDeal && analyticsCode ? <SDDocumentAnalyticsStrip dealId={dealId} code={analyticsCode} /> : null}
     {!quickDeal && tab === "contract" ? <FortuneoTestResign dealId={dealId} /> : null}
 
     {quickDeal ? (
