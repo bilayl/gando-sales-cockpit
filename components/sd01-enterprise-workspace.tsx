@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, Check, ChevronDown, Clock3, History, Loader2, MessageSquareText, Plus, RefreshCw, RotateCcw, Save, Sparkles, Target, Trash2, Users } from "lucide-react";
+import { Check, ChevronDown, Clock3, History, Loader2, MessageSquareText, Plus, RefreshCw, RotateCcw, Save, Sparkles, Target, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,11 @@ function cleanContent(value: unknown, companyName = ""): SD01Content {
 
 function lines(value: string) { return value.split("\n").map(item => item.trim()).filter(Boolean); }
 function textLines(value: string[]) { return value.join("\n"); }
-function formatDate(value?: string | null) { if (!value) return "Date inconnue"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "Date inconnue" : new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(date); }
+function formatDate(value?: string | null) {
+  if (!value) return "Date inconnue";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Date inconnue" : new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
 
 function FreeTextarea({ value, onChange, rows = 4, placeholder }: { value: string; onChange: (value: string) => void; rows?: number; placeholder?: string }) {
   return <textarea value={value} onChange={event => onChange(event.target.value)} rows={rows} placeholder={placeholder} className="w-full resize-y border-0 bg-transparent p-0 text-[15px] leading-7 text-foreground outline-none placeholder:text-muted-foreground/50 focus:ring-0" />;
@@ -46,7 +50,10 @@ function FreeTextarea({ value, onChange, rows = 4, placeholder }: { value: strin
 
 function DocBlock({ title, hint, children, action }: { title: string; hint?: string; children: ReactNode; action?: ReactNode }) {
   return <section className="border-b border-border/70 px-6 py-6 last:border-0 sm:px-9 sm:py-7">
-    <div className="mb-4 flex items-start justify-between gap-4"><div><h2 className="text-[17px] font-bold tracking-[-0.02em]">{title}</h2>{hint ? <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">{hint}</p> : null}</div>{action}</div>
+    <div className="mb-4 flex items-start justify-between gap-4">
+      <div><h2 className="text-[17px] font-bold tracking-[-0.02em]">{title}</h2>{hint ? <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">{hint}</p> : null}</div>
+      {action}
+    </div>
     {children}
   </section>;
 }
@@ -89,8 +96,9 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
       setSelectedCalls((next.linkedConversations || []).filter(call => call.imported).map(call => call.id));
       setAllowlist(next.room?.allowed_emails?.join("\n") || "");
       await loadVersions();
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Chargement impossible"); }
-    finally { setLoading(false); }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Chargement impossible");
+    } finally { setLoading(false); }
   }, [dealId, loadVersions]);
 
   useEffect(() => { void load(); }, [load]);
@@ -107,7 +115,11 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
     setWorking(publish ? "publish" : "save");
     try {
       const cleaned: SD01Content = { ...content, roi: { valueLevers: content.roi.valueLevers.filter(metric => metric.lever.trim() || metric.value.trim()), metricsRequired: [] } };
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: publish ? "publish_sd01" : "save_sd01", content: cleaned }) });
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: publish ? "publish_sd01" : "save_sd01", content: cleaned }),
+      });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Enregistrement impossible");
       setContent(cleanContent(payload.document?.content, companyName));
@@ -122,7 +134,11 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
     if (!selectedCalls.length && !manualTranscript.trim()) { toast.error("Sélectionne un enregistrement ou ajoute une note."); return; }
     setWorking("generate");
     try {
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ callIds: selectedCalls, manualTitle, manualTranscript }) });
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/generate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ callIds: selectedCalls, manualTitle, manualTranscript }),
+      });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Mise à jour impossible");
       setContent(cleanContent(payload.document?.content, companyName));
@@ -137,7 +153,11 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
     if (!window.confirm(`Restaurer la version ${version} dans un nouveau brouillon ?`)) return;
     setWorking(`restore-${version}`);
     try {
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/versions`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version }) });
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/versions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ version }),
+      });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Restauration impossible");
       setContent(cleanContent(payload.document?.content, companyName));
@@ -151,7 +171,11 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
     if (!room) return;
     setWorking("access");
     try {
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "settings", accessMode: room.access_mode, allowedEmails: lines(allowlist) }) });
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "settings", accessMode: room.access_mode, allowedEmails: lines(allowlist) }),
+      });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Réglage impossible");
       setData(current => current ? { ...current, room: payload.room } : current);
@@ -163,7 +187,11 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
   async function resolveComment(commentId: string) {
     setWorking(`comment:${commentId}`);
     try {
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "resolve_comment", commentId }) });
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "resolve_comment", commentId }),
+      });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Traitement impossible");
       setData(current => current ? { ...current, comments: (current.comments || []).map(comment => comment.id === commentId ? payload.comment : comment) } : current);
@@ -174,6 +202,7 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
   if (loading && !data) return <div className="grid min-h-[60vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   if (!data?.room) return <div className="p-6"><Card className="mx-auto max-w-xl p-8 text-center"><div className="font-bold">SD01 indisponible</div><Button className="mt-4" variant="outline" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" />Réessayer</Button></Card></div>;
 
+  const safeRoom = data.room;
   const addStakeholder = () => update("stakeholders", [...content.stakeholders, { name: "", role: "", organization: companyName, notes: "" }]);
   const addPain = () => update("painPoints", [...content.painPoints, { priority: content.painPoints.length + 1, title: "", details: [] }]);
   const addFit = () => update("solutionFit", [...content.solutionFit, { need: "", response: "" }]);
@@ -222,7 +251,12 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
         </Card>
 
         <aside className="space-y-4 xl:sticky xl:top-32">
-          <Card className="p-5"><div className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /><h3 className="font-bold">Accès client</h3></div><div className="mt-4 grid grid-cols-2 gap-2"><Button variant={room.access_mode === "email" ? "default" : "outline"} size="sm" onClick={() => setData(current => current && current.room ? { ...current, room: { ...current.room, access_mode: "email" } } : current)}>Email identifié</Button><Button variant={room.access_mode === "allowlist" ? "default" : "outline"} size="sm" onClick={() => setData(current => current && current.room ? { ...current, room: { ...current.room, access_mode: "allowlist" } } : current)}>Liste autorisée</Button></div>{room.access_mode === "allowlist" ? <textarea value={allowlist} onChange={event => setAllowlist(event.target.value)} rows={4} placeholder="direction@client.com" className="mt-3 w-full rounded-lg border border-border bg-background p-3 text-xs outline-none" /> : <p className="mt-3 text-xs leading-5 text-muted-foreground">Chaque visiteur renseigne son identité avant d’accéder à la Room.</p>}<Button className="mt-3 w-full" variant="outline" size="sm" onClick={() => void saveAccess()} disabled={working === "access"}>Enregistrer l’accès</Button></Card>
+          <Card className="p-5">
+            <div className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /><h3 className="font-bold">Accès client</h3></div>
+            <div className="mt-4 grid grid-cols-2 gap-2"><Button variant={safeRoom.access_mode === "email" ? "default" : "outline"} size="sm" onClick={() => setData(current => current && current.room ? { ...current, room: { ...current.room, access_mode: "email" } } : current)}>Email identifié</Button><Button variant={safeRoom.access_mode === "allowlist" ? "default" : "outline"} size="sm" onClick={() => setData(current => current && current.room ? { ...current, room: { ...current.room, access_mode: "allowlist" } } : current)}>Liste autorisée</Button></div>
+            {safeRoom.access_mode === "allowlist" ? <textarea value={allowlist} onChange={event => setAllowlist(event.target.value)} rows={4} placeholder="direction@client.com" className="mt-3 w-full rounded-lg border border-border bg-background p-3 text-xs outline-none" /> : <p className="mt-3 text-xs leading-5 text-muted-foreground">Chaque visiteur renseigne son identité avant d’accéder à la Room.</p>}
+            <Button className="mt-3 w-full" variant="outline" size="sm" onClick={() => void saveAccess()} disabled={working === "access"}>Enregistrer l’accès</Button>
+          </Card>
 
           <Card className="p-5"><div className="flex items-center gap-2"><MessageSquareText className="h-4 w-4 text-primary" /><h3 className="font-bold">Remarques</h3><Badge variant="outline">{openComments.length}</Badge></div><div className="mt-3 space-y-2">{openComments.slice(0, 6).map(comment => <div key={comment.id} className="rounded-lg border border-border bg-muted/20 p-3 text-xs"><div className="font-semibold">{comment.author_email}</div><p className="mt-1 whitespace-pre-line leading-5 text-muted-foreground">{comment.body}</p><div className="mt-2 flex items-center justify-between"><span className="text-[10px] text-muted-foreground">{comment.document_code} · {formatDate(comment.created_at)}</span><Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => void resolveComment(comment.id)} disabled={working === `comment:${comment.id}`}><Check className="mr-1 h-3 w-3" />Traité</Button></div></div>)}{!openComments.length ? <p className="text-xs text-muted-foreground">Aucune remarque ouverte.</p> : null}</div></Card>
 
