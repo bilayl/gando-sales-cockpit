@@ -15,7 +15,7 @@ function cloneContent(value: unknown): SD01Content {
 
 function updateMetric(content: SD01Content, index: number, lever: string, nextMetric: SD01Metric) {
   const metrics = Array.isArray(content?.roi?.valueLevers) ? content.roi.valueLevers : [];
-  let target = metrics[index];
+  let target: SD01Metric | undefined = metrics[index];
   let targetIndex = index;
 
   if (!target || String(target.lever || "").trim() !== lever) {
