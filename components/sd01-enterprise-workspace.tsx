@@ -1,16 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight,
+  BriefcaseBusiness,
+  Building2,
   Check,
   CheckCircle2,
-  ChevronDown,
-  Circle,
+  CircleDollarSign,
+  CircleHelp,
   Clock3,
+  Eye,
   History,
+  ListChecks,
   Loader2,
+  LockKeyhole,
   MessageSquareText,
+  Package,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -20,6 +25,8 @@ import {
   Target,
   Trash2,
   Users,
+  Workflow,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +41,8 @@ import {
   type SD01Content,
   type SD01NextStep,
   type SDDocumentRecord,
+  type SDRoomAnalytics,
+  type SDRoomComment,
   type SDRoomRecord,
 } from "@/lib/sd-room-types";
 import { cn } from "@/lib/utils";
@@ -53,6 +62,8 @@ type RoomResponse = {
   documents: SDDocumentRecord[];
   sources: SourceSummary[];
   linkedConversations: LinkedConversation[];
+  analytics?: SDRoomAnalytics;
+  comments?: SDRoomComment[];
 };
 
 type VersionRow = {
@@ -66,6 +77,10 @@ type VersionRow = {
   change_summary: string | null;
   created_at: string;
 };
+
+type EditorSection = "essential" | "context" | "decision";
+
+const EMPTY_ANALYTICS: SDRoomAnalytics = { opens: 0, uniqueVisitors: 0, activeSeconds: 0, lastViewedAt: null, recentVisitors: [] };
 
 function cleanContent(value: unknown, companyName = ""): SD01Content {
   const empty = createEmptySD01(companyName);
@@ -82,7 +97,6 @@ function cleanContent(value: unknown, companyName = ""): SD01Content {
     solutionFit: Array.isArray(source.solutionFit) ? source.solutionFit : [],
     roi: {
       valueLevers: Array.isArray(source.roi?.valueLevers) ? source.roi.valueLevers : [],
-      // Missing metrics are not part of the collaborative SD01. We only keep metrics when a real value is known.
       metricsRequired: [],
     },
     urgency: Array.isArray(source.urgency) ? source.urgency : [],
@@ -94,29 +108,48 @@ function cleanContent(value: unknown, companyName = ""): SD01Content {
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "Date inconnue";
+  if (!value) return "Jamais";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Date inconnue";
+  if (Number.isNaN(date.getTime())) return "Jamais";
   return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
-function textLines(values: string[]) {
-  return values.join("\n");
+function formatDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.round(totalSeconds || 0));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours) return `${hours} h ${minutes} min`;
+  if (minutes) return `${minutes} min`;
+  return `${seconds} s`;
 }
 
 function lines(value: string) {
   return value.split("\n").map(item => item.trim()).filter(Boolean);
 }
 
-function Area({ value, onChange, rows = 4, placeholder }: { value: string; onChange: (value: string) => void; rows?: number; placeholder?: string }) {
-  return <textarea value={value} onChange={event => onChange(event.target.value)} rows={rows} placeholder={placeholder} className="w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 text-sm leading-6 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15" />;
+function textLines(values: string[]) {
+  return values.join("\n");
 }
 
-function SectionTitle({ icon: Icon, title, description, right }: { icon: typeof Target; title: string; description: string; right?: React.ReactNode }) {
-  return <div className="flex flex-col gap-3 border-b border-border px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
-    <div className="flex items-start gap-3"><div className="rounded-xl bg-primary/10 p-2 text-primary"><Icon className="h-4 w-4" /></div><div><h2 className="font-black tracking-[-0.02em]">{title}</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p></div></div>
-    {right ? <div className="shrink-0">{right}</div> : null}
-  </div>;
+function Area({ value, onChange, rows = 4, placeholder }: { value: string; onChange: (value: string) => void; rows?: number; placeholder?: string }) {
+  return <textarea value={value} onChange={event => onChange(event.target.value)} rows={rows} placeholder={placeholder} className="w-full resize-y rounded-xl border border-input bg-background px-3 py-2.5 text-sm leading-6 outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15" />;
+}
+
+function Block({ icon, title, description, action, children }: { icon: ReactNode; title: string; description?: string; action?: ReactNode; children: ReactNode }) {
+  return <Card className="overflow-hidden p-0">
+    <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="mt-0.5 rounded-xl bg-primary/10 p-2 text-primary">{icon}</div>
+        <div className="min-w-0"><h2 className="font-black tracking-[-0.02em]">{title}</h2>{description ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p> : null}</div>
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
+    <div className="p-5">{children}</div>
+  </Card>;
+}
+
+function EmptyLine({ children }: { children: ReactNode }) {
+  return <div className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-xs text-muted-foreground">{children}</div>;
 }
 
 export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
@@ -126,10 +159,10 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
   const [selectedCalls, setSelectedCalls] = useState<string[]>([]);
   const [manualTitle, setManualTitle] = useState("Note de réunion / compte rendu");
   const [manualTranscript, setManualTranscript] = useState("");
+  const [allowlist, setAllowlist] = useState("");
+  const [section, setSection] = useState<EditorSection>("essential");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
-  const [showContext, setShowContext] = useState(false);
-  const [previewVersion, setPreviewVersion] = useState<number | null>(null);
 
   const loadVersions = useCallback(async () => {
     try {
@@ -154,6 +187,7 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
       const sd01 = next.documents.find(document => document.code === "SD01");
       setContent(cleanContent(sd01?.content, next.room?.company_name || next.deal.company?.name || ""));
       setSelectedCalls((next.linkedConversations || []).filter(call => call.imported).map(call => call.id));
+      setAllowlist(next.room?.allowed_emails?.join("\n") || "");
       await loadVersions();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Chargement impossible");
@@ -164,16 +198,19 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
 
   useEffect(() => { void load(); }, [load]);
 
+  const room = data?.room;
   const sd01 = data?.documents.find(document => document.code === "SD01");
-  const companyName = data?.room?.company_name || data?.deal.company?.name || "Client";
-  const dealName = data?.deal.name || data?.room?.title || "Deal entreprise";
-  const openActions = content.nextSteps.filter(step => step.status !== "done");
+  const companyName = room?.company_name || data?.deal.company?.name || "Client";
+  const dealName = data?.deal.name || room?.title || "Deal entreprise";
+  const analytics = data?.analytics || EMPTY_ANALYTICS;
+  const comments = data?.comments || [];
   const confirmedMetrics = content.roi.valueLevers.filter(metric => metric.value.trim());
+  const openActions = content.nextSteps.filter(step => step.status !== "done");
   const missingCore = useMemo(() => [
-    !content.executiveSummary.trim() ? "Synthèse du besoin" : null,
-    !content.painPoints.length ? "Enjeu / problème client" : null,
-    !content.solutionFit.length ? "Proposition Gando" : null,
-  ].filter(Boolean) as string[], [content.executiveSummary, content.painPoints.length, content.solutionFit.length]);
+    !content.executiveSummary.trim() ? "Synthèse" : null,
+    !content.painPoints.some(item => item.title.trim()) ? "Enjeux" : null,
+    !content.solutionFit.some(item => item.need.trim() && item.response.trim()) ? "Solution fit" : null,
+  ].filter(Boolean) as string[], [content.executiveSummary, content.painPoints, content.solutionFit]);
   const readyForNext = missingCore.length === 0;
 
   const update = <K extends keyof SD01Content>(key: K, value: SD01Content[K]) => setContent(current => ({ ...current, [key]: value }));
@@ -196,7 +233,11 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Enregistrement impossible");
       setContent(cleanContent(payload.document?.content, companyName));
-      setData(current => current ? { ...current, documents: current.documents.map(document => document.code === "SD01" ? payload.document : document) } : current);
+      setData(current => current ? {
+        ...current,
+        documents: current.documents.map(document => document.code === "SD01" ? payload.document : document),
+        room: publish && current.room ? { ...current.room, status: "published", current_stage: "SD01", published_at: new Date().toISOString() } : current.room,
+      } : current);
       await loadVersions();
       toast.success(publish ? "SD01 publié dans la Deal Room" : "SD01 enregistré");
     } catch (error) {
@@ -208,7 +249,7 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
 
   async function generateFromSources() {
     if (!selectedCalls.length && !manualTranscript.trim()) {
-      toast.error("Sélectionne un enregistrement ou ajoute un compte rendu.");
+      toast.error("Sélectionne un échange ou ajoute une note.");
       return;
     }
     setWorking("generate");
@@ -220,14 +261,51 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Mise à jour impossible");
-      const nextContent = cleanContent(payload.document?.content, companyName);
-      setContent(nextContent);
-      setData(current => current ? { ...current, documents: current.documents.map(document => document.code === "SD01" ? { ...payload.document, content: nextContent } : document) } : current);
+      setContent(cleanContent(payload.document?.content, companyName));
       setManualTranscript("");
       await load();
       toast.success(`SD01 mis à jour depuis ${payload.sourceCount} source(s)`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Mise à jour impossible");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function saveAccess() {
+    if (!room) return;
+    setWorking("access");
+    try {
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "settings", accessMode: room.access_mode, allowedEmails: lines(allowlist) }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || payload.error || "Réglage impossible");
+      setData(current => current ? { ...current, room: payload.room } : current);
+      toast.success("Accès client mis à jour");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Réglage impossible");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function resolveComment(commentId: string) {
+    setWorking(`comment:${commentId}`);
+    try {
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "resolve_comment", commentId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || payload.error || "Traitement impossible");
+      setData(current => current ? { ...current, comments: (current.comments || []).map(comment => comment.id === commentId ? payload.comment : comment) } : current);
+      toast.success("Remarque traitée");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Traitement impossible");
     } finally {
       setWorking(null);
     }
@@ -245,13 +323,17 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Restauration impossible");
       setContent(cleanContent(payload.document?.content, companyName));
-      await load();
-      toast.success(`Version ${version} restaurée dans un nouveau brouillon`);
+      await loadVersions();
+      toast.success(`Version ${version} restaurée`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Restauration impossible");
     } finally {
       setWorking(null);
     }
+  }
+
+  function addPainPoint() {
+    update("painPoints", [...content.painPoints, { priority: content.painPoints.length + 1, title: "", details: [] }]);
   }
 
   function addSolutionFit() {
@@ -262,6 +344,10 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
     update("roi", { ...content.roi, valueLevers: [...content.roi.valueLevers, { lever: "", mechanism: "", value: "" }] });
   }
 
+  function addStakeholder() {
+    update("stakeholders", [...content.stakeholders, { name: "", role: "", organization: "", notes: "" }]);
+  }
+
   function addAction() {
     update("nextSteps", [...content.nextSteps, { owner: "", action: "", dueDate: null, status: "not_started" }]);
   }
@@ -270,103 +356,166 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
     update("nextSteps", content.nextSteps.map((step, position) => position === index ? { ...step, ...patch } : step));
   }
 
-  if (loading && !data) return <div className="grid min-h-[60vh] place-items-center"><div className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><div className="mt-3 text-sm text-muted-foreground">Chargement du cadrage…</div></div></div>;
-  if (!data?.room) return <div className="p-6"><Card className="mx-auto max-w-xl p-8 text-center"><div className="font-bold">SD01 indisponible</div><Button className="mt-4" variant="outline" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" />Réessayer</Button></Card></div>;
+  if (loading && !data) return <div className="grid min-h-[60vh] place-items-center"><div className="text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><div className="mt-3 text-sm text-muted-foreground">Chargement du SD01…</div></div></div>;
+  if (!room || !data) return <div className="p-6"><Card className="mx-auto max-w-xl p-8 text-center"><div className="font-bold">SD01 indisponible</div><Button className="mt-4" variant="outline" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" /> Réessayer</Button></Card></div>;
 
-  return <div className="page-shell min-h-screen p-5 lg:p-7"><div className="mx-auto max-w-[1280px] space-y-5">
-    <Card className="overflow-hidden p-0">
-      <div className="bg-gradient-to-br from-primary/[0.09] via-background to-background p-5 sm:p-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">SD01 · Cadrage collaboratif</div>
-            <h1 className="mt-1 text-2xl font-black tracking-[-0.035em]">{dealName}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{companyName} · Le SD01 sert à obtenir ce qu’il faut pour construire la suite, pas à remplir un dossier.</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge variant="outline">V{sd01?.version || 1}</Badge>
-              <Badge variant="outline" className={readyForNext ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700" : "border-amber-500/30 bg-amber-500/10 text-amber-700"}>{readyForNext ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> : <Clock3 className="mr-1 h-3.5 w-3.5" />}{readyForNext ? "Cadrage exploitable" : `${missingCore.length} élément(s) structurant(s) manquant(s)`}</Badge>
-              {openActions.length ? <Badge variant="outline">{openActions.length} action(s) ouverte(s)</Badge> : null}
-              {confirmedMetrics.length ? <Badge variant="outline" className="border-primary/25 text-primary">{confirmedMetrics.length} métrique(s) confirmée(s)</Badge> : null}
+  const setAccessMode = (mode: "email" | "allowlist") => setData(current => current && current.room ? { ...current, room: { ...current.room, access_mode: mode } } : current);
+
+  return <div className="page-shell min-h-screen p-5 lg:p-7">
+    <div className="mx-auto max-w-[1500px] space-y-5">
+      <Card className="overflow-hidden p-0">
+        <div className="bg-gradient-to-br from-primary/[0.08] via-background to-background p-5 sm:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-primary">SD01 · Synthèse</div>
+              <h1 className="mt-1 text-2xl font-black tracking-[-0.035em]">{dealName}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{companyName} · Toutes les anciennes thématiques, organisées en blocs simples.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Badge variant="outline">V{sd01?.version || 1}</Badge>
+                <Badge variant="outline" className={readyForNext ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700" : "border-amber-500/30 bg-amber-500/10 text-amber-700"}>{readyForNext ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> : <Clock3 className="mr-1 h-3.5 w-3.5" />}{readyForNext ? "Synthèse exploitable" : `À compléter : ${missingCore.join(", ")}`}</Badge>
+                {confirmedMetrics.length ? <Badge variant="outline">{confirmedMetrics.length} métrique(s) confirmée(s)</Badge> : null}
+                {openActions.length ? <Badge variant="outline">{openActions.length} action(s) ouverte(s)</Badge> : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => void save(false)} disabled={Boolean(working)}>{working === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Enregistrer</Button>
+              <Button onClick={() => void save(true)} disabled={Boolean(working) || !content.executiveSummary.trim()}>{working === "publish" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} Publier</Button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void save(false)} disabled={Boolean(working)}>{working === "save" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Enregistrer</Button>
-            <Button onClick={() => void save(true)} disabled={Boolean(working) || !content.executiveSummary.trim()}>{working === "publish" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Publier au client</Button>
-          </div>
         </div>
+        <div className="flex gap-2 overflow-x-auto border-t border-border px-5 py-3">
+          {([
+            ["essential", "Essentiel"],
+            ["context", "Contexte entreprise"],
+            ["decision", "Décision & suite"],
+          ] as Array<[EditorSection, string]>).map(([value, label]) => <button key={value} type="button" onClick={() => setSection(value)} className={cn("shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition", section === value ? "bg-primary text-primary-foreground" : "bg-muted/50 text-muted-foreground hover:text-foreground")}>{label}</button>)}
+        </div>
+      </Card>
 
-        <div className={cn("mt-5 rounded-2xl border p-4", readyForNext ? "border-emerald-500/20 bg-emerald-500/[0.06]" : "border-amber-500/20 bg-amber-500/[0.06]") }>
-          <div className="flex items-start gap-3"><div className={cn("mt-0.5 rounded-full p-1", readyForNext ? "bg-emerald-500/15 text-emerald-700" : "bg-amber-500/15 text-amber-700")}>{readyForNext ? <Check className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><div className="text-sm font-black">{readyForNext ? "Le cadrage permet d’avancer vers SD02" : "À compléter avant d’avoir un cadrage solide"}</div>{missingCore.length ? <div className="mt-2 flex flex-wrap gap-2">{missingCore.map(item => <span key={item} className="rounded-full bg-background/80 px-2.5 py-1 text-xs font-semibold">{item}</span>)}</div> : <p className="mt-1 text-xs text-muted-foreground">Les métriques restent facultatives : aucun chiffre n’est requis pour avancer s’il n’est pas confirmé.</p>}</div></div>
-        </div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <main className="min-w-0 space-y-5">
+          {section === "essential" ? <>
+            <Block icon={<Target className="h-4 w-4" />} title="Synthèse exécutive" description="Le contexte et l’enjeu principal en quelques lignes.">
+              <Area value={content.executiveSummary} onChange={value => update("executiveSummary", value)} rows={5} placeholder="Contexte, enjeu principal, valeur attendue et décision à prendre…" />
+            </Block>
+
+            <Block icon={<Zap className="h-4 w-4" />} title="Pain points" description="Les problèmes réellement exprimés par le client." action={<Button variant="outline" size="sm" onClick={addPainPoint}><Plus className="mr-1 h-3.5 w-3.5" /> Ajouter</Button>}>
+              <div className="space-y-3">
+                {content.painPoints.map((item, index) => <div key={index} className="rounded-xl border border-border bg-muted/15 p-4">
+                  <div className="flex items-start gap-3"><div className="min-w-0 flex-1 space-y-2"><Input value={item.title} onChange={event => update("painPoints", content.painPoints.map((point, position) => position === index ? { ...point, title: event.target.value } : point))} placeholder="Problème / enjeu" /><Area value={textLines(item.details)} onChange={value => update("painPoints", content.painPoints.map((point, position) => position === index ? { ...point, details: lines(value) } : point))} rows={2} placeholder="Précisions — une ligne par élément" /></div><Button variant="ghost" size="sm" onClick={() => update("painPoints", content.painPoints.filter((_, position) => position !== index))}><Trash2 className="h-4 w-4" /></Button></div>
+                </div>)}
+                {!content.painPoints.length ? <EmptyLine>Ajoute uniquement les enjeux réellement identifiés.</EmptyLine> : null}
+              </div>
+            </Block>
+
+            <Block icon={<Sparkles className="h-4 w-4" />} title="Correspondance solution / Solution fit" description="Mini-propal : besoin client → réponse Gando." action={<Button variant="outline" size="sm" onClick={addSolutionFit}><Plus className="mr-1 h-3.5 w-3.5" /> Ajouter</Button>}>
+              <div className="space-y-3">
+                {content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 rounded-xl border border-border bg-muted/15 p-4 lg:grid-cols-[1fr_auto_1fr_auto] lg:items-start">
+                  <div><Label className="text-[11px] text-muted-foreground">Besoin client</Label><Area value={item.need} onChange={value => update("solutionFit", content.solutionFit.map((fit, position) => position === index ? { ...fit, need: value } : fit))} rows={3} placeholder="Ce que le client cherche à résoudre" /></div>
+                  <div className="hidden pt-8 text-primary lg:block">→</div>
+                  <div><Label className="text-[11px] text-muted-foreground">Proposition Gando</Label><Area value={item.response} onChange={value => update("solutionFit", content.solutionFit.map((fit, position) => position === index ? { ...fit, response: value } : fit))} rows={3} placeholder="La réponse proposée" /></div>
+                  <Button variant="ghost" size="sm" className="mt-5" onClick={() => update("solutionFit", content.solutionFit.filter((_, position) => position !== index))}><Trash2 className="h-4 w-4" /></Button>
+                </div>)}
+                {!content.solutionFit.length ? <EmptyLine>Ajoute un besoin et la réponse Gando correspondante.</EmptyLine> : null}
+              </div>
+            </Block>
+
+            <Block icon={<CircleDollarSign className="h-4 w-4" />} title="Leviers de valeur / ROI" description="Facultatif. Ne renseigne une métrique que si une valeur est confirmée." action={<Button variant="outline" size="sm" onClick={addMetric}><Plus className="mr-1 h-3.5 w-3.5" /> Ajouter une métrique</Button>}>
+              <div className="space-y-3">
+                {content.roi.valueLevers.map((metric, index) => <div key={index} className="grid gap-3 rounded-xl border border-border bg-muted/15 p-4 md:grid-cols-[1fr_1.4fr_0.8fr_auto] md:items-end">
+                  <div><Label className="text-[11px] text-muted-foreground">Levier</Label><Input value={metric.lever} onChange={event => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.map((item, position) => position === index ? { ...item, lever: event.target.value } : item) })} placeholder="Ex. conversion" /></div>
+                  <div><Label className="text-[11px] text-muted-foreground">Mécanisme</Label><Input value={metric.mechanism} onChange={event => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.map((item, position) => position === index ? { ...item, mechanism: event.target.value } : item) })} placeholder="Pourquoi cela crée de la valeur" /></div>
+                  <div><Label className="text-[11px] text-muted-foreground">Valeur confirmée</Label><Input value={metric.value} onChange={event => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.map((item, position) => position === index ? { ...item, value: event.target.value } : item) })} placeholder="Ex. 12 %" /></div>
+                  <Button variant="ghost" size="sm" onClick={() => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.filter((_, position) => position !== index) })}><Trash2 className="h-4 w-4" /></Button>
+                </div>)}
+                {!content.roi.valueLevers.length ? <EmptyLine>Aucune métrique ? Laisse ce bloc vide. Cela ne bloque pas la suite.</EmptyLine> : null}
+              </div>
+            </Block>
+          </> : null}
+
+          {section === "context" ? <>
+            <Block icon={<Building2 className="h-4 w-4" />} title="Présentation de l’entreprise" description="Secteur, activité et contexte du compte.">
+              <div className="grid gap-4 md:grid-cols-2"><div><Label>Secteur</Label><Input className="mt-2" value={content.companyProfile.sector} onChange={event => update("companyProfile", { ...content.companyProfile, sector: event.target.value })} placeholder="Location automobile…" /></div><div><Label>Présentation</Label><Input className="mt-2" value={content.companyProfile.description} onChange={event => update("companyProfile", { ...content.companyProfile, description: event.target.value })} placeholder="Activité, taille, périmètre…" /></div></div>
+              <div className="mt-4"><Label>Contexte</Label><Area value={content.companyProfile.context} onChange={value => update("companyProfile", { ...content.companyProfile, context: value })} rows={3} placeholder="Contexte commercial actuel" /></div>
+            </Block>
+
+            <Block icon={<BriefcaseBusiness className="h-4 w-4" />} title="Contexte Gando" description="Pourquoi cette discussion existe et où Gando intervient."><Area value={content.gandoContext} onChange={value => update("gandoContext", value)} rows={4} placeholder="Origine de l’échange, attente vis-à-vis de Gando…" /></Block>
+
+            <Block icon={<Users className="h-4 w-4" />} title="Personnes clés" description="Décideurs, opérationnels et parties prenantes." action={<Button variant="outline" size="sm" onClick={addStakeholder}><Plus className="mr-1 h-3.5 w-3.5" /> Ajouter</Button>}>
+              <div className="space-y-3">{content.stakeholders.map((person, index) => <div key={index} className="grid gap-3 rounded-xl border border-border bg-muted/15 p-4 md:grid-cols-2">
+                <Input value={person.name} onChange={event => update("stakeholders", content.stakeholders.map((item, position) => position === index ? { ...item, name: event.target.value } : item))} placeholder="Nom" />
+                <Input value={person.role} onChange={event => update("stakeholders", content.stakeholders.map((item, position) => position === index ? { ...item, role: event.target.value } : item))} placeholder="Fonction" />
+                <Input value={person.organization} onChange={event => update("stakeholders", content.stakeholders.map((item, position) => position === index ? { ...item, organization: event.target.value } : item))} placeholder="Organisation" />
+                <div className="flex gap-2"><Input value={person.notes} onChange={event => update("stakeholders", content.stakeholders.map((item, position) => position === index ? { ...item, notes: event.target.value } : item))} placeholder="Rôle dans la décision / note" /><Button variant="ghost" size="sm" onClick={() => update("stakeholders", content.stakeholders.filter((_, position) => position !== index))}><Trash2 className="h-4 w-4" /></Button></div>
+              </div>)}{!content.stakeholders.length ? <EmptyLine>Aucune personne clé ajoutée.</EmptyLine> : null}</div>
+            </Block>
+
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Block icon={<Workflow className="h-4 w-4" />} title="Processus actuel" description="Une étape par ligne."><Area value={textLines(content.currentProcess)} onChange={value => update("currentProcess", lines(value))} rows={6} placeholder="Réservation reçue\nCaution demandée\nRemise du véhicule…" /></Block>
+              <Block icon={<Package className="h-4 w-4" />} title="Produits et offres" description="Produits, catégories ou offres concernées."><Area value={textLines(content.productsAndOffers)} onChange={value => update("productsAndOffers", lines(value))} rows={6} placeholder="Une offre par ligne" /></Block>
+            </div>
+
+            <Block icon={<CircleDollarSign className="h-4 w-4" />} title="Business model" description="Tarification, volumes ou logique économique connue."><Area value={textLines(content.businessModel)} onChange={value => update("businessModel", lines(value))} rows={5} placeholder="Un élément par ligne" /></Block>
+          </> : null}
+
+          {section === "decision" ? <>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Block icon={<Clock3 className="h-4 w-4" />} title="Pourquoi maintenant ?" description="Urgence, échéance ou déclencheur."><Area value={textLines(content.urgency)} onChange={value => update("urgency", lines(value))} rows={5} placeholder="Un facteur par ligne" /></Block>
+              <Block icon={<CheckCircle2 className="h-4 w-4" />} title="Décisions prises" description="Ce qui est déjà acté."><Area value={textLines(content.decisions)} onChange={value => update("decisions", lines(value))} rows={5} placeholder="Une décision par ligne" /></Block>
+            </div>
+
+            <Block icon={<CircleHelp className="h-4 w-4" />} title="Questions ouvertes" description="Points manquants, désaccords ou sujets à confirmer."><Area value={textLines(content.openQuestions)} onChange={value => update("openQuestions", lines(value))} rows={5} placeholder="Une question par ligne" /></Block>
+
+            <Block icon={<ListChecks className="h-4 w-4" />} title="Prochaines étapes" description="Qui fait quoi et pour quand." action={<Button variant="outline" size="sm" onClick={addAction}><Plus className="mr-1 h-3.5 w-3.5" /> Ajouter</Button>}>
+              <div className="space-y-3">{content.nextSteps.map((step, index) => <div key={index} className="grid gap-3 rounded-xl border border-border bg-muted/15 p-4 md:grid-cols-[0.8fr_1.7fr_0.8fr_0.8fr_auto] md:items-end">
+                <div><Label className="text-[11px] text-muted-foreground">Responsable</Label><Input value={step.owner} onChange={event => patchAction(index, { owner: event.target.value })} placeholder="Gando / Client" /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Action</Label><Input value={step.action} onChange={event => patchAction(index, { action: event.target.value })} placeholder="Action à réaliser" /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Date</Label><Input type="date" value={step.dueDate || ""} onChange={event => patchAction(index, { dueDate: event.target.value || null })} /></div>
+                <div><Label className="text-[11px] text-muted-foreground">Statut</Label><select value={step.status} onChange={event => patchAction(index, { status: event.target.value as SD01NextStep["status"] })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="not_started">À faire</option><option value="in_progress">En cours</option><option value="done">Fait</option></select></div>
+                <Button variant="ghost" size="sm" onClick={() => update("nextSteps", content.nextSteps.filter((_, position) => position !== index))}><Trash2 className="h-4 w-4" /></Button>
+              </div>)}{!content.nextSteps.length ? <EmptyLine>Aucune prochaine étape ajoutée.</EmptyLine> : null}</div>
+            </Block>
+
+            {content.evidence.length ? <Block icon={<LockKeyhole className="h-4 w-4" />} title="Preuves de l’agent" description="Interne uniquement. Ces citations ne sont pas exposées au client."><div className="grid gap-2 lg:grid-cols-2">{content.evidence.slice(0, 16).map((item, index) => <div key={`${item.sourceId}-${index}`} className="rounded-xl border border-border bg-muted/20 p-3 text-xs"><div className="font-bold text-primary">{item.field}</div><p className="mt-1 leading-5 text-muted-foreground">« {item.quote} »</p></div>)}</div></Block> : null}
+          </> : null}
+        </main>
+
+        <aside className="space-y-5 xl:sticky xl:top-[118px] xl:self-start">
+          <Card className="p-5">
+            <div className="flex items-center gap-2"><Users className="h-4 w-4 text-primary" /><h3 className="font-black">Accès client</h3></div>
+            <div className="mt-4 grid grid-cols-2 gap-2"><Button variant={room.access_mode === "email" ? "default" : "outline"} size="sm" onClick={() => setAccessMode("email")}>Email identifié</Button><Button variant={room.access_mode === "allowlist" ? "default" : "outline"} size="sm" onClick={() => setAccessMode("allowlist")}>Liste autorisée</Button></div>
+            {room.access_mode === "allowlist" ? <div className="mt-3"><Area value={allowlist} onChange={setAllowlist} rows={4} placeholder="direction@client.com\nboard@client.com" /></div> : <p className="mt-3 text-xs leading-5 text-muted-foreground">Toute personne ayant le lien renseigne son email avant accès. Chaque visite est attribuée.</p>}
+            <Button className="mt-3 w-full" variant="outline" size="sm" onClick={() => void saveAccess()} disabled={working === "access"}>{working === "access" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LockKeyhole className="mr-2 h-4 w-4" />} Enregistrer l’accès</Button>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center gap-2"><MessageSquareText className="h-4 w-4 text-primary" /><h3 className="font-black">Remarques du board</h3><Badge variant="outline">{comments.filter(comment => comment.status === "open").length}</Badge></div>
+            <div className="mt-3 space-y-2">{comments.slice(0, 8).map(comment => <article key={comment.id} className={cn("rounded-xl border p-3 text-xs", comment.status === "open" ? "border-primary/25 bg-primary/[0.04]" : "border-border bg-muted/20 opacity-65")}><div className="flex items-center justify-between gap-2"><span className="truncate font-semibold">{comment.author_email}</span><Badge variant="outline" className="shrink-0">{comment.document_code}</Badge></div><p className="mt-2 whitespace-pre-line leading-5 text-muted-foreground">{comment.body}</p><div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted-foreground"><span>{formatDate(comment.created_at)}</span>{comment.status === "open" ? <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px]" disabled={working === `comment:${comment.id}`} onClick={() => void resolveComment(comment.id)}>{working === `comment:${comment.id}` ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />} Traité</Button> : <span>Traitée</span>}</div></article>)}{!comments.length ? <p className="text-xs text-muted-foreground">Les suggestions envoyées depuis la room apparaîtront ici.</p> : null}</div>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex items-center gap-2"><Eye className="h-4 w-4 text-primary" /><h3 className="font-black">Dernières consultations</h3></div>
+            <p className="mt-1 text-xs text-muted-foreground">Dernière activité : {formatDate(analytics.lastViewedAt)}</p>
+            <div className="mt-3 space-y-2">{analytics.recentVisitors.slice(0, 6).map(visitor => { const fullName = [visitor.firstName, visitor.lastName].filter(Boolean).join(" "); return <div key={`${visitor.email}-${visitor.lastSeenAt}`} className="flex items-center justify-between gap-3 rounded-xl bg-muted/35 p-3 text-xs"><div className="min-w-0"><div className="truncate font-semibold">{fullName || visitor.email || "Visiteur"}</div>{fullName && visitor.email ? <div className="truncate text-[11px] text-muted-foreground">{visitor.email}</div> : null}<div className="text-[11px] text-muted-foreground">{formatDate(visitor.lastSeenAt)}</div></div><Badge variant="outline" className="shrink-0"><Clock3 className="mr-1 h-3 w-3" /> {formatDuration(visitor.activeSeconds)}</Badge></div>; })}{!analytics.recentVisitors.length ? <p className="text-xs text-muted-foreground">Aucune consultation pour le moment.</p> : null}</div>
+          </Card>
+
+          <details className="rounded-xl border border-border bg-card p-5">
+            <summary className="cursor-pointer list-none"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><span className="font-black">Mettre à jour depuis les échanges</span></div><p className="mt-1 text-xs text-muted-foreground">Réutilise les appels reliés au deal ou colle une note.</p></summary>
+            <div className="mt-4 space-y-3">
+              {(data.linkedConversations || []).slice(0, 10).map(call => <label key={call.id} className="flex cursor-pointer items-start gap-2 rounded-xl border border-border p-3 text-xs"><input type="checkbox" className="mt-0.5" checked={selectedCalls.includes(call.id)} onChange={event => setSelectedCalls(current => event.target.checked ? Array.from(new Set([...current, call.id])) : current.filter(id => id !== call.id))} /><span className="min-w-0"><span className="block truncate font-semibold">{call.title}</span><span className="text-muted-foreground">{formatDate(call.occurredAt)}</span></span></label>)}
+              {!(data.linkedConversations || []).length ? <p className="text-xs text-muted-foreground">Aucun appel relié au deal.</p> : null}
+              <Input value={manualTitle} onChange={event => setManualTitle(event.target.value)} placeholder="Titre de la note" />
+              <Area value={manualTranscript} onChange={setManualTranscript} rows={5} placeholder="Compte rendu ou transcription à intégrer…" />
+              <Button className="w-full" onClick={() => void generateFromSources()} disabled={Boolean(working)}>{working === "generate" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />} Mettre à jour le SD01</Button>
+            </div>
+          </details>
+
+          <details className="rounded-xl border border-border bg-card p-5">
+            <summary className="cursor-pointer list-none"><div className="flex items-center gap-2"><History className="h-4 w-4 text-primary" /><span className="font-black">Historique des versions</span><Badge variant="outline">{versions.length}</Badge></div><p className="mt-1 text-xs text-muted-foreground">Chaque sauvegarde reste restaurable.</p></summary>
+            <div className="mt-4 space-y-2">{versions.slice(0, 12).map(version => <div key={version.id} className="rounded-xl border border-border p-3 text-xs"><div className="flex items-start justify-between gap-3"><div><div className="font-bold">Version {version.version}</div><div className="mt-1 text-muted-foreground">{formatDate(version.created_at)}</div>{version.change_summary ? <div className="mt-1 text-muted-foreground">{version.change_summary}</div> : null}</div><Button variant="ghost" size="sm" disabled={working === `restore-${version.version}`} onClick={() => void restoreVersion(version.version)}>{working === `restore-${version.version}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}</Button></div></div>)}{!versions.length ? <p className="text-xs text-muted-foreground">Aucune version enregistrée.</p> : null}</div>
+          </details>
+        </aside>
       </div>
-    </Card>
-
-    <div className="grid gap-5 xl:grid-cols-[1.05fr_.95fr]">
-      <Card className="overflow-hidden p-0">
-        <SectionTitle icon={Target} title="1. Ce qu’on sait" description="Le minimum utile pour partager une compréhension commune du deal." />
-        <div className="space-y-5 p-5 sm:p-6">
-          <div><Label>Synthèse du besoin</Label><p className="mt-1 text-[11px] text-muted-foreground">Problème, enjeu, décision attendue. Lecture en moins d’une minute.</p><div className="mt-2"><Area value={content.executiveSummary} onChange={value => update("executiveSummary", value)} rows={6} placeholder="Aujourd’hui…, le client cherche à…, la décision attendue est…" /></div></div>
-          <div><Label>Enjeux / irritants</Label><p className="mt-1 text-[11px] text-muted-foreground">Une ligne : enjeu | détail</p><div className="mt-2"><Area value={content.painPoints.map(item => `${item.title}${item.details.length ? ` | ${item.details.join(" ; ")}` : ""}`).join("\n")} onChange={value => update("painPoints", lines(value).map((row, index) => { const [title = "", detail = ""] = row.split("|").map(part => part.trim()); return { priority: index + 1, title, details: detail ? detail.split(";").map(part => part.trim()).filter(Boolean) : [] }; }))} rows={6} placeholder={'Préautorisation répétée | friction opérationnelle\nPouvoir d’achat immobilisé | impact expérience locataire'} /></div></div>
-          <div><Label>Interlocuteurs clés</Label><p className="mt-1 text-[11px] text-muted-foreground">Une ligne : nom | fonction | organisation | note</p><div className="mt-2"><Area value={content.stakeholders.map(item => [item.name, item.role, item.organization, item.notes].join(" | ")).join("\n")} onChange={value => update("stakeholders", lines(value).map(row => { const [name = "", role = "", organization = "", notes = ""] = row.split("|").map(part => part.trim()); return { name, role, organization, notes }; }))} rows={5} /></div></div>
-
-          <button type="button" onClick={() => setShowContext(value => !value)} className="flex w-full items-center justify-between rounded-xl border border-border bg-muted/20 px-4 py-3 text-left text-sm font-bold hover:bg-muted/40"><span>Contexte secondaire</span><ChevronDown className={cn("h-4 w-4 transition-transform", showContext && "rotate-180")} /></button>
-          {showContext ? <div className="space-y-4 rounded-xl border border-border bg-muted/10 p-4">
-            <div className="grid gap-3 md:grid-cols-3"><div><Label>Secteur</Label><Input className="mt-2" value={content.companyProfile.sector} onChange={event => update("companyProfile", { ...content.companyProfile, sector: event.target.value })} /></div><div><Label>Présentation</Label><Input className="mt-2" value={content.companyProfile.description} onChange={event => update("companyProfile", { ...content.companyProfile, description: event.target.value })} /></div><div><Label>Contexte</Label><Input className="mt-2" value={content.companyProfile.context} onChange={event => update("companyProfile", { ...content.companyProfile, context: event.target.value })} /></div></div>
-            <div><Label>Process actuel</Label><div className="mt-2"><Area value={textLines(content.currentProcess)} onChange={value => update("currentProcess", lines(value))} rows={4} /></div></div>
-            <div className="grid gap-4 md:grid-cols-2"><div><Label>Décisions déjà prises</Label><div className="mt-2"><Area value={textLines(content.decisions)} onChange={value => update("decisions", lines(value))} rows={4} /></div></div><div><Label>Questions ouvertes</Label><div className="mt-2"><Area value={textLines(content.openQuestions)} onChange={value => update("openQuestions", lines(value))} rows={4} /></div></div></div>
-          </div> : null}
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden p-0">
-        <SectionTitle icon={Sparkles} title="2. Mini-propal · Solution fit" description="Transformer le besoin identifié en proposition Gando. Les chiffres ne sont affichés que s’ils sont réellement connus." right={<Button size="sm" variant="outline" onClick={addSolutionFit}><Plus className="mr-1.5 h-3.5 w-3.5" />Ajouter</Button>} />
-        <div className="space-y-4 p-5 sm:p-6">
-          {!content.solutionFit.length ? <div className="rounded-xl border border-dashed border-border bg-muted/15 p-6 text-center"><div className="text-sm font-bold">Aucune proposition structurée</div><p className="mt-1 text-xs text-muted-foreground">Ajoute un besoin client et la réponse Gando proposée.</p><Button className="mt-4" size="sm" onClick={addSolutionFit}><Plus className="mr-2 h-4 w-4" />Créer le premier bloc</Button></div> : null}
-          {content.solutionFit.map((item, index) => <div key={index} className="rounded-2xl border border-border bg-background p-4">
-            <div className="mb-3 flex items-center justify-between"><span className="text-[10px] font-black uppercase tracking-[0.12em] text-primary">Proposition {index + 1}</span><Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => update("solutionFit", content.solutionFit.filter((_, position) => position !== index))}><Trash2 className="h-3.5 w-3.5" /></Button></div>
-            <div className="space-y-3"><div><Label>Besoin / enjeu client</Label><Input className="mt-2" value={item.need} onChange={event => update("solutionFit", content.solutionFit.map((row, position) => position === index ? { ...row, need: event.target.value } : row))} placeholder="Ce que le client doit résoudre" /></div><div><Label>Proposition Gando</Label><div className="mt-2"><Area value={item.response} onChange={value => update("solutionFit", content.solutionFit.map((row, position) => position === index ? { ...row, response: value } : row))} rows={4} placeholder="Comment Gando répond concrètement à ce besoin…" /></div></div></div>
-          </div>)}
-
-          <div className="border-t border-border pt-4">
-            <div className="flex items-start justify-between gap-3"><div><div className="text-sm font-black">Métriques confirmées <span className="font-medium text-muted-foreground">· optionnel</span></div><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Si aucun chiffre fiable n’est disponible, cette partie reste vide. Aucune métrique n’est nécessaire pour passer à l’étape suivante.</p></div><Button size="sm" variant="outline" onClick={addMetric}><Plus className="mr-1.5 h-3.5 w-3.5" />Métrique</Button></div>
-            <div className="mt-4 space-y-3">{content.roi.valueLevers.map((metric, index) => <div key={index} className="grid gap-2 rounded-xl border border-primary/15 bg-primary/[0.03] p-3 md:grid-cols-[1fr_150px_1.25fr_auto]"><Input value={metric.lever} onChange={event => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.map((row, position) => position === index ? { ...row, lever: event.target.value } : row) })} placeholder="Métrique / levier" /><Input value={metric.value} onChange={event => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.map((row, position) => position === index ? { ...row, value: event.target.value } : row) })} placeholder="Valeur confirmée" /><Input value={metric.mechanism} onChange={event => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.map((row, position) => position === index ? { ...row, mechanism: event.target.value } : row) })} placeholder="Pourquoi cela compte" /><Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.filter((_, position) => position !== index) })}><Trash2 className="h-3.5 w-3.5" /></Button></div>)}</div>
-          </div>
-        </div>
-      </Card>
     </div>
-
-    <Card className="overflow-hidden p-0">
-      <SectionTitle icon={CheckCircle2} title="3. Éléments à obtenir / transmettre" description="Chaque élément a un responsable, une échéance et un statut. C’est ici que le deal avance réellement." right={<Button size="sm" variant="outline" onClick={addAction}><Plus className="mr-1.5 h-3.5 w-3.5" />Ajouter</Button>} />
-      <div className="p-5 sm:p-6">
-        {!content.nextSteps.length ? <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Aucun élément ouvert. Ajoute les informations, validations ou documents nécessaires pour faire avancer le deal.</div> : <div className="space-y-2">{content.nextSteps.map((step, index) => <div key={index} className={cn("grid gap-2 rounded-xl border p-3 lg:grid-cols-[44px_minmax(260px,1fr)_180px_150px_auto] lg:items-center", step.status === "done" ? "border-emerald-500/20 bg-emerald-500/[0.04]" : "border-border bg-background")}>
-          <button type="button" onClick={() => patchAction(index, { status: step.status === "done" ? "not_started" : "done" })} className={cn("grid h-9 w-9 place-items-center rounded-full border", step.status === "done" ? "border-emerald-500 bg-emerald-500 text-white" : "border-border text-muted-foreground hover:border-primary hover:text-primary")}>{step.status === "done" ? <Check className="h-4 w-4" /> : <Circle className="h-4 w-4" />}</button>
-          <Input value={step.action} onChange={event => patchAction(index, { action: event.target.value })} placeholder="Ex. transmettre le volume annuel de cautions" />
-          <Input value={step.owner} onChange={event => patchAction(index, { owner: event.target.value })} placeholder="Responsable" />
-          <Input type="date" value={step.dueDate || ""} onChange={event => patchAction(index, { dueDate: event.target.value || null })} />
-          <div className="flex gap-1"><select value={step.status} onChange={event => patchAction(index, { status: event.target.value as SD01NextStep["status"] })} className="h-9 rounded-lg border border-input bg-background px-2 text-xs font-semibold"><option value="not_started">À faire</option><option value="in_progress">En cours</option><option value="done">Fait</option></select><Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => update("nextSteps", content.nextSteps.filter((_, position) => position !== index))}><Trash2 className="h-3.5 w-3.5" /></Button></div>
-        </div>)}</div>}
-      </div>
-    </Card>
-
-    <div className="grid gap-5 xl:grid-cols-[1.05fr_.95fr]">
-      <Card className="overflow-hidden p-0">
-        <SectionTitle icon={MessageSquareText} title="4. Conversations & enregistrements" description="Reprends les anciens appels déjà utilisés ou ajoute un nouvel échange pour enrichir le SD01." />
-        <div className="space-y-5 p-5 sm:p-6">
-          {data.linkedConversations?.length ? <div><div className="mb-2 text-xs font-black uppercase tracking-[0.1em] text-muted-foreground">Appels reliés au deal</div><div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">{data.linkedConversations.map(call => { const checked = selectedCalls.includes(call.id); return <button key={call.id} type="button" onClick={() => setSelectedCalls(current => checked ? current.filter(id => id !== call.id) : [...current, call.id])} className={cn("flex w-full items-start gap-3 rounded-xl border p-3 text-left transition", checked ? "border-primary bg-primary/[0.05]" : "border-border hover:border-primary/30")}><div className={cn("mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border", checked ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{checked ? <Check className="h-3.5 w-3.5" /> : null}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-bold">{call.title}</span>{call.imported ? <Badge variant="outline" className="text-[10px]">Déjà utilisé</Badge> : null}</div><div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{call.transcriptText || "Transcription disponible"}</div></div></button>; })}</div></div> : null}
-
-          {data.sources?.length ? <div><div className="mb-2 text-xs font-black uppercase tracking-[0.1em] text-muted-foreground">Sources déjà conservées</div><div className="flex flex-wrap gap-2">{data.sources.map(source => <Badge key={source.id} variant="outline">{source.title}</Badge>)}</div></div> : null}
-
-          <div className="rounded-xl border border-border bg-muted/15 p-4"><Label>Ajouter une note ou un compte rendu</Label><Input className="mt-2" value={manualTitle} onChange={event => setManualTitle(event.target.value)} placeholder="Titre de la source" /><div className="mt-2"><Area value={manualTranscript} onChange={setManualTranscript} rows={6} placeholder="Colle ici un compte rendu, un extrait d’email ou une transcription…" /></div></div>
-          <Button onClick={() => void generateFromSources()} disabled={Boolean(working) || (!selectedCalls.length && !manualTranscript.trim())}>{working === "generate" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}Mettre à jour SD01 depuis les sources</Button>
-          <p className="text-[11px] leading-5 text-muted-foreground">La génération conserve une nouvelle version. Elle n’invente aucun chiffre : les métriques non confirmées sont retirées du workspace.</p>
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden p-0">
-        <SectionTitle icon={History} title="5. Historique des versions" description="Consulte et restaure un ancien état du SD01 sans écraser l’historique." right={<Button size="sm" variant="ghost" onClick={() => void loadVersions()}><RefreshCw className="h-3.5 w-3.5" /></Button>} />
-        <div className="max-h-[620px] space-y-2 overflow-y-auto p-5 sm:p-6">
-          {!versions.length ? <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">L’historique apparaîtra après le premier enregistrement.</div> : versions.map(version => { const preview = previewVersion === version.version; const versionContent = cleanContent(version.content, companyName); return <div key={version.id} className="rounded-xl border border-border bg-background p-3"><div className="flex items-start gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-xs font-black">V{version.version}</div><div className="min-w-0 flex-1"><div className="text-sm font-bold">{version.change_summary || "Mise à jour SD01"}</div><div className="mt-1 text-[11px] text-muted-foreground">{formatDate(version.created_at)}{version.created_by_email ? ` · ${version.created_by_email}` : ""}</div></div><div className="flex gap-1"><Button size="sm" variant="ghost" onClick={() => setPreviewVersion(preview ? null : version.version)}>Voir</Button><Button size="sm" variant="outline" onClick={() => void restoreVersion(version.version)} disabled={Boolean(working)}>{working === `restore-${version.version}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />}Restaurer</Button></div></div>{preview ? <div className="mt-3 rounded-lg bg-muted/30 p-3"><div className="text-xs font-bold">Synthèse</div><p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">{versionContent.executiveSummary || "—"}</p>{versionContent.solutionFit.length ? <div className="mt-3 space-y-1">{versionContent.solutionFit.slice(0, 4).map((fit, index) => <div key={index} className="text-xs"><span className="font-semibold">{fit.need || "Besoin"}</span><span className="text-muted-foreground"> → {fit.response || "—"}</span></div>)}</div> : null}</div> : null}</div>; })}
-        </div>
-      </Card>
-    </div>
-  </div></div>;
+  </div>;
 }
