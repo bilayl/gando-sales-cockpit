@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, CircleSlash2, PhoneCall, Target } from "lucide-react";
+import { CalendarClock, CircleSlash2, List, PhoneCall, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,7 @@ type Props = {
 };
 
 const buckets: Array<{
-  value: ProspectionBucket;
+  value: SdrWorkFilter;
   label: string;
   description: string;
   icon: typeof PhoneCall;
@@ -51,6 +51,12 @@ const buckets: Array<{
     description: "À ne plus prospecter",
     icon: CircleSlash2,
   },
+  {
+    value: "ALL",
+    label: "Tous",
+    description: "Toute la file de travail",
+    icon: List,
+  },
 ];
 
 export function SdrWorkQueue({
@@ -65,11 +71,12 @@ export function SdrWorkQueue({
   onFilterChange,
   onStartSession,
 }: Props) {
-  const counts: Record<ProspectionBucket, number> = {
+  const counts: Record<SdrWorkFilter, number> = {
     ACTIONABLE: actionableCount,
     OPPORTUNITY: opportunitiesCount,
     SNOOZED: snoozedCount,
     EXCLUDED: excludedCount,
+    ALL: totalCount,
   };
 
   return (
@@ -87,14 +94,6 @@ export function SdrWorkQueue({
 
         <div className="flex items-center gap-2">
           <Button
-            variant="ghost"
-            size="sm"
-            className="hidden h-9 text-muted-foreground xl:inline-flex"
-            onClick={() => onFilterChange("ALL")}
-          >
-            Voir les {totalCount} comptes
-          </Button>
-          <Button
             disabled={loading || actionableCount === 0}
             onClick={onStartSession}
             className="h-9 gap-2"
@@ -108,7 +107,7 @@ export function SdrWorkQueue({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 border-t border-border md:grid-cols-4">
+      <div className="grid grid-cols-2 border-t border-border sm:grid-cols-3 lg:grid-cols-5">
         {buckets.map(bucket => {
           const Icon = bucket.icon;
           const active = activeFilter === bucket.value;
