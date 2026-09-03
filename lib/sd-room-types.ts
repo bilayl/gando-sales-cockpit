@@ -62,6 +62,7 @@ export type SD01Content = {
   solutionFit: Array<{ need: string; response: string }>;
   roi: {
     valueLevers: SD01Metric[];
+    estimates: SD01Metric[];
     metricsRequired: string[];
   };
   urgency: string[];
@@ -177,7 +178,7 @@ export function createEmptySD01(companyName = ""): SD01Content {
     businessModel: [],
     painPoints: [],
     solutionFit: [],
-    roi: { valueLevers: [], metricsRequired: [] },
+    roi: { valueLevers: [], estimates: [], metricsRequired: [] },
     urgency: [],
     decisions: [],
     openQuestions: [],
