@@ -84,6 +84,10 @@ export function PublicSD01EnterpriseDocument({
   const hasSeparatedRoi = Array.isArray(roiRecord.estimates);
   const metrics = hasSeparatedRoi ? (content.roi.valueLevers || []).filter(metric => String(metric.lever || "").trim()) : [];
   const roiRows = (hasSeparatedRoi ? roiRecord.estimates || [] : content.roi.valueLevers || []).filter(metric => String(metric.lever || "").trim());
+  const commercialItems = (content.businessModel || [])
+    .flatMap(item => String(item || "").split(/\n+/))
+    .map(item => item.trim())
+    .filter(Boolean);
 
   return <div className="space-y-5 sm:space-y-6">
     <AccordionBubble title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")} defaultOpen>
@@ -111,8 +115,8 @@ export function PublicSD01EnterpriseDocument({
 
     {content.solutionFit?.length ? <Section title={tr(language, "Solution fit", "Solution fit")} kicker={tr(language, "Besoin → réponse proposée", "Need → proposed response")}><div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div></Section> : null}
 
-    {content.businessModel?.length ? <Section title={tr(language, "Modèle commercial", "Commercial model")} kicker={tr(language, "Sous la solution proposée", "Below the proposed solution")}>
-      <div className="grid gap-3">{content.businessModel.map((item, index) => <div key={`${index}-${item}`} className="flex gap-4 rounded-[14px] border border-[#e2e4e7] bg-[#fafafa] p-4 sm:p-5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#6e62c3] text-[11px] font-semibold text-white">{index + 1}</div><p className="pt-0.5 text-[15px] leading-6 text-[#394348]">{item}</p></div>)}</div>
+    {commercialItems.length ? <Section title={tr(language, "Modèle commercial", "Commercial model")} kicker={tr(language, "Sous la solution proposée", "Below the proposed solution")}>
+      <div className="grid gap-3">{commercialItems.map((item, index) => <div key={`${index}-${item}`} className="flex gap-4 rounded-[14px] border border-[#e2e4e7] bg-[#fafafa] p-4 sm:p-5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#6e62c3] text-[11px] font-semibold text-white">{index + 1}</div><p className="pt-0.5 whitespace-pre-line text-[15px] leading-6 text-[#394348]">{item}</p></div>)}</div>
     </Section> : null}
 
     {metrics.length ? <PublicSD01MetricConfirmations token={token} metrics={content.roi.valueLevers} email={email} firstName={firstName} lastName={lastName} language={language} companyName={companyName} locked={locked} onConfirmed={onMetricConfirmed} /> : null}
