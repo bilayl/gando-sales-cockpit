@@ -90,7 +90,7 @@ export function PublicSD01EnterpriseDocument({
     .filter(Boolean);
 
   return <div className="space-y-5 sm:space-y-6">
-    <AccordionBubble title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")} defaultOpen>
+    <AccordionBubble title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")}>
       <p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.executiveSummary || tr(language, "Synthèse en cours de validation.", "Summary pending approval.")}</p>
     </AccordionBubble>
 
