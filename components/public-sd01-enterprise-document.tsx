@@ -41,6 +41,24 @@ function BulletList({ items, empty = "À confirmer" }: { items?: string[]; empty
   return <ul className="space-y-3">{items.map((item, index) => <li key={`${index}-${item}`} className="flex gap-3"><span className="mt-[10px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#7166c7]" /><span>{item}</span></li>)}</ul>;
 }
 
+function RoiTable({ rows, companyName, language }: { rows: SD01Metric[]; companyName: string; language: RoomLanguage }) {
+  if (!rows.length) return null;
+  return <Section title={tr(language, "Valeur & estimation du ROI", "Value & ROI estimate")} kicker={tr(language, "Impact attendu", "Expected impact")}>
+    <div className="overflow-hidden rounded-[14px] border border-[#dedaf7]">
+      <div className="hidden grid-cols-[1fr_1.35fr_1.35fr] bg-[#f5f3ff] text-[11px] font-semibold text-[#6558c8] sm:grid">
+        <div className="px-4 py-3">{tr(language, "Levier", "Lever")}</div>
+        <div className="border-l border-[#dedaf7] px-4 py-3">{tr(language, "Mécanisme", "Mechanism")}</div>
+        <div className="border-l border-[#dedaf7] px-4 py-3">{tr(language, `Valeur pour ${companyName}`, `Value for ${companyName}`)}</div>
+      </div>
+      <div className="divide-y divide-[#e4e0f7]">{rows.map((row, index) => <div key={`${row.lever}-${index}`} className="grid bg-white sm:grid-cols-[1fr_1.35fr_1.35fr]">
+        <div className="px-4 py-4"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, "Levier", "Lever")}</div><div className="font-semibold text-[#202a2f]">{row.lever}</div></div>
+        <div className="border-t border-[#eceeef] px-4 py-4 sm:border-l sm:border-t-0"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, "Mécanisme", "Mechanism")}</div>{row.mechanism || tr(language, "À préciser", "TBD")}</div>
+        <div className="border-t border-[#eceeef] px-4 py-4 sm:border-l sm:border-t-0"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, `Valeur pour ${companyName}`, `Value for ${companyName}`)}</div>{row.value || tr(language, "À estimer", "To estimate")}</div>
+      </div>)}</div>
+    </div>
+  </Section>;
+}
+
 export function PublicSD01EnterpriseDocument({
   content,
   language,
@@ -62,7 +80,10 @@ export function PublicSD01EnterpriseDocument({
   locked: boolean;
   onMetricConfirmed: (index: number, metric: SD01Metric) => void;
 }) {
-  const metrics = (content.roi?.valueLevers || []).filter(metric => String(metric.lever || "").trim());
+  const roiRecord = content.roi as SD01Content["roi"] & { estimates?: SD01Metric[] };
+  const hasSeparatedRoi = Array.isArray(roiRecord.estimates);
+  const metrics = hasSeparatedRoi ? (content.roi.valueLevers || []).filter(metric => String(metric.lever || "").trim()) : [];
+  const roiRows = (hasSeparatedRoi ? roiRecord.estimates || [] : content.roi.valueLevers || []).filter(metric => String(metric.lever || "").trim());
 
   return <div className="space-y-5 sm:space-y-6">
     <AccordionBubble title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")} defaultOpen>
@@ -78,29 +99,25 @@ export function PublicSD01EnterpriseDocument({
       {content.gandoContext ? <div className="mt-5 rounded-xl bg-[#f7f6ff] p-4"><Eyebrow>{tr(language, "Pourquoi Gando", "Why Gando")}</Eyebrow><p className="mt-2">{content.gandoContext}</p></div> : null}
     </AccordionBubble> : null}
 
-    {content.currentProcess?.length ? <AccordionBubble title={tr(language, "Processus actuel", "Current process")}>
-      <BulletList items={content.currentProcess} />
-    </AccordionBubble> : null}
+    {content.currentProcess?.length ? <AccordionBubble title={tr(language, "Processus actuel", "Current process")}><BulletList items={content.currentProcess} /></AccordionBubble> : null}
 
-    {content.stakeholders?.length ? <Section title={tr(language, "Personnes clés", "Key people")}>
-      <div className="grid gap-3 sm:grid-cols-2">{content.stakeholders.map((person, index) => <div key={index} className="rounded-xl bg-[#f6f7f8] p-4"><div className="font-semibold text-[#202a2f]">{person.name}</div><div className="mt-1 text-[13px] text-[#687277]">{person.role}{person.organization ? ` · ${person.organization}` : ""}</div>{person.notes ? <p className="mt-2 text-[13px] leading-6 text-[#687277]">{person.notes}</p> : null}</div>)}</div>
-    </Section> : null}
+    {content.stakeholders?.length ? <Section title={tr(language, "Personnes clés", "Key people")}><div className="grid gap-3 sm:grid-cols-2">{content.stakeholders.map((person, index) => <div key={index} className="rounded-xl bg-[#f6f7f8] p-4"><div className="font-semibold text-[#202a2f]">{person.name}</div><div className="mt-1 text-[13px] text-[#687277]">{person.role}{person.organization ? ` · ${person.organization}` : ""}</div>{person.notes ? <p className="mt-2 text-[13px] leading-6 text-[#687277]">{person.notes}</p> : null}</div>)}</div></Section> : null}
 
     {content.productsAndOffers?.length ? <Section title={tr(language, "Produits & offres", "Products & offers")}><BulletList items={content.productsAndOffers} /></Section> : null}
-
-    {content.businessModel?.length ? <Section title={tr(language, "Modèle commercial", "Commercial model")} kicker={tr(language, "Conditions proposées", "Proposed terms")}>
-      <div className="grid gap-3">{content.businessModel.map((item, index) => <div key={`${index}-${item}`} className="flex gap-4 rounded-[14px] border border-[#e2e4e7] bg-[#fafafa] p-4 sm:p-5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#6e62c3] text-[11px] font-semibold text-white">{index + 1}</div><p className="pt-0.5 text-[15px] leading-6 text-[#394348]">{item}</p></div>)}</div>
-    </Section> : null}
 
     <Section title={tr(language, "Enjeux prioritaires", "Top priorities")}>
       {content.painPoints?.length ? <div className="space-y-5">{content.painPoints.map((pain, index) => <div key={index} className="border-b border-[#eceeef] pb-5 last:border-0 last:pb-0"><div className="font-semibold text-[#202a2f]">{pain.title}</div><div className="mt-2"><BulletList items={pain.details} /></div></div>)}</div> : <p className="italic text-[#81898e]">{tr(language, "Enjeux à préciser.", "Priorities to clarify.")}</p>}
     </Section>
 
-    {content.solutionFit?.length ? <Section title={tr(language, "Solution fit", "Solution fit")} kicker={tr(language, "Besoin → réponse proposée", "Need → proposed response")}>
-      <div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div>
+    {content.solutionFit?.length ? <Section title={tr(language, "Solution fit", "Solution fit")} kicker={tr(language, "Besoin → réponse proposée", "Need → proposed response")}><div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div></Section> : null}
+
+    {content.businessModel?.length ? <Section title={tr(language, "Modèle commercial", "Commercial model")} kicker={tr(language, "Sous la solution proposée", "Below the proposed solution")}>
+      <div className="grid gap-3">{content.businessModel.map((item, index) => <div key={`${index}-${item}`} className="flex gap-4 rounded-[14px] border border-[#e2e4e7] bg-[#fafafa] p-4 sm:p-5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#6e62c3] text-[11px] font-semibold text-white">{index + 1}</div><p className="pt-0.5 text-[15px] leading-6 text-[#394348]">{item}</p></div>)}</div>
     </Section> : null}
 
     {metrics.length ? <PublicSD01MetricConfirmations token={token} metrics={content.roi.valueLevers} email={email} firstName={firstName} lastName={lastName} language={language} companyName={companyName} locked={locked} onConfirmed={onMetricConfirmed} /> : null}
+
+    <RoiTable rows={roiRows} companyName={companyName} language={language} />
 
     {content.urgency?.length ? <Section title={tr(language, "Pourquoi maintenant ?", "Why now?")}><BulletList items={content.urgency} /></Section> : null}
   </div>;
