@@ -62,7 +62,7 @@ export type SD01Content = {
   solutionFit: Array<{ need: string; response: string }>;
   roi: {
     valueLevers: SD01Metric[];
-    estimates: SD01Metric[];
+    estimates?: SD01Metric[];
     metricsRequired: string[];
   };
   urgency: string[];
