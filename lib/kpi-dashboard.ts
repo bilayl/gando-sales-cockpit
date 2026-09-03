@@ -48,6 +48,13 @@ export type CampaignKpiRow = {
   cashCollected: number | null
 }
 
+export type AcquisitionCostKpiRow = {
+  year: number
+  monthNumber: number
+  category: string
+  amount: number | null
+}
+
 export type KpiMonthlyPoint = {
   key: string
   label: string
@@ -94,74 +101,46 @@ export type KpiDashboardSummary = {
   campaignCash: number
   cashRoas: number | null
   cashRoi: number | null
-  coverage: {
-    revenue: number
-    tdv: number
-    deposits: number
-    activeRenters: number
-    total: number
-  }
+  coverage: { revenue: number; tdv: number; deposits: number; activeRenters: number; total: number }
   points: KpiMonthlyPoint[]
 }
 
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"]
-
-function n(value: number | null | undefined) {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0
-}
-
-function known(value: number | null | undefined): value is number {
-  return typeof value === "number" && Number.isFinite(value)
-}
-
-function ratio(top: number, bottom: number) {
-  return bottom > 0 ? top / bottom : null
-}
-
-function roi(returnValue: number, cost: number) {
-  return cost > 0 ? (returnValue - cost) / cost : null
-}
-
-function key(year: number, monthNumber: number) {
-  return year * 12 + monthNumber - 1
-}
-
-function label(year: number, monthNumber: number) {
-  return `${MONTHS[monthNumber - 1]} ${String(year).slice(-2)}`
-}
-
+function n(value: number | null | undefined) { return typeof value === "number" && Number.isFinite(value) ? value : 0 }
+function known(value: number | null | undefined): value is number { return typeof value === "number" && Number.isFinite(value) }
+function ratio(top: number, bottom: number) { return bottom > 0 ? top / bottom : null }
+function roi(returnValue: number, cost: number) { return cost > 0 ? (returnValue - cost) / cost : null }
+function key(year: number, monthNumber: number) { return year * 12 + monthNumber - 1 }
+function rowKey(year: number, monthNumber: number) { return `${year}-${String(monthNumber).padStart(2, "0")}` }
+function label(year: number, monthNumber: number) { return `${MONTHS[monthNumber - 1]} ${String(year).slice(-2)}` }
 function growth(current: number | null | undefined, previous: number | null | undefined) {
   if (!known(current) || !known(previous) || previous === 0) return null
   return current / previous - 1
 }
-
 function geometricMonthlyGrowth(first: number | null | undefined, last: number | null | undefined, periods: number) {
   if (!known(first) || !known(last) || first <= 0 || last < 0 || periods <= 0) return null
   return Math.pow(last / first, 1 / periods) - 1
+}
+function legacyCampaignCost(row: CampaignKpiRow) {
+  return n(row.spend) + n(row.salesCost) + n(row.toolingCost) + n(row.agencyCost) + n(row.creativeCost) + n(row.otherCost)
 }
 
 export function buildKpiDashboardSummary(
   coreRows: CoreKpiRow[],
   valueRows: ValueKpiRow[],
   campaignRows: CampaignKpiRow[],
+  acquisitionCosts: AcquisitionCostKpiRow[] = [],
 ): KpiDashboardSummary | null {
   const core = [...coreRows]
     .filter(row => [row.revenue, row.tdv, row.deposits, row.activeRenters].some(known))
     .sort((a, b) => key(a.year, a.monthNumber) - key(b.year, b.monthNumber))
-
   if (!core.length) return null
 
   const points: KpiMonthlyPoint[] = core.map((row, index) => {
     const previous = core[index - 1]
     return {
-      key: `${row.year}-${String(row.monthNumber).padStart(2, "0")}`,
-      label: label(row.year, row.monthNumber),
-      year: row.year,
-      monthNumber: row.monthNumber,
-      revenue: n(row.revenue),
-      tdv: n(row.tdv),
-      deposits: n(row.deposits),
-      activeRenters: n(row.activeRenters),
+      key: rowKey(row.year, row.monthNumber), label: label(row.year, row.monthNumber), year: row.year, monthNumber: row.monthNumber,
+      revenue: n(row.revenue), tdv: n(row.tdv), deposits: n(row.deposits), activeRenters: n(row.activeRenters),
       takeRate: known(row.revenue) && known(row.tdv) ? ratio(row.revenue, row.tdv) : null,
       arpu: known(row.revenue) && known(row.activeRenters) ? ratio(row.revenue, row.activeRenters) : null,
       avgDeposit: known(row.tdv) && known(row.deposits) ? ratio(row.tdv, row.deposits) : null,
@@ -176,12 +155,10 @@ export function buildKpiDashboardSummary(
   const matchedArpu = core.filter(row => known(row.revenue) && known(row.activeRenters) && n(row.activeRenters) > 0)
   const renterMonths = matchedArpu.reduce((sum, row) => sum + n(row.activeRenters), 0)
   const arpuRevenue = matchedArpu.reduce((sum, row) => sum + n(row.revenue), 0)
-
   const firstRevenue = core.find(row => known(row.revenue) && n(row.revenue) > 0)
   const lastRevenue = [...core].reverse().find(row => known(row.revenue) && n(row.revenue) > 0)
   const firstDeposits = core.find(row => known(row.deposits) && n(row.deposits) > 0)
   const lastDeposits = [...core].reverse().find(row => known(row.deposits) && n(row.deposits) > 0)
-
   const last = core[core.length - 1]
   const previous = core.length > 1 ? core[core.length - 2] : null
 
@@ -193,51 +170,30 @@ export function buildKpiDashboardSummary(
   const cashCollected = valueRows.reduce((sum, row) => sum + n(row.cashCollected), 0)
   const netMargin = valueRows.reduce((sum, row) => sum + n(row.netMargin), 0)
 
-  const campaignSpend = campaignRows.reduce((sum, row) => sum + n(row.spend), 0)
-  const campaignTotalCost = campaignRows.reduce((sum, row) => (
-    sum
-    + n(row.spend)
-    + n(row.salesCost)
-    + n(row.toolingCost)
-    + n(row.agencyCost)
-    + n(row.creativeCost)
-    + n(row.otherCost)
-  ), 0)
+  // A month with ledger entries uses the new cost ledger. Other months retain the legacy campaign-cost fallback.
+  const ledgerMonths = new Set(acquisitionCosts.map(row => rowKey(row.year, row.monthNumber)))
+  const ledgerTotal = acquisitionCosts.reduce((sum, row) => sum + n(row.amount), 0)
+  const ledgerMedia = acquisitionCosts.filter(row => row.category === "ads").reduce((sum, row) => sum + n(row.amount), 0)
+  const legacyRows = campaignRows.filter(row => !ledgerMonths.has(rowKey(row.year, row.monthNumber)))
+  const campaignSpend = ledgerMedia + legacyRows.reduce((sum, row) => sum + n(row.spend), 0)
+  const campaignTotalCost = ledgerTotal + legacyRows.reduce((sum, row) => sum + legacyCampaignCost(row), 0)
   const campaignCash = campaignRows.reduce((sum, row) => sum + n(row.cashCollected), 0)
 
   const first = core[0]
   const spanMonths = Math.max(1, key(last.year, last.monthNumber) - key(first.year, first.monthNumber) + 1)
 
   return {
-    firstLabel: label(first.year, first.monthNumber),
-    lastLabel: label(last.year, last.monthNumber),
-    spanMonths,
-    totalRevenue,
-    totalTdv,
-    totalDeposits,
+    firstLabel: label(first.year, first.monthNumber), lastLabel: label(last.year, last.monthNumber), spanMonths,
+    totalRevenue, totalTdv, totalDeposits,
     currentMau: known(last.activeRenters) ? last.activeRenters : null,
-    weightedTakeRate: ratio(totalRevenue, totalTdv),
-    weightedArpu: ratio(arpuRevenue, renterMonths),
-    avgDeposit: ratio(totalTdv, totalDeposits),
+    weightedTakeRate: ratio(totalRevenue, totalTdv), weightedArpu: ratio(arpuRevenue, renterMonths), avgDeposit: ratio(totalTdv, totalDeposits),
     revenueGrowth: firstRevenue && lastRevenue ? geometricMonthlyGrowth(firstRevenue.revenue, lastRevenue.revenue, key(lastRevenue.year, lastRevenue.monthNumber) - key(firstRevenue.year, firstRevenue.monthNumber)) : null,
     tdvGrowth: previous ? growth(last.tdv, previous.tdv) : null,
     depositGrowth: firstDeposits && lastDeposits ? geometricMonthlyGrowth(firstDeposits.deposits, lastDeposits.deposits, key(lastDeposits.year, lastDeposits.monthNumber) - key(firstDeposits.year, firstDeposits.monthNumber)) : null,
     mauGrowth: previous ? growth(last.activeRenters, previous.activeRenters) : null,
-    prospects,
-    meetings,
-    rentersActivated,
-    firstDepositRenters,
-    closingRate: ratio(rentersActivated, meetings),
-    signedRevenue,
-    cashCollected,
-    collectionRate: ratio(cashCollected, signedRevenue),
-    netMargin,
-    marginRate: ratio(netMargin, totalRevenue),
-    campaignSpend,
-    campaignTotalCost,
-    campaignCash,
-    cashRoas: ratio(campaignCash, campaignSpend),
-    cashRoi: roi(campaignCash, campaignTotalCost),
+    prospects, meetings, rentersActivated, firstDepositRenters, closingRate: ratio(rentersActivated, meetings),
+    signedRevenue, cashCollected, collectionRate: ratio(cashCollected, signedRevenue), netMargin, marginRate: ratio(netMargin, totalRevenue),
+    campaignSpend, campaignTotalCost, campaignCash, cashRoas: ratio(campaignCash, campaignSpend), cashRoi: roi(campaignCash, campaignTotalCost),
     coverage: {
       revenue: core.filter(row => known(row.revenue)).length,
       tdv: core.filter(row => known(row.tdv)).length,
