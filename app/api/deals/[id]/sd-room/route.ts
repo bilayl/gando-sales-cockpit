@@ -12,7 +12,7 @@ import {
   updateSDRoomSettings,
 } from "@/lib/sd-room";
 import { requireSDInternalAccess } from "@/lib/sd-room-access";
-import type { SDRoomBrandTheme, SDRoomMode, SDRoomRecord } from "@/lib/sd-room-types";
+import type { SD01Content, SDRoomBrandTheme, SDRoomMode, SDRoomRecord } from "@/lib/sd-room-types";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +23,47 @@ function brandTheme(value: unknown): SDRoomBrandTheme {
 
 function roomMode(value: unknown): SDRoomMode {
   return value === "enterprise" ? "enterprise" : "standard";
+}
+
+function sanitizeMetricRows(value: unknown): SD01Content["roi"]["valueLevers"] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(item => item && typeof item === "object")
+    .map(item => {
+      const row = item as Record<string, unknown>;
+      const confirmedBy = row.confirmedBy == null ? null : String(row.confirmedBy).trim().slice(0, 240) || null;
+      const confirmedEmail = row.confirmedEmail == null ? null : String(row.confirmedEmail).trim().slice(0, 320) || null;
+      const confirmedAt = row.confirmedAt == null ? null : String(row.confirmedAt).trim().slice(0, 80) || null;
+      return {
+        lever: String(row.lever || "").trim().slice(0, 500),
+        mechanism: String(row.mechanism || "").trim().slice(0, 1000),
+        value: String(row.value || "").trim().slice(0, 500),
+        ...(confirmedBy ? { confirmedBy } : {}),
+        ...(confirmedEmail ? { confirmedEmail } : {}),
+        ...(confirmedAt ? { confirmedAt } : {}),
+      };
+    })
+    .filter(item => item.lever)
+    .slice(0, 30);
+}
+
+function preserveSeparatedRoi(rawContent: unknown, normalized: SD01Content): SD01Content {
+  const record = rawContent && typeof rawContent === "object" ? rawContent as Record<string, unknown> : {};
+  const rawRoi = record.roi && typeof record.roi === "object" ? record.roi as Record<string, unknown> : {};
+
+  // Old SD01 documents only had valueLevers. Keep their legacy interpretation untouched.
+  // New editor payloads always send estimates (even an empty array), which marks the split
+  // between factual metrics and ROI estimates.
+  if (!Array.isArray(rawRoi.estimates)) return normalized;
+
+  return {
+    ...normalized,
+    roi: {
+      ...normalized.roi,
+      valueLevers: sanitizeMetricRows(rawRoi.valueLevers),
+      estimates: sanitizeMetricRows(rawRoi.estimates),
+    },
+  };
 }
 
 function standaloneDeal(room: SDRoomRecord): DealRoomDetail {
@@ -187,7 +228,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     if (body?.action === "save_sd01" || body?.action === "publish_sd01") {
-      const content = normalizeManualSD01(body.content, deal.company?.name || "Client");
+      const normalized = normalizeManualSD01(body.content, deal.company?.name || "Client");
+      const content = preserveSeparatedRoi(body.content, normalized);
       const current = bundle.documents.find(document => document.code === "SD01");
       const sourceMode = current?.source_mode === "agent" ? "mixed" : current?.source_mode || "manual";
       const document = await saveSDDocument({
