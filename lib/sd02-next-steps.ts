@@ -93,6 +93,28 @@ export function generateSD02NextSteps(sd01: SD01Content, maxSteps = 6): MutualAc
     }));
   }
 
+  if (candidates.length < 3) {
+    for (const pain of Array.isArray(sd01.painPoints) ? sd01.painPoints : []) {
+      const title = clean(pain.title, 320);
+      if (!title) continue;
+      candidates.push(step({
+        milestone: `Valider la réponse au besoin « ${title} »`,
+        dependency: Array.isArray(pain.details) ? pain.details.map(item => clean(item, 300)).filter(Boolean).join(" · ") : "",
+        organization: "joint",
+      }));
+      if (candidates.length >= 3) break;
+    }
+  }
+
+  if (!candidates.length && clean(sd01.executiveSummary)) {
+    candidates.push(step({
+      milestone: "Valider le cadrage et définir le périmètre de la prochaine phase",
+      dependency: clean(sd01.executiveSummary, 700),
+      organization: "joint",
+      workstream: "business",
+    }));
+  }
+
   const seen = new Set<string>();
   return candidates.filter(item => {
     const key = item.milestone.toLowerCase().replace(/[^a-z0-9à-ÿ]+/g, " ").trim();
