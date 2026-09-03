@@ -188,9 +188,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     if (body?.action === "save_sd01" || body?.action === "publish_sd01") {
       const content = normalizeManualSD01(body.content, deal.company?.name || "Client");
-      if (body.action === "publish_sd01" && !content.executiveSummary.trim()) {
-        throw Object.assign(new Error("Ajoutez une synthèse avant de publier le SD01."), { status: 400 });
-      }
       const current = bundle.documents.find(document => document.code === "SD01");
       const sourceMode = current?.source_mode === "agent" ? "mixed" : current?.source_mode || "manual";
       const document = await saveSDDocument({
