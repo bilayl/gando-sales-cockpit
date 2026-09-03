@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { PublicSD01MetricConfirmations } from "@/components/public-sd01-metric-confirmations";
 import type { SD01Content, SD01Metric } from "@/lib/sd-room-types";
@@ -20,7 +21,8 @@ function Section({ title, children, kicker }: { title: string; children: React.R
 }
 
 function AccordionBubble({ title, children, kicker, defaultOpen = false }: { title: string; children: React.ReactNode; kicker?: string; defaultOpen?: boolean }) {
-  return <details defaultOpen={defaultOpen} className="group overflow-hidden rounded-[18px] border border-[#e0e4e6] bg-white shadow-[0_1px_2px_rgba(20,30,35,0.025)]">
+  const [open, setOpen] = useState(defaultOpen);
+  return <details open={open} onToggle={event => setOpen(event.currentTarget.open)} className="group overflow-hidden rounded-[18px] border border-[#e0e4e6] bg-white shadow-[0_1px_2px_rgba(20,30,35,0.025)]">
     <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-5 sm:px-8 sm:py-6 [&::-webkit-details-marker]:hidden">
       <div className="min-w-0 flex-1">
         {kicker ? <Eyebrow>{kicker}</Eyebrow> : null}
