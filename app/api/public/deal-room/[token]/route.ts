@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getPublicSDRoomWithIdentity } from "@/lib/sd-room-public-identity";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { createEmptySD02 } from "@/lib/sd-stage-content";
 import type { SDDocumentRecord, SDRoomBrandTheme } from "@/lib/sd-room-types";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,18 @@ function publicError(error: unknown) {
 
 function brandTheme(value: unknown): SDRoomBrandTheme {
   return value === "gradient" || value === "dark" || value === "light" ? value : "gando";
+}
+
+function keepOnlySD02NextSteps(document: SDDocumentRecord): SDDocumentRecord {
+  if (document.code !== "SD02") return document;
+  const content = document.content && typeof document.content === "object" ? document.content as Record<string, unknown> : {};
+  return {
+    ...document,
+    content: {
+      ...createEmptySD02(),
+      milestones: Array.isArray(content.milestones) ? content.milestones : [],
+    },
+  };
 }
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -46,10 +59,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         displayTitle: room.brand_title || room.title,
         displaySubtitle: room.brand_subtitle || "Proposition commerciale",
       },
-      documents: (documents || []).map(document => ({
+      documents: (documents || []).map(document => keepOnlySD02NextSteps({
         ...document,
         content: document.published_content || document.content,
-      })) as SDDocumentRecord[],
+      } as SDDocumentRecord)),
       visitorEmail: "",
       visitorFirstName: "",
       visitorLastName: "",
@@ -76,6 +89,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         displayTitle: data.room.displayTitle || data.room.companyName,
         displaySubtitle: data.room.displaySubtitle || "Espace de collaboration",
       },
+      documents: data.documents.map(document => keepOnlySD02NextSteps(document)),
     });
   } catch (error) {
     return publicError(error);
