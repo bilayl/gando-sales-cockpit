@@ -177,6 +177,28 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
     finally { setWorking(null); }
   }
 
+  async function deleteVersion(version: VersionRow) {
+    const protectedVersion = version.version === sd01?.version || Boolean(sd01?.published_version && version.version === sd01.published_version);
+    if (protectedVersion) {
+      toast.error(version.version === sd01?.version ? "La version active ne peut pas être supprimée." : "La version publiée ne peut pas être supprimée.");
+      return;
+    }
+    if (!window.confirm(`Supprimer définitivement la version ${version.version} de l’historique ?`)) return;
+    setWorking(`delete-${version.id}`);
+    try {
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/versions`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: version.id, version: version.version }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || payload.error || "Suppression impossible");
+      setVersions(current => current.filter(item => item.id !== version.id));
+      toast.success(`Version ${version.version} supprimée`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Suppression impossible"); }
+    finally { setWorking(null); }
+  }
+
   async function saveAccess() {
     if (!room) return;
     setWorking("access");
@@ -287,7 +309,12 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
 
           <details className="group overflow-hidden rounded-xl border border-border bg-card"><summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 [&::-webkit-details-marker]:hidden"><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><span className="text-sm font-bold">Sources & mise à jour</span></div><ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" /></summary><div className="border-t border-border p-5"><div className="space-y-2">{(data.linkedConversations || []).slice(0, 10).map(call => <label key={call.id} className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5 text-xs"><input type="checkbox" className="mt-0.5" checked={selectedCalls.includes(call.id)} onChange={event => setSelectedCalls(current => event.target.checked ? [...new Set([...current, call.id])] : current.filter(id => id !== call.id))} /><span><span className="font-semibold">{call.title}</span><span className="mt-0.5 block text-muted-foreground">{formatDate(call.occurredAt)}</span></span></label>)}</div><Input className="mt-4" value={manualTitle} onChange={event => setManualTitle(event.target.value)} placeholder="Titre de la note" /><textarea className="mt-2 w-full rounded-lg border border-border bg-background p-3 text-xs outline-none" rows={4} value={manualTranscript} onChange={event => setManualTranscript(event.target.value)} placeholder="Colle un compte rendu ou une note…" /><Button className="mt-3 w-full" variant="outline" onClick={() => void generateFromSources()} disabled={working === "generate"}>{working === "generate" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}Mettre à jour le SD01</Button></div></details>
 
-          <details className="group overflow-hidden rounded-xl border border-border bg-card"><summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 [&::-webkit-details-marker]:hidden"><div className="flex items-center gap-2"><History className="h-4 w-4 text-primary" /><span className="text-sm font-bold">Historique</span><Badge variant="outline">{versions.length}</Badge></div><ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" /></summary><div className="max-h-[420px] space-y-2 overflow-y-auto border-t border-border p-4">{versions.map(version => <div key={version.id} className="rounded-lg border border-border p-3 text-xs"><div className="flex items-center justify-between gap-2"><div><div className="font-semibold">Version {version.version}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{formatDate(version.created_at)}</div></div><Button variant="ghost" size="sm" className="h-8" onClick={() => void restoreVersion(version.version)} disabled={working === `restore-${version.version}`}><RotateCcw className="mr-1 h-3.5 w-3.5" />Restaurer</Button></div>{version.change_summary ? <p className="mt-2 text-muted-foreground">{version.change_summary}</p> : null}</div>)}{!versions.length ? <p className="text-xs text-muted-foreground">Aucune version enregistrée.</p> : null}</div></details>
+          <details className="group overflow-hidden rounded-xl border border-border bg-card"><summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 [&::-webkit-details-marker]:hidden"><div className="flex items-center gap-2"><History className="h-4 w-4 text-primary" /><span className="text-sm font-bold">Historique</span><Badge variant="outline">{versions.length}</Badge></div><ChevronDown className="h-4 w-4 text-muted-foreground transition group-open:rotate-180" /></summary><div className="max-h-[420px] space-y-2 overflow-y-auto border-t border-border p-4">{versions.map(version => {
+            const isActive = version.version === sd01?.version;
+            const isPublished = Boolean(sd01?.published_version && version.version === sd01.published_version);
+            const protectedVersion = isActive || isPublished;
+            return <div key={version.id} className="rounded-lg border border-border p-3 text-xs"><div className="flex items-center justify-between gap-2"><div><div className="flex items-center gap-2"><div className="font-semibold">Version {version.version}</div>{isActive ? <Badge variant="outline" className="text-[9px]">Active</Badge> : isPublished ? <Badge variant="outline" className="text-[9px]">Publiée</Badge> : null}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{formatDate(version.created_at)}</div></div><div className="flex items-center gap-1"><Button variant="ghost" size="sm" className="h-8" onClick={() => void restoreVersion(version.version)} disabled={working === `restore-${version.version}`}><RotateCcw className="mr-1 h-3.5 w-3.5" />Restaurer</Button>{!protectedVersion ? <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title={`Supprimer la version ${version.version}`} onClick={() => void deleteVersion(version)} disabled={working === `delete-${version.id}`} >{working === `delete-${version.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</Button> : null}</div></div>{version.change_summary ? <p className="mt-2 text-muted-foreground">{version.change_summary}</p> : null}</div>;
+          })}{!versions.length ? <p className="text-xs text-muted-foreground">Aucune version enregistrée.</p> : null}</div></details>
 
           <Card className="p-4 text-xs text-muted-foreground"><div className="flex items-center gap-2 font-semibold text-foreground"><Clock3 className="h-4 w-4 text-primary" />Règle SD01</div><p className="mt-2 leading-5">On comprend le client ici. On décide et on organise la suite dans <strong>SD02 · Prochaines étapes</strong>.</p></Card>
         </aside>
