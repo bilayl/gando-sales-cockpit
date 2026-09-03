@@ -69,3 +69,50 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return apiError(error);
   }
 }
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    await requireSDInternalAccess();
+    const body = await request.json();
+    const versionId = String(body?.id || "").trim();
+    const targetVersion = Number(body?.version);
+    if (!versionId || !Number.isInteger(targetVersion) || targetVersion < 1) {
+      throw Object.assign(new Error("Version SD01 invalide."), { status: 400 });
+    }
+
+    const bundle = await getSDRoomBundle(id);
+    if (!bundle.room) throw Object.assign(new Error("Deal Room introuvable."), { status: 404 });
+    const current = bundle.documents.find(document => document.code === "SD01");
+    if (!current) throw Object.assign(new Error("SD01 introuvable."), { status: 404 });
+
+    if (targetVersion === current.version) {
+      throw Object.assign(new Error("La version actuellement active ne peut pas être supprimée."), { status: 409 });
+    }
+    if (current.published_version && targetVersion === current.published_version) {
+      throw Object.assign(new Error("La version actuellement publiée ne peut pas être supprimée."), { status: 409 });
+    }
+
+    const admin = getSupabaseAdmin();
+    const { data: existing, error: lookupError } = await admin
+      .from("sd_document_versions")
+      .select("id,version")
+      .eq("id", versionId)
+      .eq("document_id", current.id)
+      .eq("version", targetVersion)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!existing) throw Object.assign(new Error("Cette version n’existe plus."), { status: 404 });
+
+    const { error: deleteError } = await admin
+      .from("sd_document_versions")
+      .delete()
+      .eq("id", versionId)
+      .eq("document_id", current.id);
+    if (deleteError) throw deleteError;
+
+    return Response.json({ deleted: true, id: versionId, version: targetVersion });
+  } catch (error) {
+    return apiError(error);
+  }
+}
