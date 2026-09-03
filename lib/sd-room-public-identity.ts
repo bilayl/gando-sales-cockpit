@@ -5,7 +5,7 @@ import {
   getPublicSDRoom,
   recordSDRoomEvent,
 } from "@/lib/sd-room";
-import type { SDCode } from "@/lib/sd-room-types";
+import type { SD01Content, SDCode } from "@/lib/sd-room-types";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 function cleanName(value: unknown, label: string) {
@@ -14,6 +14,28 @@ function cleanName(value: unknown, label: string) {
     throw Object.assign(new Error(`${label} obligatoire.`), { status: 400 });
   }
   return name;
+}
+
+function normalizeLegacyPublicSD01<T extends Awaited<ReturnType<typeof getPublicSDRoom>>>(data: T): T {
+  return {
+    ...data,
+    documents: data.documents.map(document => {
+      if (document.code !== "SD01") return document;
+      const content = document.content as SD01Content;
+      if (!content?.roi || Array.isArray(content.roi.estimates)) return document;
+      return {
+        ...document,
+        content: {
+          ...content,
+          roi: {
+            ...content.roi,
+            valueLevers: [],
+            estimates: Array.isArray(content.roi.valueLevers) ? content.roi.valueLevers : [],
+          },
+        },
+      };
+    }),
+  } as T;
 }
 
 export function normalizePublicVisitorIdentity(firstName: unknown, lastName: unknown) {
@@ -30,7 +52,8 @@ export async function getPublicSDRoomWithIdentity(input: {
   lastName: unknown;
 }) {
   const identity = normalizePublicVisitorIdentity(input.firstName, input.lastName);
-  const data = await getPublicSDRoom(input.token, String(input.email || ""));
+  const rawData = await getPublicSDRoom(input.token, String(input.email || ""));
+  const data = normalizeLegacyPublicSD01(rawData);
   return {
     ...data,
     visitorFirstName: identity.firstName,

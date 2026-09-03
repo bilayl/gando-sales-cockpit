@@ -13,8 +13,13 @@ function cloneContent(value: unknown): SD01Content {
   return JSON.parse(JSON.stringify(value || {})) as SD01Content;
 }
 
+function hasSeparatedRoi(content: SD01Content) {
+  return Array.isArray((content.roi as SD01Content["roi"] & { estimates?: SD01Metric[] })?.estimates);
+}
+
 function updateMetric(content: SD01Content, index: number, lever: string, nextMetric: SD01Metric) {
-  const metrics = Array.isArray(content?.roi?.valueLevers) ? content.roi.valueLevers : [];
+  if (!hasSeparatedRoi(content)) return content;
+  const metrics = Array.isArray(content?.roi?.valueLevers) ? [...content.roi.valueLevers] : [];
   let target: SD01Metric | undefined = metrics[index];
   let targetIndex = index;
 
@@ -74,6 +79,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const published = cloneContent(document.published_content);
+    if (!hasSeparatedRoi(published)) {
+      throw Object.assign(new Error("Ce document utilise encore l’ancien format ROI. Enregistrez puis republiez le SD01 avant de confirmer des métriques."), { status: 409 });
+    }
     const publishedMetrics = Array.isArray(published?.roi?.valueLevers) ? published.roi.valueLevers : [];
     const metric = publishedMetrics[metricIndex];
     if (!metric || !String(metric.lever || "").trim()) {
