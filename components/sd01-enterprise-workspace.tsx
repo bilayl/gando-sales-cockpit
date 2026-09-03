@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { DealRoomDetail } from "@/lib/deal-room-types";
-import { createEmptySD01, type LinkedConversation, type SD01Content, type SDDocumentRecord, type SDRoomAnalytics, type SDRoomComment, type SDRoomRecord } from "@/lib/sd-room-types";
+import { createEmptySD01, type LinkedConversation, type SD01Content, type SD01Metric, type SDDocumentRecord, type SDRoomAnalytics, type SDRoomComment, type SDRoomRecord } from "@/lib/sd-room-types";
 
 type SourceSummary = { id: string; external_id?: string | null; title: string; source_type: string; characterCount: number; occurred_at: string | null };
 type RoomResponse = { deal: DealRoomDetail; room: SDRoomRecord | null; documents: SDDocumentRecord[]; sources: SourceSummary[]; linkedConversations: LinkedConversation[]; analytics?: SDRoomAnalytics; comments?: SDRoomComment[] };
@@ -18,6 +18,10 @@ type VersionRow = { id: string; version: number; content: SD01Content; source_re
 function cleanContent(value: unknown, companyName = ""): SD01Content {
   const empty = createEmptySD01(companyName);
   const source = value && typeof value === "object" ? value as Partial<SD01Content> : {};
+  const legacyLevers = Array.isArray(source.roi?.valueLevers) ? source.roi.valueLevers : [];
+  const hasSeparatedRoi = Array.isArray(source.roi?.estimates);
+  const estimates = hasSeparatedRoi ? (source.roi?.estimates || []) : legacyLevers;
+  const metrics = hasSeparatedRoi ? legacyLevers : [];
   return {
     ...empty,
     ...source,
@@ -28,7 +32,7 @@ function cleanContent(value: unknown, companyName = ""): SD01Content {
     businessModel: Array.isArray(source.businessModel) ? source.businessModel : [],
     painPoints: Array.isArray(source.painPoints) ? source.painPoints : [],
     solutionFit: Array.isArray(source.solutionFit) ? source.solutionFit : [],
-    roi: { valueLevers: Array.isArray(source.roi?.valueLevers) ? source.roi.valueLevers : [], metricsRequired: [] },
+    roi: { valueLevers: metrics, estimates, metricsRequired: [] },
     urgency: Array.isArray(source.urgency) ? source.urgency : [],
     decisions: Array.isArray(source.decisions) ? source.decisions : [],
     openQuestions: Array.isArray(source.openQuestions) ? source.openQuestions : [],
@@ -70,6 +74,15 @@ function DocBlock({ title, hint, children, action }: { title: string; hint?: str
 
 function MiniInput({ value, onChange, placeholder, className = "" }: { value: string; onChange: (value: string) => void; placeholder: string; className?: string }) {
   return <Input value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} className={`h-9 text-sm ${className}`} />;
+}
+
+function MetricRows({ rows, onChange, onRemove, mode }: { rows: SD01Metric[]; onChange: (rows: SD01Metric[]) => void; onRemove: (index: number) => void; mode: "metrics" | "roi" }) {
+  return <div className="space-y-2">{rows.map((metric, index) => <div key={index} className="group grid gap-2 rounded-xl border border-border bg-background p-3 sm:grid-cols-[1fr_1.4fr_1fr_auto]">
+    <MiniInput value={metric.lever} onChange={value => onChange(rows.map((row, position) => position === index ? { ...row, lever: value } : row))} placeholder={mode === "metrics" ? "Métrique" : "Levier"} />
+    <MiniInput value={metric.mechanism} onChange={value => onChange(rows.map((row, position) => position === index ? { ...row, mechanism: value } : row))} placeholder={mode === "metrics" ? "Contexte / pourquoi elle compte" : "Mécanisme"} />
+    <MiniInput value={metric.value} onChange={value => onChange(rows.map((row, position) => position === index ? { ...row, value } : row))} placeholder={mode === "metrics" ? "Valeur ou laisser vide" : "Valeur estimée pour le client"} />
+    <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => onRemove(index)}><Trash2 className="h-4 w-4" /></Button>
+  </div>)}{!rows.length ? <p className="text-sm italic text-muted-foreground">{mode === "metrics" ? "Aucune métrique ajoutée." : "Aucune estimation ROI ajoutée."}</p> : null}</div>;
 }
 
 export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
@@ -124,7 +137,14 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
   async function save(publish = false) {
     setWorking(publish ? "publish" : "save");
     try {
-      const cleaned: SD01Content = { ...content, roi: { valueLevers: content.roi.valueLevers.filter(metric => metric.lever.trim() || metric.value.trim()), metricsRequired: [] } };
+      const cleaned: SD01Content = {
+        ...content,
+        roi: {
+          valueLevers: content.roi.valueLevers.filter(metric => metric.lever.trim() || metric.value.trim()),
+          estimates: (content.roi.estimates || []).filter(metric => metric.lever.trim() || metric.value.trim()),
+          metricsRequired: [],
+        },
+      };
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -241,6 +261,7 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
   const addPain = () => update("painPoints", [...content.painPoints, { priority: content.painPoints.length + 1, title: "", details: [] }]);
   const addFit = () => update("solutionFit", [...content.solutionFit, { need: "", response: "" }]);
   const addMetric = () => update("roi", { ...content.roi, valueLevers: [...content.roi.valueLevers, { lever: "", mechanism: "", value: "" }] });
+  const addRoiEstimate = () => update("roi", { ...content.roi, estimates: [...(content.roi.estimates || []), { lever: "", mechanism: "", value: "" }] });
 
   return <div className="min-h-screen bg-muted/20 px-4 py-6 lg:px-7 lg:py-8">
     <div className="mx-auto max-w-[1320px] space-y-4">
@@ -267,7 +288,7 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
 
           <DocBlock title="Processus actuel" hint="Une étape par ligne. L’objectif est de comprendre comment le client fonctionne aujourd’hui."><FreeTextarea value={textLines(content.currentProcess)} onChange={value => update("currentProcess", lines(value))} rows={5} placeholder={"Réservation créée\nPréautorisation de caution\nRemise du véhicule"} /></DocBlock>
 
-          <DocBlock title="Produits, offres & business model" hint="Conserve ici le contexte commercial nécessaire, sans en faire une fiche CRM."><div className="grid gap-6 md:grid-cols-2"><div><div className="mb-2 text-xs font-bold text-muted-foreground">Produits / offres</div><FreeTextarea value={textLines(content.productsAndOffers)} onChange={value => update("productsAndOffers", lines(value))} rows={4} placeholder="Une offre par ligne…" /></div><div><div className="mb-2 text-xs font-bold text-muted-foreground">Business model</div><FreeTextarea value={textLines(content.businessModel)} onChange={value => update("businessModel", lines(value))} rows={4} placeholder="Les éléments économiques utiles…" /></div></div></DocBlock>
+          <DocBlock title="Produits & offres" hint="Le contexte commercial existant, sans le confondre avec le modèle proposé par Gando."><FreeTextarea value={textLines(content.productsAndOffers)} onChange={value => update("productsAndOffers", lines(value))} rows={4} placeholder="Une offre par ligne…" /></DocBlock>
 
           <DocBlock title="Enjeux prioritaires" hint="Ce qui justifie réellement le projet." action={<Button variant="outline" size="sm" onClick={addPain}><Plus className="mr-1 h-3.5 w-3.5" />Ajouter</Button>}>
             <div className="space-y-3">{content.painPoints.map((pain, index) => <div key={index} className="group rounded-xl border border-border bg-background p-4"><div className="flex gap-2"><Input value={pain.title} onChange={event => update("painPoints", content.painPoints.map((row, position) => position === index ? { ...row, title: event.target.value } : row))} placeholder="Enjeu" className="h-auto border-0 bg-transparent p-0 font-semibold shadow-none focus-visible:ring-0" /><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive opacity-60 group-hover:opacity-100" onClick={() => update("painPoints", content.painPoints.filter((_, position) => position !== index).map((row, position) => ({ ...row, priority: position + 1 })))}><Trash2 className="h-4 w-4" /></Button></div><div className="mt-2"><FreeTextarea value={textLines(pain.details)} onChange={value => update("painPoints", content.painPoints.map((row, position) => position === index ? { ...row, details: lines(value) } : row))} rows={3} placeholder="Détail, preuve, conséquence…" /></div></div>)}{!content.painPoints.length ? <p className="text-sm italic text-muted-foreground">Aucun enjeu renseigné.</p> : null}</div>
@@ -277,8 +298,14 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
             <div className="space-y-3">{content.solutionFit.map((item, index) => <div key={index} className="group grid gap-3 rounded-xl border border-border bg-background p-4 md:grid-cols-[1fr_1fr_auto]"><FreeTextarea value={item.need} onChange={value => update("solutionFit", content.solutionFit.map((row, position) => position === index ? { ...row, need: value } : row))} rows={3} placeholder="Besoin / problème client…" /><FreeTextarea value={item.response} onChange={value => update("solutionFit", content.solutionFit.map((row, position) => position === index ? { ...row, response: value } : row))} rows={3} placeholder="Réponse Gando proposée…" /><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-60 group-hover:opacity-100" onClick={() => update("solutionFit", content.solutionFit.filter((_, position) => position !== index))}><Trash2 className="h-4 w-4" /></Button></div>)}{!content.solutionFit.length ? <p className="text-sm italic text-muted-foreground">Ajoute une correspondance besoin → réponse pour construire la mini-propal.</p> : null}</div>
           </DocBlock>
 
-          <DocBlock title="Métriques confirmées" hint="Entièrement facultatif. Si nous n’avons pas une donnée fiable, nous n’affichons rien." action={<Button variant="outline" size="sm" onClick={addMetric}><Plus className="mr-1 h-3.5 w-3.5" />Ajouter</Button>}>
-            <div className="space-y-2">{content.roi.valueLevers.map((metric, index) => <div key={index} className="group grid gap-2 rounded-xl border border-border bg-background p-3 sm:grid-cols-[1fr_1.4fr_1fr_auto]"><MiniInput value={metric.lever} onChange={value => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.map((row, position) => position === index ? { ...row, lever: value } : row) })} placeholder="Métrique" /><MiniInput value={metric.mechanism} onChange={value => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.map((row, position) => position === index ? { ...row, mechanism: value } : row) })} placeholder="Pourquoi elle compte" /><MiniInput value={metric.value} onChange={value => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.map((row, position) => position === index ? { ...row, value } : row) })} placeholder="Valeur confirmée" /><Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.filter((_, position) => position !== index) })}><Trash2 className="h-4 w-4" /></Button></div>)}{!content.roi.valueLevers.length ? <p className="text-sm italic text-muted-foreground">Aucune métrique confirmée — ce bloc ne sera pas affiché côté client.</p> : null}</div>
+          <DocBlock title="Modèle commercial" hint="Les conditions commerciales proposées pour ce deal. Ce bloc apparaît juste sous la solution côté client."><FreeTextarea value={textLines(content.businessModel)} onChange={value => update("businessModel", lines(value))} rows={6} placeholder={"Partenariat sans abonnement\nFrais de sécurisation payés par le client final\nConditions proposées pour le pilote…"} /></DocBlock>
+
+          <DocBlock title="Métriques" hint="Données factuelles du client. Laisse la valeur vide si elle doit être confirmée directement par l’interlocuteur." action={<Button variant="outline" size="sm" onClick={addMetric}><Plus className="mr-1 h-3.5 w-3.5" />Ajouter</Button>}>
+            <MetricRows rows={content.roi.valueLevers} mode="metrics" onChange={rows => update("roi", { ...content.roi, valueLevers: rows })} onRemove={index => update("roi", { ...content.roi, valueLevers: content.roi.valueLevers.filter((_, position) => position !== index) })} />
+          </DocBlock>
+
+          <DocBlock title="Valeur & estimation du ROI" hint="Impact attendu de Gando : levier, mécanisme et valeur estimée pour le client. Ce bloc est distinct des métriques factuelles." action={<Button variant="outline" size="sm" onClick={addRoiEstimate}><Plus className="mr-1 h-3.5 w-3.5" />Ajouter</Button>}>
+            <MetricRows rows={content.roi.estimates || []} mode="roi" onChange={rows => update("roi", { ...content.roi, estimates: rows })} onRemove={index => update("roi", { ...content.roi, estimates: (content.roi.estimates || []).filter((_, position) => position !== index) })} />
           </DocBlock>
 
           <DocBlock title="Pourquoi maintenant ?" hint="Contexte d’urgence ou événement déclencheur, si pertinent."><FreeTextarea value={textLines(content.urgency)} onChange={value => update("urgency", lines(value))} rows={4} placeholder="Un facteur par ligne…" /></DocBlock>
@@ -313,7 +340,7 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
             const isActive = version.version === sd01?.version;
             const isPublished = Boolean(sd01?.published_version && version.version === sd01.published_version);
             const protectedVersion = isActive || isPublished;
-            return <div key={version.id} className="rounded-lg border border-border p-3 text-xs"><div className="flex items-center justify-between gap-2"><div><div className="flex items-center gap-2"><div className="font-semibold">Version {version.version}</div>{isActive ? <Badge variant="outline" className="text-[9px]">Active</Badge> : isPublished ? <Badge variant="outline" className="text-[9px]">Publiée</Badge> : null}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{formatDate(version.created_at)}</div></div><div className="flex items-center gap-1"><Button variant="ghost" size="sm" className="h-8" onClick={() => void restoreVersion(version.version)} disabled={working === `restore-${version.version}`}><RotateCcw className="mr-1 h-3.5 w-3.5" />Restaurer</Button>{!protectedVersion ? <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title={`Supprimer la version ${version.version}`} onClick={() => void deleteVersion(version)} disabled={working === `delete-${version.id}`} >{working === `delete-${version.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</Button> : null}</div></div>{version.change_summary ? <p className="mt-2 text-muted-foreground">{version.change_summary}</p> : null}</div>;
+            return <div key={version.id} className="rounded-lg border border-border p-3 text-xs"><div className="flex items-center justify-between gap-2"><div><div className="flex items-center gap-2"><div className="font-semibold">Version {version.version}</div>{isActive ? <Badge variant="outline" className="text-[9px]">Active</Badge> : isPublished ? <Badge variant="outline" className="text-[9px]">Publiée</Badge> : null}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{formatDate(version.created_at)}</div></div><div className="flex items-center gap-1"><Button variant="ghost" size="sm" className="h-8" onClick={() => void restoreVersion(version.version)} disabled={working === `restore-${version.version}`}><RotateCcw className="mr-1 h-3.5 w-3.5" />Restaurer</Button>{!protectedVersion ? <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title={`Supprimer la version ${version.version}`} onClick={() => void deleteVersion(version)} disabled={working === `delete-${version.id}`}>{working === `delete-${version.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</Button> : null}</div></div>{version.change_summary ? <p className="mt-2 text-muted-foreground">{version.change_summary}</p> : null}</div>;
           })}{!versions.length ? <p className="text-xs text-muted-foreground">Aucune version enregistrée.</p> : null}</div></details>
 
           <Card className="p-4 text-xs text-muted-foreground"><div className="flex items-center gap-2 font-semibold text-foreground"><Clock3 className="h-4 w-4 text-primary" />Règle SD01</div><p className="mt-2 leading-5">On comprend le client ici. On décide et on organise la suite dans <strong>SD02 · Prochaines étapes</strong>.</p></Card>
