@@ -8,21 +8,6 @@ import { generateSD02NextSteps } from "@/lib/sd02-next-steps";
 
 export const dynamic = "force-dynamic";
 
-function hasSD02Work(content: SD02Content) {
-  return Boolean(
-    content.objective.trim() ||
-    content.workingNotes.trim() ||
-    content.decisionProcess.length ||
-    content.blockers.length ||
-    content.milestones.length ||
-    content.clientCommitments.length ||
-    content.gandoCommitments.length ||
-    content.dependencies.length ||
-    content.risks.length ||
-    content.exitCriteria.length
-  );
-}
-
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
@@ -47,7 +32,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ? normalizeStageContent("SD02", current.content) as SD02Content
       : createEmptySD02();
 
-    if (!force && hasSD02Work(currentContent)) {
+    if (!force && currentContent.milestones.length) {
       return Response.json({ document: current, generated: false, reason: "existing_content" });
     }
 
@@ -58,9 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const content: SD02Content = {
-      ...currentContent,
-      decisionProcess: currentContent.decisionProcess.length ? currentContent.decisionProcess : (Array.isArray(source.decisions) ? source.decisions.filter(Boolean) : []),
-      blockers: currentContent.blockers.length ? currentContent.blockers : (Array.isArray(source.openQuestions) ? source.openQuestions.filter(Boolean) : []),
+      ...createEmptySD02(),
       milestones,
     };
 
@@ -72,7 +55,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       updatedByEmail: userEmail,
       status: "draft",
       sourceRefs: [{ id: sd01.id, title: "SD01 · Synthèse", sourceType: "sd01" }],
-      changeSummary: force ? "Next steps régénérées automatiquement depuis SD01" : "Next steps générées automatiquement depuis SD01",
+      changeSummary: force ? "Prochaines étapes régénérées automatiquement depuis SD01" : "Prochaines étapes générées automatiquement depuis SD01",
     });
 
     return Response.json({ document, generated: true, count: milestones.length });
