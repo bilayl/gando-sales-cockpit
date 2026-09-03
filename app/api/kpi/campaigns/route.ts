@@ -22,6 +22,7 @@ function toClient(row: Record<string, unknown>) {
     monthNumber: Number(row.month_number),
     source: String(row.source || ""),
     campaign: String(row.campaign || ""),
+    // Legacy cost columns are kept read-only for historical fallback.
     spend: nullableNumber(row.spend),
     salesCost: nullableNumber(row.sales_cost),
     toolingCost: nullableNumber(row.tooling_cost),
@@ -73,17 +74,11 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Source, campagne ou mois invalide." }, { status: 400 });
     }
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       year,
       month_number: monthNumber,
       source,
       campaign,
-      spend: nullableNumber(body?.spend),
-      sales_cost: nullableNumber(body?.salesCost),
-      tooling_cost: nullableNumber(body?.toolingCost),
-      agency_cost: nullableNumber(body?.agencyCost),
-      creative_cost: nullableNumber(body?.creativeCost),
-      other_cost: nullableNumber(body?.otherCost),
       leads: nullableInteger(body?.leads),
       meetings: nullableInteger(body?.meetings),
       clients: nullableInteger(body?.clients),
@@ -92,6 +87,15 @@ export async function PUT(request: NextRequest) {
       updated_by: access.email || access.displayName || null,
       updated_at: new Date().toISOString(),
     };
+
+    // Backward compatibility only: old clients may still send embedded costs.
+    // New KPI UI writes costs through /api/kpi/acquisition-costs instead.
+    if (Object.prototype.hasOwnProperty.call(body, "spend")) payload.spend = nullableNumber(body.spend);
+    if (Object.prototype.hasOwnProperty.call(body, "salesCost")) payload.sales_cost = nullableNumber(body.salesCost);
+    if (Object.prototype.hasOwnProperty.call(body, "toolingCost")) payload.tooling_cost = nullableNumber(body.toolingCost);
+    if (Object.prototype.hasOwnProperty.call(body, "agencyCost")) payload.agency_cost = nullableNumber(body.agencyCost);
+    if (Object.prototype.hasOwnProperty.call(body, "creativeCost")) payload.creative_cost = nullableNumber(body.creativeCost);
+    if (Object.prototype.hasOwnProperty.call(body, "otherCost")) payload.other_cost = nullableNumber(body.otherCost);
 
     const { error } = await getSupabaseAdmin()
       .from("kpi_campaign_performance")
