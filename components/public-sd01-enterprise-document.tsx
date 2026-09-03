@@ -36,8 +36,7 @@ function AccordionBubble({ title, children, kicker, defaultOpen = false }: { tit
   </details>;
 }
 
-function BulletList({ items, empty = "À confirmer" }: { items?: string[]; empty?: string }) {
-  if (!items?.length) return <p className="italic text-[#81898e]">{empty}</p>;
+function BulletList({ items }: { items: string[] }) {
   return <ul className="space-y-3">{items.map((item, index) => <li key={`${index}-${item}`} className="flex gap-3"><span className="mt-[10px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#7166c7]" /><span>{item}</span></li>)}</ul>;
 }
 
@@ -51,12 +50,16 @@ function RoiTable({ rows, companyName, language }: { rows: SD01Metric[]; company
         <div className="border-l border-[#dedaf7] px-4 py-3">{tr(language, `Valeur pour ${companyName}`, `Value for ${companyName}`)}</div>
       </div>
       <div className="divide-y divide-[#e4e0f7]">{rows.map((row, index) => <div key={`${row.lever}-${index}`} className="grid bg-white sm:grid-cols-[1fr_1.35fr_1.35fr]">
-        <div className="px-4 py-4"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, "Levier", "Lever")}</div><div className="font-semibold text-[#202a2f]">{row.lever}</div></div>
+        <div className="px-4 py-4"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, "Levier", "Lever")}</div><div className="font-semibold text-[#202a2f]">{row.lever || tr(language, "À préciser", "TBD")}</div></div>
         <div className="border-t border-[#eceeef] px-4 py-4 sm:border-l sm:border-t-0"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, "Mécanisme", "Mechanism")}</div>{row.mechanism || tr(language, "À préciser", "TBD")}</div>
         <div className="border-t border-[#eceeef] px-4 py-4 sm:border-l sm:border-t-0"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, `Valeur pour ${companyName}`, `Value for ${companyName}`)}</div>{row.value || tr(language, "À estimer", "To estimate")}</div>
       </div>)}</div>
     </div>
   </Section>;
+}
+
+function nonEmptyLines(values?: string[]) {
+  return (values || []).map(value => String(value || "").trim()).filter(Boolean);
 }
 
 export function PublicSD01EnterpriseDocument({
@@ -82,38 +85,50 @@ export function PublicSD01EnterpriseDocument({
 }) {
   const roiRecord = content.roi as SD01Content["roi"] & { estimates?: SD01Metric[] };
   const hasSeparatedRoi = Array.isArray(roiRecord.estimates);
+  const summary = String(content.executiveSummary || "").trim();
+  const sector = String(content.companyProfile?.sector || "").trim();
+  const companyDescription = String(content.companyProfile?.description || "").trim();
+  const companyContext = String(content.companyProfile?.context || "").trim();
+  const gandoContext = String(content.gandoContext || "").trim();
+  const hasCompanyContext = Boolean(sector || companyDescription || companyContext || gandoContext);
+  const currentProcess = nonEmptyLines(content.currentProcess);
+  const stakeholders = (content.stakeholders || []).filter(person => [person.name, person.role, person.organization, person.notes].some(value => String(value || "").trim()));
+  const productsAndOffers = nonEmptyLines(content.productsAndOffers);
+  const painPoints = (content.painPoints || []).map(pain => ({ ...pain, title: String(pain.title || "").trim(), details: nonEmptyLines(pain.details) })).filter(pain => pain.title || pain.details.length);
+  const solutionFit = (content.solutionFit || []).map(item => ({ need: String(item.need || "").trim(), response: String(item.response || "").trim() })).filter(item => item.need || item.response);
   const metrics = hasSeparatedRoi ? (content.roi.valueLevers || []).filter(metric => String(metric.lever || "").trim()) : [];
-  const roiRows = (hasSeparatedRoi ? roiRecord.estimates || [] : content.roi.valueLevers || []).filter(metric => String(metric.lever || "").trim());
+  const roiRows = (hasSeparatedRoi ? roiRecord.estimates || [] : content.roi.valueLevers || []).filter(metric => [metric.lever, metric.mechanism, metric.value].some(value => String(value || "").trim()));
   const commercialItems = (content.businessModel || [])
     .flatMap(item => String(item || "").split(/\n+/))
     .map(item => item.trim())
     .filter(Boolean);
+  const urgency = nonEmptyLines(content.urgency);
 
   return <div className="space-y-5 sm:space-y-6">
-    <AccordionBubble title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")}>
-      <p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.executiveSummary || tr(language, "Synthèse en cours de validation.", "Summary pending approval.")}</p>
-    </AccordionBubble>
-
-    {(content.companyProfile?.sector || content.companyProfile?.description || content.companyProfile?.context || content.gandoContext) ? <AccordionBubble title={tr(language, "Entreprise & contexte", "Company & context")}>
-      <div className="grid gap-5 sm:grid-cols-[170px_1fr]">
-        <div><Eyebrow>{tr(language, "Secteur", "Industry")}</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{content.companyProfile?.sector || tr(language, "À confirmer", "TBD")}</div></div>
-        <div><Eyebrow>{tr(language, "Entreprise", "Company")}</Eyebrow><p className="mt-2">{content.companyProfile?.description || tr(language, "À compléter", "To complete")}</p></div>
-      </div>
-      {content.companyProfile?.context ? <div className="mt-5 border-t border-[#eceeef] pt-5"><Eyebrow>{tr(language, "Contexte", "Context")}</Eyebrow><p className="mt-2">{content.companyProfile.context}</p></div> : null}
-      {content.gandoContext ? <div className="mt-5 rounded-xl bg-[#f7f6ff] p-4"><Eyebrow>{tr(language, "Pourquoi Gando", "Why Gando")}</Eyebrow><p className="mt-2">{content.gandoContext}</p></div> : null}
+    {summary ? <AccordionBubble title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")}>
+      <p className="text-[18px] font-medium leading-8 text-[#202a2f]">{summary}</p>
     </AccordionBubble> : null}
 
-    {content.currentProcess?.length ? <AccordionBubble title={tr(language, "Processus actuel", "Current process")}><BulletList items={content.currentProcess} /></AccordionBubble> : null}
+    {hasCompanyContext ? <AccordionBubble title={tr(language, "Entreprise & contexte", "Company & context")}>
+      {(sector || companyDescription) ? <div className="grid gap-5 sm:grid-cols-2">
+        {sector ? <div><Eyebrow>{tr(language, "Secteur", "Industry")}</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{sector}</div></div> : null}
+        {companyDescription ? <div><Eyebrow>{tr(language, "Entreprise", "Company")}</Eyebrow><p className="mt-2">{companyDescription}</p></div> : null}
+      </div> : null}
+      {companyContext ? <div className={`${sector || companyDescription ? "mt-5 border-t border-[#eceeef] pt-5" : ""}`}><Eyebrow>{tr(language, "Contexte", "Context")}</Eyebrow><p className="mt-2">{companyContext}</p></div> : null}
+      {gandoContext ? <div className={`${sector || companyDescription || companyContext ? "mt-5" : ""} rounded-xl bg-[#f7f6ff] p-4`}><Eyebrow>{tr(language, "Pourquoi Gando", "Why Gando")}</Eyebrow><p className="mt-2">{gandoContext}</p></div> : null}
+    </AccordionBubble> : null}
 
-    {content.stakeholders?.length ? <Section title={tr(language, "Personnes clés", "Key people")}><div className="grid gap-3 sm:grid-cols-2">{content.stakeholders.map((person, index) => <div key={index} className="rounded-xl bg-[#f6f7f8] p-4"><div className="font-semibold text-[#202a2f]">{person.name}</div><div className="mt-1 text-[13px] text-[#687277]">{person.role}{person.organization ? ` · ${person.organization}` : ""}</div>{person.notes ? <p className="mt-2 text-[13px] leading-6 text-[#687277]">{person.notes}</p> : null}</div>)}</div></Section> : null}
+    {currentProcess.length ? <AccordionBubble title={tr(language, "Processus actuel", "Current process")}><BulletList items={currentProcess} /></AccordionBubble> : null}
 
-    {content.productsAndOffers?.length ? <Section title={tr(language, "Produits & offres", "Products & offers")}><BulletList items={content.productsAndOffers} /></Section> : null}
+    {stakeholders.length ? <Section title={tr(language, "Personnes clés", "Key people")}><div className="grid gap-3 sm:grid-cols-2">{stakeholders.map((person, index) => <div key={index} className="rounded-xl bg-[#f6f7f8] p-4">{String(person.name || "").trim() ? <div className="font-semibold text-[#202a2f]">{person.name}</div> : null}{(String(person.role || "").trim() || String(person.organization || "").trim()) ? <div className="mt-1 text-[13px] text-[#687277]">{[person.role, person.organization].map(value => String(value || "").trim()).filter(Boolean).join(" · ")}</div> : null}{String(person.notes || "").trim() ? <p className="mt-2 text-[13px] leading-6 text-[#687277]">{person.notes}</p> : null}</div>)}</div></Section> : null}
 
-    <Section title={tr(language, "Enjeux prioritaires", "Top priorities")}>
-      {content.painPoints?.length ? <div className="space-y-5">{content.painPoints.map((pain, index) => <div key={index} className="border-b border-[#eceeef] pb-5 last:border-0 last:pb-0"><div className="font-semibold text-[#202a2f]">{pain.title}</div><div className="mt-2"><BulletList items={pain.details} /></div></div>)}</div> : <p className="italic text-[#81898e]">{tr(language, "Enjeux à préciser.", "Priorities to clarify.")}</p>}
-    </Section>
+    {productsAndOffers.length ? <Section title={tr(language, "Produits & offres", "Products & offers")}><BulletList items={productsAndOffers} /></Section> : null}
 
-    {content.solutionFit?.length ? <Section title={tr(language, "Solution fit", "Solution fit")} kicker={tr(language, "Besoin → réponse proposée", "Need → proposed response")}><div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2"><div className="font-semibold text-[#202a2f]">{item.need}</div><div>{item.response}</div></div>)}</div></Section> : null}
+    {painPoints.length ? <Section title={tr(language, "Enjeux prioritaires", "Top priorities")}>
+      <div className="space-y-5">{painPoints.map((pain, index) => <div key={index} className="border-b border-[#eceeef] pb-5 last:border-0 last:pb-0">{pain.title ? <div className="font-semibold text-[#202a2f]">{pain.title}</div> : null}{pain.details.length ? <div className={pain.title ? "mt-2" : ""}><BulletList items={pain.details} /></div> : null}</div>)}</div>
+    </Section> : null}
+
+    {solutionFit.length ? <Section title={tr(language, "Solution fit", "Solution fit")} kicker={tr(language, "Besoin → réponse proposée", "Need → proposed response")}><div className="divide-y divide-[#eceeef]">{solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2">{item.need ? <div className="font-semibold text-[#202a2f]">{item.need}</div> : <div />}{item.response ? <div>{item.response}</div> : null}</div>)}</div></Section> : null}
 
     {commercialItems.length ? <Section title={tr(language, "Modèle commercial", "Commercial model")} kicker={tr(language, "Sous la solution proposée", "Below the proposed solution")}>
       <div className="grid gap-3">{commercialItems.map((item, index) => <div key={`${index}-${item}`} className="flex gap-4 rounded-[14px] border border-[#e2e4e7] bg-[#fafafa] p-4 sm:p-5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#6e62c3] text-[11px] font-semibold text-white">{index + 1}</div><p className="pt-0.5 whitespace-pre-line text-[15px] leading-6 text-[#394348]">{item}</p></div>)}</div>
@@ -123,6 +138,6 @@ export function PublicSD01EnterpriseDocument({
 
     <RoiTable rows={roiRows} companyName={companyName} language={language} />
 
-    {content.urgency?.length ? <Section title={tr(language, "Pourquoi maintenant ?", "Why now?")}><BulletList items={content.urgency} /></Section> : null}
+    {urgency.length ? <Section title={tr(language, "Pourquoi maintenant ?", "Why now?")}><BulletList items={urgency} /></Section> : null}
   </div>;
 }
