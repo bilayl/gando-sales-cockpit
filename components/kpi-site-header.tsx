@@ -7,6 +7,7 @@ import type { KpiView } from "@/lib/kpi-views"
 
 const VIEW_LABEL: Record<KpiView, string> = {
   lifetime: "Vue d’ensemble",
+  system: "Système KPI",
   overview: "Dernier mois",
   funnel: "Funnel & économie",
   history: "Mensuel & projection",
@@ -14,6 +15,7 @@ const VIEW_LABEL: Record<KpiView, string> = {
 
 const VIEW_COPY: Record<KpiView, string> = {
   lifetime: "Lisez la trajectoire de Gando depuis le début de l’activité.",
+  system: "Pilotez Gando avec des définitions, formules et données fiables de bout en bout.",
   overview: "Comprenez immédiatement la santé du dernier mois renseigné.",
   funnel: "Reliez acquisition, activation, revenu, cash et marge.",
   history: "Saisissez les données sources et projetez les prochains mois.",
