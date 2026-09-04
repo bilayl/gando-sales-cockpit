@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
- type ExperimentRow = {
+type ExperimentRow = {
   id?: string
   name: string
   startDate: string
@@ -80,6 +80,12 @@ function nullableNumber(value: string) {
   if (!value.trim()) return null
   const parsed = Number(value)
   return Number.isFinite(parsed) ? Math.max(0, parsed) : null
+}
+
+function nullableSignedNumber(value: string) {
+  if (!value.trim()) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 function integer(value: number | null | undefined) {
@@ -224,7 +230,7 @@ export function KpiAcquisitionExperiment({ canEdit }: { canEdit: boolean }) {
             Ici, un deal n’est pas un client. L’acquisition est validée à la première caution activée ; le CAC de référence devient le CAC MAU J+30 de la même cohorte.
           </p>
         </div>
-        {canEdit ? <Button size="sm" className="h-9 gap-1.5" onClick={() => { setDraft(blankDraft()); setEditing(current == null) }}>
+        {canEdit ? <Button size="sm" className="h-9 gap-1.5" onClick={() => { setDraft(blankDraft()); setEditing(true) }}>
           <Plus size={14} />Nouveau test 14 jours
         </Button> : null}
       </div>
@@ -304,8 +310,8 @@ export function KpiAcquisitionExperiment({ canEdit }: { canEdit: boolean }) {
           ["rentersRegistered", "Loueurs inscrits"],
           ["firstDepositRenters", "1res cautions activées"],
           ["mau30Renters", "MAU de cohorte à J+30"],
-          ["margin30d", "Marge cohorte à 30 j €"],
         ].map(([key, label]) => <Input key={key} type="number" min="0" step="any" placeholder={label} value={(draft as unknown as Record<string, number | null>)[key] ?? ""} onChange={event => setDraft(currentDraft => ({ ...currentDraft, [key]: nullableNumber(event.target.value) }))} />)}
+        <Input type="number" step="any" placeholder="Marge cohorte à 30 j €" value={draft.margin30d ?? ""} onChange={event => setDraft(currentDraft => ({ ...currentDraft, margin30d: nullableSignedNumber(event.target.value) }))} />
         <Input className="sm:col-span-2 lg:col-span-3" placeholder="Notes / hypothèse testée" value={draft.notes || ""} onChange={event => setDraft(currentDraft => ({ ...currentDraft, notes: event.target.value || null }))} />
       </div>
       <div className="mt-3 flex justify-end gap-2">
