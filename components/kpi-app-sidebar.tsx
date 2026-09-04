@@ -1,6 +1,6 @@
 "use client"
 
-import { ChartNoAxesCombined, Gauge, History, Infinity, Network, WalletCards } from "lucide-react"
+import { ChartNoAxesCombined, Gauge, History, Infinity, Network, PhoneCall, WalletCards } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { cn } from "@/lib/utils"
@@ -9,6 +9,7 @@ import type { KpiView } from "@/lib/kpi-views"
 const sections: Array<{ id: KpiView; label: string; icon: typeof Gauge }> = [
   { id: "lifetime", label: "Vue d’ensemble", icon: Infinity },
   { id: "system", label: "Système KPI", icon: Network },
+  { id: "calls", label: "Appels du jour", icon: PhoneCall },
   { id: "costs", label: "Cost Control", icon: WalletCards },
   { id: "overview", label: "Dernier mois", icon: Gauge },
   { id: "funnel", label: "Funnel & économie", icon: ChartNoAxesCombined },
