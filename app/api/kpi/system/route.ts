@@ -46,27 +46,35 @@ export async function GET() {
     if (!access) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
     const admin = getSupabaseAdmin();
-    const [coreResult, funnelResult, experimentResult] = await Promise.all([
+    const [coreResult, funnelResult, experimentResult, costResult] = await Promise.all([
       admin.from("kpi_monthly_metrics").select("*").order("year", { ascending: true }).order("month_number", { ascending: true }),
       admin.from("kpi_value_funnel_monthly").select("*").order("year", { ascending: true }).order("month_number", { ascending: true }),
       admin.from("kpi_acquisition_experiments").select("*").order("start_date", { ascending: false }),
+      admin.from("kpi_cost_entries").select("year,month_number,family,amount").eq("family", "acquisition"),
     ]);
     if (coreResult.error) throw coreResult.error;
     if (funnelResult.error) throw funnelResult.error;
     if (experimentResult.error) throw experimentResult.error;
+    if (costResult.error) throw costResult.error;
 
     const coreRows = (coreResult.data || []) as Row[];
     const funnelRows = (funnelResult.data || []) as Row[];
     const experiments = (experimentResult.data || []) as Row[];
+    const costRows = (costResult.data || []) as Row[];
 
     const core = latestPopulated(coreRows, ["deposits_activated", "active_renters", "revenue", "tdv"]);
     const previousCore = previousRow(coreRows, core);
     const funnel = latestPopulated(funnelRows, ["prospects_contacted", "renters_registered", "first_deposit_renters", "net_margin"]);
     const matureExperiment = experiments.find(row => row.first_deposit_renters != null && row.mau_30_renters != null) || null;
 
-    const acquisitionCost = funnel
+    const funnelCosts = funnel
+      ? costRows.filter(row => n(row.year) === n(funnel.year) && n(row.month_number) === n(funnel.month_number))
+      : [];
+    const ledgerAcquisitionCost = funnelCosts.length ? funnelCosts.reduce((sum, row) => sum + n(row.amount), 0) : null;
+    const legacyAcquisitionCost = funnel
       ? n(funnel.paid_spend) + n(funnel.sales_cost) + n(funnel.tooling_cost) + n(funnel.agency_cost) + n(funnel.creative_cost) + n(funnel.other_acquisition_cost)
       : null;
+    const acquisitionCost = ledgerAcquisitionCost ?? legacyAcquisitionCost;
 
     const deposits = nullable(core?.deposits_activated);
     const activeRenters = nullable(core?.active_renters);
@@ -124,6 +132,7 @@ export async function GET() {
       },
       acquisition: {
         acquisitionCost,
+        acquisitionCostSource: ledgerAcquisitionCost != null ? "ledger" : "legacy",
         prospectsContacted: nullable(funnel?.prospects_contacted),
         meetings: nullable(funnel?.meetings),
         firstDepositRenters,
