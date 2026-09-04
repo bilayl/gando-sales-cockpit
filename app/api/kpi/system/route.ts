@@ -10,38 +10,34 @@ function n(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
-
 function nullable(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
-
 function ratio(top: unknown, bottom: unknown) {
-  const b = n(bottom);
-  return b > 0 ? n(top) / b : null;
+  const t = nullable(top);
+  const b = nullable(bottom);
+  return t != null && b != null && b > 0 ? t / b : null;
 }
-
 function monthKey(row: Row) {
   return n(row.year) * 12 + n(row.month_number);
 }
-
 function latestPopulated(rows: Row[], fields: string[]) {
   return [...rows]
     .filter(row => fields.some(field => row[field] !== null && row[field] !== undefined))
     .sort((a, b) => monthKey(b) - monthKey(a))[0] || null;
 }
-
 function previousRow(rows: Row[], current: Row | null) {
   if (!current) return null;
-  return [...rows].filter(row => monthKey(row) < monthKey(current)).sort((a, b) => monthKey(b) - monthKey(a))[0] || null;
+  return [...rows]
+    .filter(row => monthKey(row) < monthKey(current) && ["deposits_activated", "active_renters"].some(field => row[field] != null))
+    .sort((a, b) => monthKey(b) - monthKey(a))[0] || null;
 }
-
 function delta(current: unknown, previous: unknown) {
   const prev = nullable(previous);
   const cur = nullable(current);
-  if (prev == null || cur == null || prev === 0) return null;
-  return (cur - prev) / Math.abs(prev);
+  return prev != null && cur != null && prev !== 0 ? (cur - prev) / Math.abs(prev) : null;
 }
 
 export async function GET() {
@@ -55,7 +51,6 @@ export async function GET() {
       admin.from("kpi_value_funnel_monthly").select("*").order("year", { ascending: true }).order("month_number", { ascending: true }),
       admin.from("kpi_acquisition_experiments").select("*").order("start_date", { ascending: false }),
     ]);
-
     if (coreResult.error) throw coreResult.error;
     if (funnelResult.error) throw funnelResult.error;
     if (experimentResult.error) throw experimentResult.error;
@@ -67,12 +62,11 @@ export async function GET() {
     const core = latestPopulated(coreRows, ["deposits_activated", "active_renters", "revenue", "tdv"]);
     const previousCore = previousRow(coreRows, core);
     const funnel = latestPopulated(funnelRows, ["prospects_contacted", "renters_registered", "first_deposit_renters", "net_margin"]);
-
     const matureExperiment = experiments.find(row => row.first_deposit_renters != null && row.mau_30_renters != null) || null;
 
     const acquisitionCost = funnel
       ? n(funnel.paid_spend) + n(funnel.sales_cost) + n(funnel.tooling_cost) + n(funnel.agency_cost) + n(funnel.creative_cost) + n(funnel.other_acquisition_cost)
-      : 0;
+      : null;
 
     const deposits = nullable(core?.deposits_activated);
     const activeRenters = nullable(core?.active_renters);
@@ -87,12 +81,36 @@ export async function GET() {
     const experimentMau30 = nullable(matureExperiment?.mau_30_renters);
     const experimentMargin30d = nullable(matureExperiment?.margin_30d);
 
-    const cacActivation = firstDepositRenters && firstDepositRenters > 0 ? acquisitionCost / firstDepositRenters : null;
-    const cacMau30 = experimentCost != null && experimentMau30 && experimentMau30 > 0 ? experimentCost / experimentMau30 : null;
-    const marginPerMau30 = experimentMargin30d != null && experimentMau30 && experimentMau30 > 0 ? experimentMargin30d / experimentMau30 : null;
+    const depositsPerMau = activeRenters != null && activeRenters > 0 && deposits != null ? deposits / activeRenters : null;
+    const cacActivation = acquisitionCost != null && firstDepositRenters != null && firstDepositRenters > 0 ? acquisitionCost / firstDepositRenters : null;
+    const activationRate = ratio(firstDepositRenters, rentersRegistered);
+    const mau30Rate = ratio(experimentMau30, experimentFirstDeposit);
+    const cacMau30 = experimentCost != null && experimentMau30 != null && experimentMau30 > 0 ? experimentCost / experimentMau30 : null;
+    const marginPerMau30 = experimentMargin30d != null && experimentMau30 != null && experimentMau30 > 0 ? experimentMargin30d / experimentMau30 : null;
     const paybackMonths = cacMau30 != null && marginPerMau30 != null && marginPerMau30 > 0 ? cacMau30 / marginPerMau30 : null;
+    const takeRate = ratio(revenue, tdv);
+    const marginPerMau = activeRenters != null && activeRenters > 0 && netMargin != null ? netMargin / activeRenters : null;
+    const marginPerDeposit = deposits != null && deposits > 0 && netMargin != null ? netMargin / deposits : null;
+    const claimRate = ratio(core?.deposit_cashouts, core?.deposits_activated);
 
-    const riskLossAvailable = false;
+    const automatic: string[] = [];
+    const cohort: string[] = [];
+    const missing: string[] = [];
+    const register = (label: string, value: unknown, bucket = automatic) => (value == null ? missing : bucket).push(label);
+
+    register("Cautions activées", deposits);
+    register("MAU loueurs", activeRenters);
+    register("Cautions / MAU", depositsPerMau);
+    register("TDV sécurisé", tdv);
+    register("CA / take rate", takeRate);
+    register("Marge", netMargin);
+    register("CAC activation", cacActivation);
+    register("Taux d’activation", activationRate);
+    register("Taux de demandes d’encaissement", claimRate);
+    register("CAC MAU J+30", cacMau30, cohort);
+    register("Rétention J+30", mau30Rate, cohort);
+    register("Payback cohorte", paybackMonths, cohort);
+    missing.push("Loss rate définitif", "Rétention J+60 / J+90", "Attribution automatique source → activation");
 
     return NextResponse.json({
       period: core ? { year: n(core.year), monthNumber: n(core.month_number) } : null,
@@ -101,7 +119,7 @@ export async function GET() {
         depositsDelta: delta(core?.deposits_activated, previousCore?.deposits_activated),
         activeRenters,
         activeRentersDelta: delta(core?.active_renters, previousCore?.active_renters),
-        depositsPerMau: activeRenters && activeRenters > 0 && deposits != null ? deposits / activeRenters : null,
+        depositsPerMau,
         tdv,
       },
       acquisition: {
@@ -116,52 +134,33 @@ export async function GET() {
       activation: {
         rentersRegistered,
         firstDepositRenters,
-        activationRate: ratio(firstDepositRenters, rentersRegistered),
+        activationRate,
         avgClosingDays: nullable(funnel?.avg_closing_days),
       },
       retention: {
         firstDepositRenters: experimentFirstDeposit,
         mau30Renters: experimentMau30,
-        mau30Rate: ratio(experimentMau30, experimentFirstDeposit),
+        mau30Rate,
         cohortName: matureExperiment ? String(matureExperiment.name || "") : null,
       },
       economics: {
         revenue,
         netMargin,
         marginRate: ratio(netMargin, revenue),
-        marginPerMau: activeRenters && activeRenters > 0 && netMargin != null ? netMargin / activeRenters : null,
-        marginPerDeposit: deposits && deposits > 0 && netMargin != null ? netMargin / deposits : null,
-        takeRate: ratio(revenue, tdv),
+        marginPerMau,
+        marginPerDeposit,
+        takeRate,
         cacPaybackMonths: paybackMonths,
       },
       risk: {
         claimsCount: nullable(core?.deposit_cashouts),
-        claimRate: ratio(core?.deposit_cashouts, core?.deposits_activated),
+        claimRate,
         cashoutAmount: nullable(core?.cashout_amount),
         advancedGuarantee: nullable(core?.advanced_guarantee_amount),
         lossRate: null,
-        lossRateAvailable: riskLossAvailable,
+        lossRateAvailable: false,
       },
-      quality: {
-        automatic: [
-          "Cautions activées",
-          "MAU loueurs",
-          "Cautions / MAU",
-          "TDV sécurisé",
-          "CA / take rate",
-          "Marge",
-          "CAC activation",
-          "Taux d’activation",
-          "Taux de demandes d’encaissement",
-        ],
-        cohort: matureExperiment ? ["CAC MAU J+30", "Rétention J+30", "Payback cohorte"] : [],
-        missing: [
-          ...(matureExperiment ? [] : ["CAC MAU J+30", "Rétention J+30", "Payback cohorte"]),
-          "Loss rate définitif",
-          "Rétention J+60 / J+90",
-          "Attribution automatique source → activation",
-        ],
-      },
+      quality: { automatic, cohort, missing },
     });
   } catch (error) {
     console.error("KPI system failed", error);
