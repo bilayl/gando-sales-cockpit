@@ -30,8 +30,9 @@ function toClient(row: Record<string, unknown>) {
 
 async function listRows() {
   const { data, error } = await getSupabaseAdmin()
-    .from("kpi_acquisition_cost_entries")
+    .from("kpi_cost_entries")
     .select("*")
+    .eq("family", "acquisition")
     .order("year", { ascending: false })
     .order("month_number", { ascending: false })
     .order("incurred_on", { ascending: false, nullsFirst: false })
@@ -76,6 +77,7 @@ export async function PUT(request: NextRequest) {
       year,
       month_number: monthNumber,
       incurred_on: nullableString(body?.incurredOn),
+      family: "acquisition",
       category,
       label,
       amount,
@@ -88,8 +90,8 @@ export async function PUT(request: NextRequest) {
 
     const admin = getSupabaseAdmin();
     const query = id
-      ? admin.from("kpi_acquisition_cost_entries").update(payload).eq("id", id)
-      : admin.from("kpi_acquisition_cost_entries").insert(payload);
+      ? admin.from("kpi_cost_entries").update(payload).eq("id", id).eq("family", "acquisition")
+      : admin.from("kpi_cost_entries").insert(payload);
     const { error } = await query;
     if (error) throw error;
     return NextResponse.json({ rows: await listRows() });
@@ -107,7 +109,7 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const id = nullableString(body?.id);
     if (!id) return NextResponse.json({ error: "Identifiant manquant." }, { status: 400 });
-    const { error } = await getSupabaseAdmin().from("kpi_acquisition_cost_entries").delete().eq("id", id);
+    const { error } = await getSupabaseAdmin().from("kpi_cost_entries").delete().eq("id", id).eq("family", "acquisition");
     if (error) throw error;
     return NextResponse.json({ rows: await listRows() });
   } catch (error) {
