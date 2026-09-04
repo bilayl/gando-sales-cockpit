@@ -1,1 +1,1 @@
-export type KpiView = "lifetime" | "system" | "overview" | "funnel" | "history"
+export type KpiView = "lifetime" | "system" | "costs" | "overview" | "funnel" | "history"
