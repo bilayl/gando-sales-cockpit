@@ -5,9 +5,14 @@ import { KpiAcquisitionExperiment } from "@/components/kpi-acquisition-experimen
 import { KpiDashboardOverview } from "@/components/kpi-dashboard-overview"
 import { KpiExecutiveOverview } from "@/components/kpi-executive-overview"
 import { KpiMonthlyShadcn } from "@/components/kpi-monthly-shadcn"
+import { KpiSystemDashboard } from "@/components/kpi-system-dashboard"
 import type { KpiView } from "@/lib/kpi-views"
 
 export function KpiWorkspace({ view, canEdit }: { view: KpiView; canEdit: boolean }) {
+  if (view === "system") {
+    return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiSystemDashboard /></div>
+  }
+
   if (view === "overview") {
     return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiExecutiveOverview /></div>
   }
