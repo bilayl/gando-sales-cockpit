@@ -12,7 +12,7 @@ create table if not exists public.kpi_acquisition_experiments (
   renters_registered integer check (renters_registered >= 0),
   first_deposit_renters integer check (first_deposit_renters >= 0),
   mau_30_renters integer check (mau_30_renters >= 0),
-  margin_30d double precision check (margin_30d >= 0),
+  margin_30d double precision,
   notes text,
   updated_by text,
   created_at timestamptz not null default now(),
