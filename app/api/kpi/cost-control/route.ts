@@ -22,6 +22,14 @@ function validPeriod(yearValue: unknown, monthValue: unknown) {
   return { year, monthNumber };
 }
 
+function validDate(value: unknown) {
+  const date = text(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return null;
+  return date;
+}
+
 function entryToClient(row: Record<string, unknown>) {
   return {
     id: String(row.id || ""),
@@ -100,15 +108,16 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     const kind = text(body?.kind);
-    const period = validPeriod(body?.year, body?.monthNumber);
     const family = text(body?.family);
-    if (!period || !FAMILIES.has(family)) return NextResponse.json({ error: "Période ou famille invalide." }, { status: 400 });
+    if (!FAMILIES.has(family)) return NextResponse.json({ error: "Famille de coût invalide." }, { status: 400 });
 
     const admin = getSupabaseAdmin();
     const updatedBy = access.email || access.displayName || null;
 
     if (kind === "budget") {
+      const period = validPeriod(body?.year, body?.monthNumber);
       const budgetAmount = Number(body?.budgetAmount);
+      if (!period) return NextResponse.json({ error: "Période invalide." }, { status: 400 });
       if (!Number.isFinite(budgetAmount) || budgetAmount < 0) return NextResponse.json({ error: "Budget invalide." }, { status: 400 });
       const { error } = await admin.from("kpi_cost_monthly_budgets").upsert({
         year: period.year,
@@ -128,13 +137,19 @@ export async function PUT(request: NextRequest) {
       const category = text(body?.category);
       const label = text(body?.label);
       const amount = Number(body?.amount);
+      const incurredOn = validDate(body?.incurredOn);
+      if (!incurredOn) return NextResponse.json({ error: "La date réelle de la dépense est obligatoire." }, { status: 400 });
       if (!category || !label || !Number.isFinite(amount) || amount < 0) {
         return NextResponse.json({ error: "Catégorie, libellé ou montant invalide." }, { status: 400 });
       }
+      const [year, monthNumber] = incurredOn.split("-").map(Number);
+      const period = validPeriod(year, monthNumber);
+      if (!period) return NextResponse.json({ error: "Date de dépense invalide." }, { status: 400 });
+
       const data = {
         year: period.year,
         month_number: period.monthNumber,
-        incurred_on: nullableText(body?.incurredOn),
+        incurred_on: incurredOn,
         family,
         category,
         label,
