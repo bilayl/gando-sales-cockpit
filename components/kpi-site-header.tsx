@@ -7,6 +7,7 @@ import type { KpiView } from "@/lib/kpi-views"
 
 const VIEW_LABEL: Record<KpiView, string> = {
   lifetime: "Vue d’ensemble",
+  remuneration: "Rémunération partenaires",
   system: "Système KPI",
   costs: "Cost Control",
   overview: "Dernier mois",
@@ -15,7 +16,8 @@ const VIEW_LABEL: Record<KpiView, string> = {
 }
 
 const VIEW_COPY: Record<KpiView, string> = {
-  lifetime: "Lisez la trajectoire de Gando depuis le début de l’activité.",
+  lifetime: "Commencez par les 4 résultats CEO : cautions, MAU, marge contributive et loss rate.",
+  remuneration: "Suivez ce que Gando doit aux loueurs et partenaires, mois par mois, à partir du volume réellement éligible.",
   system: "Pilotez Gando avec des définitions, formules et données fiables de bout en bout.",
   costs: "Maîtrisez budget, dépenses réelles, coûts unitaires et dérives avant la fin du mois.",
   overview: "Comprenez immédiatement la santé du dernier mois renseigné.",
