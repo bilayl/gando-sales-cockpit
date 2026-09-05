@@ -1,6 +1,6 @@
 "use client"
 
-import { BadgeEuro, Database, HandCoins, History, LayoutDashboard, Target, TrendingUp, WalletCards } from "lucide-react"
+import { BadgeEuro, Database, HandCoins, History, LayoutDashboard, Target, TrendingUp, WalletCards, ChartSpline } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { cn } from "@/lib/utils"
@@ -15,22 +15,28 @@ const groups: Group[] = [
     label: "Pilotage CEO",
     items: [
       { id: "ceo", label: "CEO Cockpit", icon: LayoutDashboard },
+      { id: "forecast", label: "Prévisions & scénarios", icon: ChartSpline },
       { id: "growth", label: "Croissance & usage", icon: TrendingUp },
       { id: "economics", label: "Économie & risque", icon: BadgeEuro },
     ],
   },
   {
-    label: "Exécution",
+    label: "Go-to-market",
     items: [
-      { id: "acquisition", label: "Acquisition", icon: Target },
+      { id: "acquisition", label: "Acquisition & CAC", icon: Target },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
       { id: "cash", label: "Cash & coûts", icon: WalletCards },
-      { id: "remuneration", label: "Partenaires", icon: HandCoins },
+      { id: "remuneration", label: "Rémunération partenaires", icon: HandCoins },
     ],
   },
   {
     label: "Contrôle",
     items: [
-      { id: "history", label: "Historique", icon: History },
+      { id: "history", label: "Historique réel", icon: History },
       { id: "data", label: "Qualité des données", icon: Database },
     ],
   },
