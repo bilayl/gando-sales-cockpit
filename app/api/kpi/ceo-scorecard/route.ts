@@ -124,29 +124,42 @@ export async function GET() {
       return paidAt != null && paidAt >= previousStart && paidAt <= previousComparableEnd;
     });
     const currentMau = new Set(currentWon.map(deposit => deposit.accountId).filter(Boolean));
+    const lifetimeActiveRenters = new Set(wonDeposits.map(deposit => deposit.accountId).filter(Boolean));
     const currentGuaranteeCents = currentWon.reduce((sum, deposit) => sum + deposit.amountCents, 0);
+    const lifetimeGuaranteeCents = wonDeposits.reduce((sum, deposit) => sum + deposit.amountCents, 0);
     const currentGrossRevenueCents = currentWon.reduce((sum, deposit) => sum + (feeByDeposit.get(deposit.id)?.amountCents || 0), 0);
+    const lifetimeGrossRevenueCents = wonDeposits.reduce((sum, deposit) => sum + (feeByDeposit.get(deposit.id)?.amountCents || 0), 0);
 
-    let currentPartnerCostCents = 0;
-    for (const rule of (rulesResult.data || []) as Row[]) {
-      if (!bool(rule.enabled) || !str(rule.account_id)) continue;
-      const mode = str(rule.calculation_mode) || "fixed_tier";
-      const accountId = str(rule.account_id);
-      const rateBps = num(rule.rate_bps);
-      const tiers = Array.isArray(rule.tiers) ? rule.tiers as Tier[] : [];
-      for (const deposit of deposits) {
-        const fee = feeByDeposit.get(deposit.id);
-        if (!fee || fee.createdAt == null || fee.createdAt < currentStart || fee.createdAt > now || deposit.accountId !== accountId || deposit.archived) continue;
-        if (mode === "active_volume_rate") {
-          const effectiveFrom = ts(rule.effective_from);
-          if (deposit.status === "active" && rateBps > 0 && (effectiveFrom == null || fee.createdAt >= effectiveFrom)) {
-            currentPartnerCostCents += Math.round(deposit.amountCents * rateBps / 10000);
+    const rules = (rulesResult.data || []) as Row[];
+    function partnerCost(from: number | null, to: number | null) {
+      let total = 0;
+      for (const rule of rules) {
+        if (!bool(rule.enabled) || !str(rule.account_id)) continue;
+        const mode = str(rule.calculation_mode) || "fixed_tier";
+        const accountId = str(rule.account_id);
+        const rateBps = num(rule.rate_bps);
+        const tiers = Array.isArray(rule.tiers) ? rule.tiers as Tier[] : [];
+        const effectiveFrom = ts(rule.effective_from);
+        const effectiveTo = ts(rule.effective_to);
+        for (const deposit of deposits) {
+          const fee = feeByDeposit.get(deposit.id);
+          if (!fee || fee.createdAt == null || deposit.accountId !== accountId || deposit.archived) continue;
+          if (from != null && fee.createdAt < from) continue;
+          if (to != null && fee.createdAt > to) continue;
+          if (effectiveFrom != null && fee.createdAt < effectiveFrom) continue;
+          if (effectiveTo != null && fee.createdAt > effectiveTo) continue;
+          if (mode === "active_volume_rate") {
+            if (deposit.status === "active" && rateBps > 0) total += Math.round(deposit.amountCents * rateBps / 10000);
+          } else if (SUCCESSFUL.has(deposit.status)) {
+            total += reward(deposit.amountCents, tiers);
           }
-        } else if (SUCCESSFUL.has(deposit.status)) {
-          currentPartnerCostCents += reward(deposit.amountCents, tiers);
         }
       }
+      return total;
     }
+
+    const currentPartnerCostCents = partnerCost(currentStart, now);
+    const lifetimePartnerCostCents = partnerCost(null, now);
 
     const insuranceRateBps = settingsResult.data?.insurance_rate_bps == null
       ? DEFAULT_INSURANCE_RATE_BPS
@@ -156,14 +169,26 @@ export async function GET() {
       const feeAt = feeByDeposit.get(deposit.id)?.createdAt;
       return feeAt != null && feeAt >= insuranceEffectiveFrom ? sum + deposit.amountCents : sum;
     }, 0);
+    const lifetimeInsuredGuaranteeCents = wonDeposits.reduce((sum, deposit) => {
+      const feeAt = feeByDeposit.get(deposit.id)?.createdAt;
+      return feeAt != null && feeAt >= insuranceEffectiveFrom ? sum + deposit.amountCents : sum;
+    }, 0);
     const currentInsuranceCents = Math.round(currentInsuredGuaranteeCents * insuranceRateBps / 10000);
+    const lifetimeInsuranceCents = Math.round(lifetimeInsuredGuaranteeCents * insuranceRateBps / 10000);
     const measuredContributionCents = currentGrossRevenueCents - currentPartnerCostCents - currentInsuranceCents;
+    const lifetimeMeasuredContributionCents = lifetimeGrossRevenueCents - lifetimePartnerCostCents - lifetimeInsuranceCents;
     const contributionPerCautionCents = perCaution(measuredContributionCents, currentWon.length);
+    const lifetimeContributionPerCautionCents = perCaution(lifetimeMeasuredContributionCents, wonDeposits.length);
 
-    const cumulativeGuaranteeCents = wonDeposits.reduce((sum, deposit) => sum + deposit.amountCents, 0);
     const guaranteeActivatedCaptures = captureRows.filter(row => str(row.payload.status) === "guarantee_activated");
     const guaranteeActivatedLossCents = guaranteeActivatedCaptures.reduce((sum, row) => sum + num(row.payload.amount_cents), 0);
-    const lossRateProxy = cumulativeGuaranteeCents > 0 ? guaranteeActivatedLossCents / cumulativeGuaranteeCents : null;
+    const currentGuaranteeActivatedCaptures = guaranteeActivatedCaptures.filter(row => {
+      const createdAt = ts(row.payload.created_at);
+      return createdAt != null && createdAt >= currentStart && createdAt <= now;
+    });
+    const currentGuaranteeActivatedLossCents = currentGuaranteeActivatedCaptures.reduce((sum, row) => sum + num(row.payload.amount_cents), 0);
+    const lossRateProxy = lifetimeGuaranteeCents > 0 ? guaranteeActivatedLossCents / lifetimeGuaranteeCents : null;
+    const currentLossRateProxy = currentGuaranteeCents > 0 ? currentGuaranteeActivatedLossCents / currentGuaranteeCents : null;
 
     return NextResponse.json({
       period: {
@@ -175,22 +200,32 @@ export async function GET() {
       cautions: {
         current: currentWon.length,
         previous: previousWon.length,
+        total: wonDeposits.length,
         mom: previousWon.length > 0 ? (currentWon.length - previousWon.length) / previousWon.length : null,
         tdvCents: currentGuaranteeCents,
+        totalTdvCents: lifetimeGuaranteeCents,
       },
       mau: {
         current: currentMau.size,
         cautionsPerMau: currentMau.size > 0 ? currentWon.length / currentMau.size : null,
+        activatedEver: lifetimeActiveRenters.size,
+        cautionsPerActivatedEver: lifetimeActiveRenters.size > 0 ? wonDeposits.length / lifetimeActiveRenters.size : null,
       },
       guarantee: {
         providedCents: currentGuaranteeCents,
+        totalProvidedCents: lifetimeGuaranteeCents,
         averagePerCautionCents: perCaution(currentGuaranteeCents, currentWon.length),
+        totalAveragePerCautionCents: perCaution(lifetimeGuaranteeCents, wonDeposits.length),
         insuranceRateBps,
         insuranceEffectiveFrom: new Date(insuranceEffectiveFrom).toISOString().slice(0, 10),
         insuredGuaranteeCents: currentInsuredGuaranteeCents,
+        totalInsuredGuaranteeCents: lifetimeInsuredGuaranteeCents,
         insuranceCostCents: currentInsuranceCents,
+        totalInsuranceCostCents: lifetimeInsuranceCents,
         grossRevenueYield: currentGuaranteeCents > 0 ? currentGrossRevenueCents / currentGuaranteeCents : null,
+        totalGrossRevenueYield: lifetimeGuaranteeCents > 0 ? lifetimeGrossRevenueCents / lifetimeGuaranteeCents : null,
         measuredContributionYield: currentGuaranteeCents > 0 ? measuredContributionCents / currentGuaranteeCents : null,
+        totalMeasuredContributionYield: lifetimeGuaranteeCents > 0 ? lifetimeMeasuredContributionCents / lifetimeGuaranteeCents : null,
       },
       contribution: {
         perCautionCents: contributionPerCautionCents,
@@ -201,13 +236,23 @@ export async function GET() {
         partnerCostPerCautionCents: perCaution(currentPartnerCostCents, currentWon.length),
         insuranceCostCents: currentInsuranceCents,
         insuranceCostPerCautionCents: perCaution(currentInsuranceCents, currentWon.length),
+        totalPerCautionCents: lifetimeContributionPerCautionCents,
+        totalMeasuredContributionCents: lifetimeMeasuredContributionCents,
+        totalGrossRevenueCents: lifetimeGrossRevenueCents,
+        totalGrossRevenuePerCautionCents: perCaution(lifetimeGrossRevenueCents, wonDeposits.length),
+        totalPartnerCostCents: lifetimePartnerCostCents,
+        totalPartnerCostPerCautionCents: perCaution(lifetimePartnerCostCents, wonDeposits.length),
+        totalInsuranceCostCents: lifetimeInsuranceCents,
+        totalInsuranceCostPerCautionCents: perCaution(lifetimeInsuranceCents, wonDeposits.length),
         complete: false,
         missing: ["PSP", "pertes finales / recouvrements"],
       },
       loss: {
+        currentRate: currentLossRateProxy,
+        currentAmountCents: currentGuaranteeActivatedLossCents,
         rate: lossRateProxy,
         amountCents: guaranteeActivatedLossCents,
-        basis: "garanties activées / garantie fournie cumulée",
+        basis: "garanties activées / garantie fournie",
         isProxy: true,
       },
       source: { lastSyncedAt: syncResult.data?.[0]?.last_completed_at || null },
