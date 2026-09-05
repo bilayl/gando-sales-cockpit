@@ -17,8 +17,15 @@ function str(value: unknown) { return typeof value === "string" ? value : value 
 function num(value: unknown) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function bool(value: unknown) { return value === true || value === "true"; }
 function ts(value: unknown) { if (typeof value !== "string" || !value) return null; const parsed = Date.parse(value); return Number.isFinite(parsed) ? parsed : null; }
-function monthKey(value: number | null) { return value == null ? null : new Date(value).toISOString().slice(0, 7); }
-function previousMonthKey(key: string) { const [year, month] = key.split("-").map(Number); return new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 7); }
+function monthKey(value: number) { return new Date(value).toISOString().slice(0, 7); }
+function startOfUtcMonth(value: number) {
+  const date = new Date(value);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+}
+function previousUtcMonthStart(currentStart: number) {
+  const date = new Date(currentStart);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - 1, 1);
+}
 function reward(amountCents: number, tiers: Tier[]) {
   const tier = tiers.find(candidate => amountCents >= num(candidate.min_cents) && amountCents <= (candidate.max_cents == null ? Number.POSITIVE_INFINITY : num(candidate.max_cents)));
   return tier ? num(tier.reward_cents) : 0;
@@ -95,10 +102,22 @@ export async function GET() {
     const feeByDeposit = matchFees(deposits, fees);
     const wonDeposits = deposits.filter(deposit => SUCCESSFUL.has(deposit.status) && !deposit.archived && feeByDeposit.has(deposit.id));
 
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    const previousMonth = previousMonthKey(currentMonth);
-    const currentWon = wonDeposits.filter(deposit => monthKey(feeByDeposit.get(deposit.id)?.createdAt ?? null) === currentMonth);
-    const previousWon = wonDeposits.filter(deposit => monthKey(feeByDeposit.get(deposit.id)?.createdAt ?? null) === previousMonth);
+    const now = Date.now();
+    const currentStart = startOfUtcMonth(now);
+    const previousStart = previousUtcMonthStart(currentStart);
+    const elapsedThisMonth = now - currentStart;
+    const previousComparableEnd = Math.min(previousStart + elapsedThisMonth, currentStart);
+    const currentMonth = monthKey(currentStart);
+    const previousMonth = monthKey(previousStart);
+
+    const currentWon = wonDeposits.filter(deposit => {
+      const paidAt = feeByDeposit.get(deposit.id)?.createdAt;
+      return paidAt != null && paidAt >= currentStart && paidAt <= now;
+    });
+    const previousWon = wonDeposits.filter(deposit => {
+      const paidAt = feeByDeposit.get(deposit.id)?.createdAt;
+      return paidAt != null && paidAt >= previousStart && paidAt <= previousComparableEnd;
+    });
     const currentMau = new Set(currentWon.map(deposit => deposit.accountId).filter(Boolean));
     const currentTdvCents = currentWon.reduce((sum, deposit) => sum + deposit.amountCents, 0);
     const currentGrossRevenueCents = currentWon.reduce((sum, deposit) => sum + (feeByDeposit.get(deposit.id)?.amountCents || 0), 0);
@@ -112,10 +131,10 @@ export async function GET() {
       const tiers = Array.isArray(rule.tiers) ? rule.tiers as Tier[] : [];
       for (const deposit of deposits) {
         const fee = feeByDeposit.get(deposit.id);
-        if (!fee || monthKey(fee.createdAt) !== currentMonth || deposit.accountId !== accountId || deposit.archived) continue;
+        if (!fee || fee.createdAt == null || fee.createdAt < currentStart || fee.createdAt > now || deposit.accountId !== accountId || deposit.archived) continue;
         if (mode === "active_volume_rate") {
           const effectiveFrom = ts(rule.effective_from);
-          if (deposit.status === "active" && rateBps > 0 && (effectiveFrom == null || (fee.createdAt || 0) >= effectiveFrom)) {
+          if (deposit.status === "active" && rateBps > 0 && (effectiveFrom == null || fee.createdAt >= effectiveFrom)) {
             currentPartnerCostCents += Math.round(deposit.amountCents * rateBps / 10000);
           }
         } else if (SUCCESSFUL.has(deposit.status)) {
@@ -135,7 +154,12 @@ export async function GET() {
     const lossRateProxy = cumulativeTdvCents > 0 ? guaranteeActivatedLossCents / cumulativeTdvCents : null;
 
     return NextResponse.json({
-      period: { currentMonth, previousMonth },
+      period: {
+        currentMonth,
+        previousMonth,
+        comparisonMode: "same_elapsed_period_previous_month",
+        comparisonThroughDay: new Date(now).getUTCDate(),
+      },
       cautions: {
         current: currentWon.length,
         previous: previousWon.length,
