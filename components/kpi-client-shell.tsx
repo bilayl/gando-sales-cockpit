@@ -13,10 +13,10 @@ export function KpiClientShell({
   email?: string
   role: "admin" | "member" | "commercial"
 }) {
-  const [view, setView] = useState<KpiView>("lifetime")
+  const [view, setView] = useState<KpiView>("ceo")
 
   return (
-    <main className="app-bg min-h-screen pl-[72px] lg:pl-[216px]">
+    <main className="app-bg min-h-screen pl-[72px] lg:pl-[224px]">
       <div className="animate-fade-in fixed inset-y-0 left-0 z-30">
         <KpiAppSidebar email={email} role={role} view={view} onViewChange={setView} />
       </div>
