@@ -14,12 +14,23 @@ type Scorecard = {
   }
   cautions: { current: number; previous: number; mom: number | null; tdvCents: number }
   mau: { current: number; cautionsPerMau: number | null }
+  guarantee: {
+    providedCents: number
+    averagePerCautionCents: number | null
+    insuranceRateBps: number
+    insuranceCostCents: number
+    grossRevenueYield: number | null
+    measuredContributionYield: number | null
+  }
   contribution: {
     perCautionCents: number | null
     measuredContributionCents: number | null
     grossRevenueCents: number
+    grossRevenuePerCautionCents: number | null
     partnerCostCents: number
-    insuranceCostCents: number | null
+    partnerCostPerCautionCents: number | null
+    insuranceCostCents: number
+    insuranceCostPerCautionCents: number | null
     complete: boolean
     missing: string[]
   }
@@ -42,6 +53,10 @@ function decimal(value: number | null | undefined, digits = 1) {
 function percent(value: number | null | undefined, digits = 1) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { style: "percent", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value)
+}
+function percentBps(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value / 100)} %`
 }
 function monthLabel(value: string) {
   const [year, month] = value.split("-").map(Number)
@@ -81,7 +96,7 @@ export function KpiCeoScorecard() {
       label: "CAUTIONS",
       value: integer(data.cautions.current),
       detail: data.cautions.mom == null ? "Comparaison non calculable" : `${data.cautions.mom >= 0 ? "+" : ""}${percent(data.cautions.mom)} ${comparisonLabel}`,
-      sub: `${euroCents(data.cautions.tdvCents, 0)} de volume ce mois`,
+      sub: `Garantie fournie : ${euroCents(data.guarantee.providedCents, 0)} · ${euroCents(data.guarantee.averagePerCautionCents, 0)} / caution`,
     },
     {
       label: "MAU",
@@ -92,8 +107,8 @@ export function KpiCeoScorecard() {
     {
       label: "MARGE CONTRIBUTIVE",
       value: data.contribution.perCautionCents == null ? "À fiabiliser" : `${euroCents(data.contribution.perCautionCents)} / caution`,
-      detail: data.contribution.complete ? "Coûts variables complets" : "Contribution mesurée, encore partielle",
-      sub: data.contribution.complete ? "" : `Manque : ${data.contribution.missing.join(" + ")}`,
+      detail: data.contribution.complete ? "Coûts variables complets" : "Mesurée avant PSP + pertes finales",
+      sub: `Brut ${euroCents(data.contribution.grossRevenuePerCautionCents)} − assurance ${euroCents(data.contribution.insuranceCostPerCautionCents)} − partenaires ${euroCents(data.contribution.partnerCostPerCautionCents)}`,
     },
     {
       label: "LOSS RATE",
@@ -110,7 +125,10 @@ export function KpiCeoScorecard() {
           <div className="text-[10px] font-bold uppercase tracking-[0.13em] text-primary">CEO SCORECARD</div>
           <div className="mt-0.5 text-sm font-semibold capitalize">{monthLabel(data.period.currentMonth)}</div>
         </div>
-        <Badge variant="outline" className="h-6 text-[10px]">Résultats, pas activité commerciale</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="h-6 text-[10px]">Assurance : {percentBps(data.guarantee.insuranceRateBps)} de la garantie</Badge>
+          <Badge variant="outline" className="h-6 text-[10px]">Résultats, pas activité commerciale</Badge>
+        </div>
       </div>
       <div className="grid md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card, index) => (
@@ -122,9 +140,27 @@ export function KpiCeoScorecard() {
           </div>
         ))}
       </div>
+      <div className="grid border-t border-border bg-muted/10 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="px-4 py-2.5">
+          <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Gross Revenue</div>
+          <div className="mt-1 text-xs font-semibold tabular-nums">{euroCents(data.contribution.grossRevenueCents)}</div>
+        </div>
+        <div className="border-t border-border px-4 py-2.5 sm:border-l sm:border-t-0">
+          <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Coût assurance</div>
+          <div className="mt-1 text-xs font-semibold tabular-nums">{euroCents(data.guarantee.insuranceCostCents)}</div>
+        </div>
+        <div className="border-t border-border px-4 py-2.5 lg:border-l lg:border-t-0">
+          <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Commissions partenaires</div>
+          <div className="mt-1 text-xs font-semibold tabular-nums">{euroCents(data.contribution.partnerCostCents)}</div>
+        </div>
+        <div className="border-t border-border px-4 py-2.5 sm:border-l lg:border-t-0">
+          <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Marge mesurée</div>
+          <div className="mt-1 text-xs font-semibold tabular-nums">{euroCents(data.contribution.measuredContributionCents)} · {percent(data.guarantee.measuredContributionYield, 2)} de la garantie</div>
+        </div>
+      </div>
       {!data.contribution.complete || data.loss.isProxy ? (
-        <div className="border-t border-border bg-muted/10 px-4 py-2 text-[10px] text-muted-foreground">
-          Fiabilité CFO : la marge contributive deviendra complète dès que les coûts PSP et les pertes finales/recouvrements seront reliés. Le Loss Rate affiché utilise pour l’instant les garanties activées comme proxy de perte.
+        <div className="border-t border-border px-4 py-2 text-[10px] text-muted-foreground">
+          Fiabilité CFO : l’assurance est maintenant calculée à {percentBps(data.guarantee.insuranceRateBps)} du volume garanti. La marge sera complète quand les coûts PSP et les pertes finales nettes de recouvrement seront reliés. Le Loss Rate reste un proxy basé sur les garanties Gando activées.
         </div>
       ) : null}
     </Card>
