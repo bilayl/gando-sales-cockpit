@@ -6,6 +6,7 @@ import { KpiCeoFocus } from "@/components/kpi-ceo-focus"
 import { KpiCeoScorecard } from "@/components/kpi-ceo-scorecard"
 import { KpiCostControl } from "@/components/kpi-cost-control"
 import { KpiDataSourceHealth } from "@/components/kpi-data-source-health"
+import { KpiDecisionIntelligence } from "@/components/kpi-decision-intelligence"
 import { KpiEconomicsRisk } from "@/components/kpi-economics-risk"
 import { KpiGrowthUsage } from "@/components/kpi-growth-usage"
 import { KpiMonthlyShadcn } from "@/components/kpi-monthly-shadcn"
@@ -15,11 +16,25 @@ import type { KpiView } from "@/lib/kpi-views"
 
 export function KpiWorkspace({ view, canEdit }: { view: KpiView; canEdit: boolean }) {
   if (view === "growth") {
-    return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiGrowthUsage /></div>
+    return (
+      <div className="min-w-0 p-4 lg:px-6 lg:py-5">
+        <div className="space-y-5">
+          <KpiGrowthUsage />
+          <KpiDecisionIntelligence variant="growth" />
+        </div>
+      </div>
+    )
   }
 
   if (view === "economics") {
-    return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiEconomicsRisk /></div>
+    return (
+      <div className="min-w-0 p-4 lg:px-6 lg:py-5">
+        <div className="space-y-5">
+          <KpiDecisionIntelligence variant="economics" />
+          <KpiEconomicsRisk />
+        </div>
+      </div>
+    )
   }
 
   if (view === "acquisition") {
@@ -60,6 +75,7 @@ export function KpiWorkspace({ view, canEdit }: { view: KpiView; canEdit: boolea
     <div className="min-w-0 p-4 lg:px-6 lg:py-5">
       <div className="space-y-5">
         <KpiCeoScorecard />
+        <KpiDecisionIntelligence />
         <KpiCeoFocus />
       </div>
     </div>
