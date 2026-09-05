@@ -22,6 +22,7 @@ type Tier = { min_cents?: number; max_cents?: number; reward_cents?: number };
 const SUCCESSFUL_DEPOSIT_STATUSES = new Set(["active", "close", "captured"]);
 const FEE_MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const DEFAULT_INSURANCE_RATE_BPS = 114;
+const DEFAULT_INSURANCE_EFFECTIVE_FROM = Date.parse("2026-09-01T00:00:00.000Z");
 
 function str(value: unknown) {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -180,7 +181,13 @@ export async function GET() {
     const insuranceRateBps = settingsResult.data?.insurance_rate_bps == null
       ? DEFAULT_INSURANCE_RATE_BPS
       : num(settingsResult.data.insurance_rate_bps);
-    const insuranceTotalCents = Math.round(guaranteeProvidedCents * insuranceRateBps / 10000);
+    const insuranceEffectiveFrom = timestamp(settingsResult.data?.insurance_effective_from) ?? DEFAULT_INSURANCE_EFFECTIVE_FROM;
+    const insuredDeposits = wonDeposits.filter(deposit => {
+      const feeAt = feeByDeposit.get(deposit.id)?.createdAt;
+      return feeAt != null && feeAt >= insuranceEffectiveFrom;
+    });
+    const insuredGuaranteeCents = insuredDeposits.reduce((sum, deposit) => sum + deposit.amountCents, 0);
+    const insuranceTotalCents = Math.round(insuredGuaranteeCents * insuranceRateBps / 10000);
     const measuredContributionCents = grossRevenueCents - partnerCostCents - insuranceTotalCents;
 
     const matchedDepositCount = feeByDeposit.size;
@@ -223,8 +230,11 @@ export async function GET() {
       },
       economics: {
         insuranceRateBps,
+        insuranceEffectiveFrom: new Date(insuranceEffectiveFrom).toISOString().slice(0, 10),
+        insuredDeposits: insuredDeposits.length,
+        insuredGuaranteeCents,
         insuranceTotalCents,
-        insurancePerCautionCents: wonDeposits.length ? Math.round(insuranceTotalCents / wonDeposits.length) : 0,
+        insurancePerInsuredCautionCents: insuredDeposits.length ? Math.round(insuranceTotalCents / insuredDeposits.length) : 0,
         partnerCostCents,
         partnerCostPerCautionCents: wonDeposits.length ? Math.round(partnerCostCents / wonDeposits.length) : 0,
         measuredContributionCents,
