@@ -13,6 +13,7 @@ type Tier = { min_cents?: number; max_cents?: number; reward_cents?: number };
 const SUCCESSFUL = new Set(["active", "close", "captured"]);
 const MATCH_WINDOW_MS = 14 * 86400000;
 const DEFAULT_INSURANCE_RATE_BPS = 114;
+const DEFAULT_INSURANCE_EFFECTIVE_FROM = Date.parse("2026-09-01T00:00:00.000Z");
 
 function str(value: unknown) { return typeof value === "string" ? value : value == null ? "" : String(value); }
 function num(value: unknown) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
@@ -150,7 +151,12 @@ export async function GET() {
     const insuranceRateBps = settingsResult.data?.insurance_rate_bps == null
       ? DEFAULT_INSURANCE_RATE_BPS
       : num(settingsResult.data.insurance_rate_bps);
-    const currentInsuranceCents = Math.round(currentGuaranteeCents * insuranceRateBps / 10000);
+    const insuranceEffectiveFrom = ts(settingsResult.data?.insurance_effective_from) ?? DEFAULT_INSURANCE_EFFECTIVE_FROM;
+    const currentInsuredGuaranteeCents = currentWon.reduce((sum, deposit) => {
+      const feeAt = feeByDeposit.get(deposit.id)?.createdAt;
+      return feeAt != null && feeAt >= insuranceEffectiveFrom ? sum + deposit.amountCents : sum;
+    }, 0);
+    const currentInsuranceCents = Math.round(currentInsuredGuaranteeCents * insuranceRateBps / 10000);
     const measuredContributionCents = currentGrossRevenueCents - currentPartnerCostCents - currentInsuranceCents;
     const contributionPerCautionCents = perCaution(measuredContributionCents, currentWon.length);
 
@@ -180,6 +186,8 @@ export async function GET() {
         providedCents: currentGuaranteeCents,
         averagePerCautionCents: perCaution(currentGuaranteeCents, currentWon.length),
         insuranceRateBps,
+        insuranceEffectiveFrom: new Date(insuranceEffectiveFrom).toISOString().slice(0, 10),
+        insuredGuaranteeCents: currentInsuredGuaranteeCents,
         insuranceCostCents: currentInsuranceCents,
         grossRevenueYield: currentGuaranteeCents > 0 ? currentGrossRevenueCents / currentGuaranteeCents : null,
         measuredContributionYield: currentGuaranteeCents > 0 ? measuredContributionCents / currentGuaranteeCents : null,
