@@ -6,7 +6,12 @@ import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
 type Scorecard = {
-  period: { currentMonth: string; previousMonth: string }
+  period: {
+    currentMonth: string
+    previousMonth: string
+    comparisonMode?: string
+    comparisonThroughDay?: number
+  }
   cautions: { current: number; previous: number; mom: number | null; tdvCents: number }
   mau: { current: number; cautionsPerMau: number | null }
   contribution: {
@@ -67,11 +72,15 @@ export function KpiCeoScorecard() {
   if (error) return <div className="mb-5 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error}</div>
   if (!data) return null
 
+  const comparisonLabel = data.period.comparisonMode === "same_elapsed_period_previous_month"
+    ? "vs même période M-1"
+    : "MoM"
+
   const cards = [
     {
       label: "CAUTIONS",
       value: integer(data.cautions.current),
-      detail: data.cautions.mom == null ? "MoM non calculable" : `${data.cautions.mom >= 0 ? "+" : ""}${percent(data.cautions.mom)} MoM`,
+      detail: data.cautions.mom == null ? "Comparaison non calculable" : `${data.cautions.mom >= 0 ? "+" : ""}${percent(data.cautions.mom)} ${comparisonLabel}`,
       sub: `${euroCents(data.cautions.tdvCents, 0)} de volume ce mois`,
     },
     {
