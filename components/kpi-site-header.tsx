@@ -7,24 +7,26 @@ import type { KpiView } from "@/lib/kpi-views"
 
 const VIEW_LABEL: Record<KpiView, string> = {
   ceo: "CEO Cockpit",
+  forecast: "Prévisions & scénarios",
   growth: "Croissance & usage",
   economics: "Économie & risque",
-  acquisition: "Acquisition",
+  acquisition: "Acquisition & CAC",
   cash: "Cash & coûts",
   remuneration: "Rémunération partenaires",
-  history: "Historique",
+  history: "Historique réel",
   data: "Qualité des données",
 }
 
 const VIEW_COPY: Record<KpiView, string> = {
-  ceo: "Quatre chiffres pour décider : volume, usage, marge et risque.",
-  growth: "Vérifiez si Gando grandit par davantage de loueurs actifs et davantage de cautions par loueur.",
-  economics: "Suivez ce que chaque caution rapporte, coûte, garantit et expose réellement Gando.",
-  acquisition: "Mesurez le coût d’acquisition jusqu’à la première caution et au MAU, pas l’activité commerciale.",
-  cash: "Pilotez dépenses, burn, cash et runway sans les mélanger aux KPI produit.",
-  remuneration: "Contrôlez séparément les commissions, cashback et revenue share dus aux partenaires.",
-  history: "Analysez les tendances mensuelles et les projections sans surcharger la vue CEO.",
-  data: "Contrôlez les définitions, sources et trous de données qui peuvent fausser une décision.",
+  ceo: "Où en est Gando aujourd’hui ? Quatre résultats clés et la priorité CEO du moment.",
+  forecast: "Où va Gando si la trajectoire actuelle continue, et quels leviers changent réellement le résultat ?",
+  growth: "Qui utilise réellement Gando, à quelle fréquence, et quels loueurs faut-il activer ou réactiver ?",
+  economics: "Combien gagne Gando par caution et quelle exposition au risque supporte réellement le modèle ?",
+  acquisition: "Combien coûte un nouveau loueur actif et quand l’acquisition devient-elle rentable ?",
+  cash: "Combien Gando dépense, combien de cash reste disponible et combien de temps l’entreprise peut exécuter ?",
+  remuneration: "Combien Gando doit reverser aux loueurs et partenaires, règle par règle.",
+  history: "Ce qui s’est réellement passé mois par mois, sans prévision ni scénario mélangé à l’historique.",
+  data: "Quelles données sont fiables, lesquelles manquent et quelles décisions sont encore fragiles ?",
 }
 
 export function KpiSiteHeader({ view }: { view: KpiView }) {
