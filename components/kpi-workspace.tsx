@@ -2,12 +2,13 @@
 
 import { KpiAcquisitionControl } from "@/components/kpi-acquisition-control"
 import { KpiAcquisitionExperiment } from "@/components/kpi-acquisition-experiment"
+import { KpiActualTrends } from "@/components/kpi-actual-trends"
 import { KpiCeoFocus } from "@/components/kpi-ceo-focus"
 import { KpiCeoScorecard } from "@/components/kpi-ceo-scorecard"
 import { KpiCostControl } from "@/components/kpi-cost-control"
 import { KpiDataSourceHealth } from "@/components/kpi-data-source-health"
-import { KpiDecisionIntelligence } from "@/components/kpi-decision-intelligence"
 import { KpiEconomicsRisk } from "@/components/kpi-economics-risk"
+import { KpiForecastScenarios } from "@/components/kpi-forecast-scenarios"
 import { KpiGrowthUsage } from "@/components/kpi-growth-usage"
 import { KpiMonthlyShadcn } from "@/components/kpi-monthly-shadcn"
 import { KpiPartnerRemuneration } from "@/components/kpi-partner-remuneration"
@@ -16,19 +17,29 @@ import type { KpiView } from "@/lib/kpi-views"
 
 export function KpiWorkspace({ view, canEdit }: { view: KpiView; canEdit: boolean }) {
   if (view === "forecast") {
+    return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiForecastScenarios /></div>
+  }
+
+  if (view === "growth") {
     return (
       <div className="min-w-0 p-4 lg:px-6 lg:py-5">
-        <KpiDecisionIntelligence />
+        <div className="space-y-5">
+          <KpiGrowthUsage />
+          <KpiActualTrends variant="growth" />
+        </div>
       </div>
     )
   }
 
-  if (view === "growth") {
-    return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiGrowthUsage /></div>
-  }
-
   if (view === "economics") {
-    return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiEconomicsRisk /></div>
+    return (
+      <div className="min-w-0 p-4 lg:px-6 lg:py-5">
+        <div className="space-y-5">
+          <KpiEconomicsRisk />
+          <KpiActualTrends variant="economics" />
+        </div>
+      </div>
+    )
   }
 
   if (view === "acquisition") {
