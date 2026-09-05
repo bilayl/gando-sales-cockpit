@@ -5,6 +5,7 @@ import { KpiAcquisitionExperiment } from "@/components/kpi-acquisition-experimen
 import { KpiCostControl } from "@/components/kpi-cost-control"
 import { KpiDashboardOverview } from "@/components/kpi-dashboard-overview"
 import { KpiExecutiveOverview } from "@/components/kpi-executive-overview"
+import { KpiLiveBusinessData } from "@/components/kpi-live-business-data"
 import { KpiMonthlyShadcn } from "@/components/kpi-monthly-shadcn"
 import { KpiSystemDashboard } from "@/components/kpi-system-dashboard"
 import type { KpiView } from "@/lib/kpi-views"
@@ -35,5 +36,12 @@ export function KpiWorkspace({ view, canEdit }: { view: KpiView; canEdit: boolea
     return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiMonthlyShadcn canEdit={canEdit} /></div>
   }
 
-  return <div className="min-w-0"><KpiDashboardOverview /></div>
+  return (
+    <div className="min-w-0">
+      <div className="px-4 pt-4 lg:px-6 lg:pt-5">
+        <KpiLiveBusinessData canEdit={canEdit} />
+      </div>
+      <KpiDashboardOverview />
+    </div>
+  )
 }
