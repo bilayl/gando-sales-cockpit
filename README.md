@@ -45,6 +45,28 @@ OPENROUTER_MODEL=openrouter/auto
 
 L’agent SD01 utilise `OPENROUTER_SD01_MODEL` lorsqu’elle est définie, puis `OPENROUTER_MODEL`. Les rooms, versions, transcriptions sources, remarques et événements de consultation sont stockés dans Supabase. Le navigateur n’accède jamais directement à ces tables : `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` restent consommées par les routes serveur.
 
+### Synchroniser le Supabase principal Gando
+
+Le Cockpit peut lire un deuxième projet Supabase côté serveur et en conserver un miroir brut dans son propre Supabase. Aucun secret du projet source n’est exposé au navigateur.
+
+```text
+GANDO_SOURCE_SUPABASE_URL=https://<project-ref>.supabase.co
+GANDO_SOURCE_SUPABASE_SECRET_KEY=sb_secret_...
+GANDO_SOURCE_SYNC_TABLES=deposits,payments,public.users:user_id
+```
+
+Syntaxe de `GANDO_SOURCE_SYNC_TABLES` : `[schema.]table[:idColumn]`. Le schéma par défaut est `public` et la colonne identifiante par défaut est `id`.
+
+Les lignes sont copiées dans `gando_source_records` sous forme de JSON brut. L’état de chaque table est conservé dans `gando_source_sync_state`. Une synchronisation complète est déclenchée par un administrateur avec `POST /api/system/supabase-sync`; `GET /api/system/supabase-sync` retourne la configuration et le dernier état sans exposer les secrets.
+
+Exemple de synchronisation ciblée :
+
+```json
+{
+  "tables": ["deposits", "payments"]
+}
+```
+
 Depuis une War Room interne, ouvrir **Room SD client**. La création initialise les cinq étapes. Le SD01 peut être saisi manuellement ou généré depuis les appels Onoff liés au deal/à l’entreprise et une transcription collée. Une génération passe toujours au statut **À relire** ; seul le bouton **Publier** remplace la version visible par le client.
 
 Google Calendar est facultatif :
