@@ -13,6 +13,31 @@ export type GandoSourceTableConfig = {
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+const DEFAULT_GANDO_SOURCE_SYNC_TABLES = [
+  "public.accounts",
+  "public.balances",
+  "public.booking_session_deposits",
+  "public.booking_sessions",
+  "public.bridge_scoring",
+  "public.captures",
+  "public.client_operations",
+  "public.clients",
+  "public.connect_transfer",
+  "public.deposits",
+  "public.fees",
+  "public.guarantee_activations",
+  "public.invoices",
+  "public.ledger_entries",
+  "public.partners",
+  "public.payment_links",
+  "public.payment_refunds",
+  "public.payments",
+  "public.payouts",
+  "public.platform_balance_snapshots",
+  "public.psp_transactions",
+  "public.users",
+].join(",");
+
 function requireIdentifier(value: string, label: string) {
   if (!IDENTIFIER.test(value)) {
     throw new Error(`${label} invalide dans GANDO_SOURCE_SYNC_TABLES: ${value}`);
@@ -51,16 +76,15 @@ export function getGandoSourceSupabase(): SupabaseClient {
 }
 
 /**
- * Syntaxe :
+ * Syntaxe optionnelle :
  *   GANDO_SOURCE_SYNC_TABLES=deposits,payments,public.users:user_id
  *
+ * - si la variable est absente, les tables métier Gando connues sont utilisées
  * - schéma par défaut : public
  * - colonne d'identifiant par défaut : id
  */
 export function getConfiguredGandoSourceTables(): GandoSourceTableConfig[] {
-  const raw = process.env.GANDO_SOURCE_SYNC_TABLES?.trim();
-  if (!raw) return [];
-
+  const raw = process.env.GANDO_SOURCE_SYNC_TABLES?.trim() || DEFAULT_GANDO_SOURCE_SYNC_TABLES;
   const seen = new Set<string>();
 
   return raw
