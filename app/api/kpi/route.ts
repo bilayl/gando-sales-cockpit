@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCockpitAccess } from "@/lib/cockpit-access";
+import { getGandoMonthlySourceMetrics } from "@/lib/gando-monthly-source";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -55,14 +56,56 @@ function toClientRow(row: Record<string, unknown>) {
   };
 }
 
+function monthKey(year: number, monthNumber: number) {
+  return `${year}-${String(monthNumber).padStart(2, "0")}`;
+}
+
 async function listRows() {
-  const { data, error } = await getSupabaseAdmin()
-    .from("kpi_monthly_metrics")
-    .select("*")
-    .order("year", { ascending: true })
-    .order("month_number", { ascending: true });
-  if (error) throw error;
-  return (data || []).map(row => toClientRow(row as Record<string, unknown>));
+  const [manualResult, sourceMetrics] = await Promise.all([
+    getSupabaseAdmin()
+      .from("kpi_monthly_metrics")
+      .select("*")
+      .order("year", { ascending: true })
+      .order("month_number", { ascending: true }),
+    getGandoMonthlySourceMetrics(),
+  ]);
+
+  if (manualResult.error) throw manualResult.error;
+
+  return (manualResult.data || []).map(rawRow => {
+    const row = toClientRow(rawRow as Record<string, unknown>);
+    const source = sourceMetrics.get(monthKey(row.year, row.monthNumber));
+    if (!source) return row;
+
+    const sourceFilledFields: string[] = [];
+    const fillNumber = (field: string, manual: number | null, automatic: number | null) => {
+      if (manual != null) return manual;
+      if (automatic != null) sourceFilledFields.push(field);
+      return automatic;
+    };
+
+    return {
+      ...row,
+      revenue: fillNumber("revenue", row.revenue, source.revenue),
+      tdv: fillNumber("tdv", row.tdv, source.tdv),
+      deposits: fillNumber("deposits", row.deposits, source.deposits),
+      activeRenters: fillNumber("activeRenters", row.activeRenters, source.activeRenters),
+      newUsers: fillNumber("newUsers", row.newUsers, source.newUsers),
+      registeredUsers: fillNumber("registeredUsers", row.registeredUsers, source.registeredUsers),
+      totalClients: fillNumber("totalClients", row.totalClients, source.totalClients),
+      cumulativeDepositVolume: fillNumber(
+        "cumulativeDepositVolume",
+        row.cumulativeDepositVolume,
+        source.cumulativeDepositVolume,
+      ),
+      depositCashouts: fillNumber("depositCashouts", row.depositCashouts, source.depositCashouts),
+      cashoutAmount: fillNumber("cashoutAmount", row.cashoutAmount, source.cashoutAmount),
+      advancedGuarantee: fillNumber("advancedGuarantee", row.advancedGuarantee, source.advancedGuarantee),
+      churnedRenters: fillNumber("churnedRenters", row.churnedRenters, source.churnedRenters),
+      sourceFilledFields,
+      sourceBackfill: sourceFilledFields.length > 0 ? "Gando Supabase" : null,
+    };
+  });
 }
 
 export async function GET() {
