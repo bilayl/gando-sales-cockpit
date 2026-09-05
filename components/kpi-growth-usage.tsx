@@ -4,12 +4,13 @@ import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { KpiActivatedRentersTable } from "@/components/kpi-activated-renters-table"
 
 type Scorecard = {
   period: { currentMonth: string; comparisonMode?: string }
-  cautions: { current: number; previous: number; mom: number | null; tdvCents: number }
-  mau: { current: number; cautionsPerMau: number | null }
-  guarantee: { averagePerCautionCents: number | null }
+  cautions: { current: number; previous: number; total: number; mom: number | null; tdvCents: number; totalTdvCents: number }
+  mau: { current: number; cautionsPerMau: number | null; activatedEver: number; cautionsPerActivatedEver: number | null }
+  guarantee: { averagePerCautionCents: number | null; totalAveragePerCautionCents: number | null }
 }
 
 type Live = {
@@ -68,12 +69,12 @@ export function KpiGrowthUsage() {
   if (loading) return <Skeleton className="h-[520px] w-full rounded-xl" />
   if (error || !scorecard || !live) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error || "Données indisponibles"}</div>
 
-  const activationShare = live.metadata.accounts > 0 ? live.core.activeAccounts / live.metadata.accounts : null
+  const activationShare = live.metadata.accounts > 0 ? scorecard.mau.activatedEver / live.metadata.accounts : null
   const cards = [
     { label: "Cautions MTD", value: integer(scorecard.cautions.current), detail: scorecard.cautions.mom == null ? "Comparaison indisponible" : `${scorecard.cautions.mom >= 0 ? "+" : ""}${percent(scorecard.cautions.mom)} vs même période M-1` },
     { label: "Volume MTD", value: euroCents(scorecard.cautions.tdvCents), detail: `Garantie moyenne ${euroCents(scorecard.guarantee.averagePerCautionCents)}` },
     { label: "MAU", value: integer(scorecard.mau.current), detail: `${decimal(scorecard.mau.cautionsPerMau)} cautions / MAU` },
-    { label: "Loueurs déjà actifs", value: integer(live.core.activeAccounts), detail: activationShare == null ? "—" : `${percent(activationShare)} des comptes source ont déjà généré une caution` },
+    { label: "Loueurs déjà activés", value: integer(scorecard.mau.activatedEver), detail: activationShare == null ? "—" : `${percent(activationShare)} des comptes source ont déjà généré une caution` },
   ]
 
   const usageTarget = 3.5
@@ -115,14 +116,16 @@ export function KpiGrowthUsage() {
           </div>
           <div className="border-t border-border px-4 py-4 md:border-l md:border-t-0">
             <div className="text-[10px] font-bold uppercase text-muted-foreground">Base active cumulée</div>
-            <div className="mt-2 text-2xl font-semibold tabular-nums">{integer(live.core.activeAccounts)}</div>
-            <div className="mt-1 text-[11px] text-muted-foreground">Loueurs ayant déjà produit au moins une caution gagnée depuis le début.</div>
+            <div className="mt-2 text-2xl font-semibold tabular-nums">{integer(scorecard.mau.activatedEver)}</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">{decimal(scorecard.mau.cautionsPerActivatedEver)} cautions en moyenne par loueur activé depuis le début.</div>
           </div>
         </div>
         <div className="border-t border-border bg-muted/10 px-4 py-2.5 text-[10px] text-muted-foreground">
           Le taux “comptes source devenus actifs” est un indicateur de couverture, pas encore un taux d’activation commercial parfaitement propre : les comptes source peuvent inclure des comptes de test ou incomplets.
         </div>
       </Card>
+
+      <KpiActivatedRentersTable />
     </div>
   )
 }
