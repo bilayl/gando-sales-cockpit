@@ -15,9 +15,14 @@ const groups: Group[] = [
     label: "Pilotage CEO",
     items: [
       { id: "ceo", label: "CEO Cockpit", icon: LayoutDashboard },
-      { id: "forecast", label: "Prévisions & scénarios", icon: ChartSpline },
       { id: "growth", label: "Croissance & usage", icon: TrendingUp },
       { id: "economics", label: "Économie & risque", icon: BadgeEuro },
+    ],
+  },
+  {
+    label: "Planification",
+    items: [
+      { id: "forecast", label: "Prévisions & scénarios", icon: ChartSpline },
     ],
   },
   {
