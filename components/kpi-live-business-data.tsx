@@ -5,20 +5,6 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
-type RemunerationRow = {
-  actorKey: string
-  actorLabel: string
-  accountName: string | null
-  mechanism: string
-  configured: boolean
-  eligibleDeposits: number
-  successfulDeposits: number
-  eligibleTdvCents: number
-  eligibleSecuringFeesCents: number
-  cashbackDueCents: number
-  notes: string | null
-}
-
 type LiveKpi = {
   source: { project: string; lastSyncedAt: string | null; sourceTables: number }
   core: {
@@ -33,7 +19,6 @@ type LiveKpi = {
     acceptedGuarantees: number
   }
   economics: {
-    cashbackDueCents: number
     insuranceCostPerWonDepositCents: number | null
     insuranceTotalCents: number | null
     contributionAfterCashbackAndInsuranceCents: number | null
@@ -45,7 +30,6 @@ type LiveKpi = {
     successfulDepositsWithoutMatchedFee: number
     feeMatchWindowDays: number
   }
-  remuneration: RemunerationRow[]
 }
 
 function euroCents(value: number | null | undefined, digits = 0) {
@@ -94,10 +78,11 @@ export function KpiLiveBusinessData({ canEdit }: { canEdit: boolean }) {
     setSaving(true)
     setError("")
     try {
+      const normalized = insuranceDraft.replace(",", ".")
       const response = await fetch("/api/kpi/live-business", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ insuranceCostPerWonDepositEuros: insuranceDraft }),
+        body: JSON.stringify({ insuranceCostPerWonDepositEuros: normalized }),
       })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || "Impossible d’enregistrer le coût assurance.")
@@ -129,17 +114,13 @@ export function KpiLiveBusinessData({ canEdit }: { canEdit: boolean }) {
   }
 
   const cards = useMemo(() => data ? [
-    { label: "Cautions gagnées", value: integer(data.core.successfulDeposits), detail: `${integer(data.core.activeAccounts)} loueurs actifs` },
-    { label: "TDV sécurisé", value: euroCents(data.core.totalSecuredCents), detail: `Panier moyen ${euroCents(data.core.averageDepositCents)}` },
+    { label: "Volume cumulé sécurisé", value: euroCents(data.core.totalSecuredCents), detail: `${integer(data.core.successfulDeposits)} cautions gagnées` },
+    { label: "Volume moyen / caution", value: euroCents(data.core.averageDepositCents), detail: "Cautions active, close ou captured" },
     { label: "Frais de sécurisation payés", value: euroCents(data.core.securingFeesPaidCents, 2), detail: `${integer(data.quality.feeOperations)} paiements enregistrés` },
-    { label: "Frais rattachés aux cautions gagnées", value: euroCents(data.core.matchedSecuringFeesCents, 2), detail: `${integer(data.quality.matchedFeeOperations)} cautions rapprochées` },
-    { label: "Cashback à payer", value: euroCents(data.economics.cashbackDueCents, 2), detail: "Règles partenaires configurées" },
-    { label: "Coût assurance", value: euroCents(data.economics.insuranceTotalCents, 2), detail: data.economics.insuranceCostPerWonDepositCents == null ? "Coût unitaire à renseigner" : `${euroCents(data.economics.insuranceCostPerWonDepositCents, 2)} / caution gagnée` },
-    { label: "Contribution après cashback + assurance", value: euroCents(data.economics.contributionAfterCashbackAndInsuranceCents, 2), detail: "Avant coûts PSP et autres coûts variables" },
-    { label: "Encaissements payés", value: euroCents(data.core.paidCaptureAmountCents, 2), detail: `${integer(data.core.paidCaptures)} encaissement(s) · ${integer(data.core.acceptedGuarantees)} garantie(s) acceptée(s)` },
+    { label: "Encaissements récupérés", value: euroCents(data.core.paidCaptureAmountCents, 2), detail: `${integer(data.core.paidCaptures)} encaissement(s) payé(s)` },
   ] : [], [data])
 
-  if (loading) return <Skeleton className="mb-5 h-[420px] w-full rounded-xl" />
+  if (loading) return <Skeleton className="mb-5 h-[330px] w-full rounded-xl" />
   if (!data) return null
 
   const lastSync = data.source.lastSyncedAt
@@ -173,7 +154,7 @@ export function KpiLiveBusinessData({ canEdit }: { canEdit: boolean }) {
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((item, index) => (
-          <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index >= 2 ? "sm:border-t xl:border-t-0" : ""} ${index >= 4 ? "xl:border-t" : ""}`}>
+          <div key={item.label} className={`px-4 py-4 ${index ? "border-t border-border sm:border-l sm:border-t-0" : ""} ${index >= 2 ? "sm:border-t xl:border-t-0" : ""}`}>
             <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground/70">{item.label}</div>
             <div className="mt-2 text-[22px] font-semibold tracking-[-0.03em] tabular-nums">{item.value}</div>
             <div className="mt-1.5 text-[11px] font-medium text-muted-foreground">{item.detail}</div>
@@ -186,7 +167,7 @@ export function KpiLiveBusinessData({ canEdit }: { canEdit: boolean }) {
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Assurance</div>
             <div className="mt-0.5 text-sm font-semibold">Coût par caution gagnée</div>
-            <div className="mt-1 text-[10px] text-muted-foreground">Appliqué à chaque caution au statut active, close ou captured.</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">Ce coût alimente automatiquement la marge contributive mesurée dans le CEO Scorecard.</div>
           </div>
           {canEdit ? (
             <div className="flex items-center gap-2">
@@ -213,49 +194,8 @@ export function KpiLiveBusinessData({ canEdit }: { canEdit: boolean }) {
         </div>
       </div>
 
-      <section className="border-t border-border">
-        <div className="border-b border-border px-4 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Revenue share & cashback</div>
-          <div className="mt-0.5 text-sm font-semibold">Rémunération loueurs / partenaires</div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-xs">
-            <thead className="bg-muted/20 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2.5 font-semibold">Acteur</th>
-                <th className="px-4 py-2.5 font-semibold">Mécanisme</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Cautions éligibles</th>
-                <th className="px-4 py-2.5 text-right font-semibold">TDV éligible</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Frais sécurisation</th>
-                <th className="px-4 py-2.5 text-right font-semibold">À payer HT</th>
-                <th className="px-4 py-2.5 font-semibold">Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.remuneration.map(row => (
-                <tr key={row.actorKey} className="border-t border-border">
-                  <td className="px-4 py-3">
-                    <div className="font-semibold">{row.actorLabel}</div>
-                    {row.accountName ? <div className="mt-0.5 text-[10px] text-muted-foreground">{row.accountName}</div> : null}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{row.mechanism}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums">{row.configured ? integer(row.eligibleDeposits) : "—"}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{row.configured ? euroCents(row.eligibleTdvCents) : "—"}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{row.configured ? euroCents(row.eligibleSecuringFeesCents, 2) : "—"}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums">{row.configured ? euroCents(row.cashbackDueCents, 2) : "—"}</td>
-                  <td className="px-4 py-3"><Badge variant={row.configured ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">{row.configured ? "Calcul automatique" : "À configurer"}</Badge></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="border-t border-border px-4 py-3 text-[10px] leading-relaxed text-muted-foreground">
-          RL : récompense uniquement si la caution est gagnée et qu’un frais de sécurisation payé est rapproché. 1 000 € à &lt; 1 500 € → 5,60 € HT ; 1 500 € à 2 500 € inclus → 8,33 € HT. Les cautions annulées sont exclues.
-        </div>
-      </section>
-
       <div className="border-t border-border bg-muted/10 px-4 py-2 text-[10px] text-muted-foreground">
-        Qualité du rapprochement : {integer(data.quality.matchedFeeOperations)} frais associés à une caution gagnée · {integer(data.quality.unmatchedFeeOperations)} frais non rapprochés · fenêtre de rapprochement {integer(data.quality.feeMatchWindowDays)} jours.
+        Qualité du rapprochement : {integer(data.quality.matchedFeeOperations)} frais associés à une caution gagnée · {integer(data.quality.unmatchedFeeOperations)} frais non rapprochés · fenêtre {integer(data.quality.feeMatchWindowDays)} jours. La rémunération partenaires est désormais isolée dans sa propre section.
       </div>
     </Card>
   )
