@@ -2,15 +2,21 @@
 
 import { KpiAcquisitionControl } from "@/components/kpi-acquisition-control"
 import { KpiAcquisitionExperiment } from "@/components/kpi-acquisition-experiment"
+import { KpiCeoScorecard } from "@/components/kpi-ceo-scorecard"
 import { KpiCostControl } from "@/components/kpi-cost-control"
 import { KpiDashboardOverview } from "@/components/kpi-dashboard-overview"
 import { KpiExecutiveOverview } from "@/components/kpi-executive-overview"
 import { KpiLiveBusinessData } from "@/components/kpi-live-business-data"
 import { KpiMonthlyShadcn } from "@/components/kpi-monthly-shadcn"
+import { KpiPartnerRemuneration } from "@/components/kpi-partner-remuneration"
 import { KpiSystemDashboard } from "@/components/kpi-system-dashboard"
 import type { KpiView } from "@/lib/kpi-views"
 
 export function KpiWorkspace({ view, canEdit }: { view: KpiView; canEdit: boolean }) {
+  if (view === "remuneration") {
+    return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiPartnerRemuneration /></div>
+  }
+
   if (view === "system") {
     return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiSystemDashboard /></div>
   }
@@ -39,6 +45,7 @@ export function KpiWorkspace({ view, canEdit }: { view: KpiView; canEdit: boolea
   return (
     <div className="min-w-0">
       <div className="px-4 pt-4 lg:px-6 lg:pt-5">
+        <KpiCeoScorecard />
         <KpiLiveBusinessData canEdit={canEdit} />
       </div>
       <KpiDashboardOverview />
