@@ -6,23 +6,25 @@ import { Button } from "@/components/ui/button"
 import type { KpiView } from "@/lib/kpi-views"
 
 const VIEW_LABEL: Record<KpiView, string> = {
-  lifetime: "Vue d’ensemble",
+  ceo: "CEO Cockpit",
+  growth: "Croissance & usage",
+  economics: "Économie & risque",
+  acquisition: "Acquisition",
+  cash: "Cash & coûts",
   remuneration: "Rémunération partenaires",
-  system: "Système KPI",
-  costs: "Cost Control",
-  overview: "Dernier mois",
-  funnel: "Funnel & économie",
-  history: "Mensuel & projection",
+  history: "Historique",
+  data: "Qualité des données",
 }
 
 const VIEW_COPY: Record<KpiView, string> = {
-  lifetime: "Commencez par les 4 résultats CEO : cautions, MAU, marge contributive et loss rate.",
-  remuneration: "Suivez ce que Gando doit aux loueurs et partenaires, mois par mois, à partir du volume réellement éligible.",
-  system: "Pilotez Gando avec des définitions, formules et données fiables de bout en bout.",
-  costs: "Maîtrisez budget, dépenses réelles, coûts unitaires et dérives avant la fin du mois.",
-  overview: "Comprenez immédiatement la santé du dernier mois renseigné.",
-  funnel: "Reliez acquisition, activation, revenu, cash et marge.",
-  history: "Saisissez les données sources et projetez les prochains mois.",
+  ceo: "Quatre chiffres pour décider : volume, usage, marge et risque.",
+  growth: "Vérifiez si Gando grandit par davantage de loueurs actifs et davantage de cautions par loueur.",
+  economics: "Suivez ce que chaque caution rapporte, coûte, garantit et expose réellement Gando.",
+  acquisition: "Mesurez le coût d’acquisition jusqu’à la première caution et au MAU, pas l’activité commerciale.",
+  cash: "Pilotez dépenses, burn, cash et runway sans les mélanger aux KPI produit.",
+  remuneration: "Contrôlez séparément les commissions, cashback et revenue share dus aux partenaires.",
+  history: "Analysez les tendances mensuelles et les projections sans surcharger la vue CEO.",
+  data: "Contrôlez les définitions, sources et trous de données qui peuvent fausser une décision.",
 }
 
 export function KpiSiteHeader({ view }: { view: KpiView }) {
