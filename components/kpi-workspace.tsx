@@ -15,26 +15,20 @@ import { KpiSystemDashboard } from "@/components/kpi-system-dashboard"
 import type { KpiView } from "@/lib/kpi-views"
 
 export function KpiWorkspace({ view, canEdit }: { view: KpiView; canEdit: boolean }) {
-  if (view === "growth") {
+  if (view === "forecast") {
     return (
       <div className="min-w-0 p-4 lg:px-6 lg:py-5">
-        <div className="space-y-5">
-          <KpiGrowthUsage />
-          <KpiDecisionIntelligence variant="growth" />
-        </div>
+        <KpiDecisionIntelligence />
       </div>
     )
   }
 
+  if (view === "growth") {
+    return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiGrowthUsage /></div>
+  }
+
   if (view === "economics") {
-    return (
-      <div className="min-w-0 p-4 lg:px-6 lg:py-5">
-        <div className="space-y-5">
-          <KpiDecisionIntelligence variant="economics" />
-          <KpiEconomicsRisk />
-        </div>
-      </div>
-    )
+    return <div className="min-w-0 p-4 lg:px-6 lg:py-5"><KpiEconomicsRisk /></div>
   }
 
   if (view === "acquisition") {
@@ -75,7 +69,6 @@ export function KpiWorkspace({ view, canEdit }: { view: KpiView; canEdit: boolea
     <div className="min-w-0 p-4 lg:px-6 lg:py-5">
       <div className="space-y-5">
         <KpiCeoScorecard />
-        <KpiDecisionIntelligence />
         <KpiCeoFocus />
       </div>
     </div>
