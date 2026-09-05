@@ -1,5 +1,6 @@
 export type KpiView =
   | "ceo"
+  | "forecast"
   | "growth"
   | "economics"
   | "acquisition"
