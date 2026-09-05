@@ -21,6 +21,7 @@ type Tier = { min_cents?: number; max_cents?: number; reward_cents?: number };
 
 const SUCCESSFUL_DEPOSIT_STATUSES = new Set(["active", "close", "captured"]);
 const FEE_MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const DEFAULT_INSURANCE_RATE_BPS = 114;
 
 function str(value: unknown) {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -42,6 +43,14 @@ function gapToDeposit(feeAt: number | null, deposit: Deposit) {
   const candidates = [deposit.createdAt, deposit.updatedAt].filter((value): value is number => value != null);
   if (!candidates.length) return Number.POSITIVE_INFINITY;
   return Math.min(...candidates.map(value => Math.abs(feeAt - value)));
+}
+function rewardForDeposit(amountCents: number, tiers: Tier[]) {
+  const tier = tiers.find(candidate => {
+    const min = num(candidate.min_cents);
+    const max = candidate.max_cents == null ? Number.POSITIVE_INFINITY : num(candidate.max_cents);
+    return amountCents >= min && amountCents <= max;
+  });
+  return tier ? num(tier.reward_cents) : 0;
 }
 
 async function readSourceTable(table: string): Promise<MirrorRow[]> {
@@ -67,10 +76,10 @@ function buildDeposits(rows: MirrorRow[]): Deposit[] {
   }));
 }
 
-function matchFeesToSuccessfulDeposits(deposits: Deposit[], feeOperations: FeeOperation[]) {
+function matchFeesToDeposits(deposits: Deposit[], feeOperations: FeeOperation[]) {
   const depositsByClient = new Map<string, Deposit[]>();
   for (const deposit of deposits) {
-    if (!SUCCESSFUL_DEPOSIT_STATUSES.has(deposit.status) || deposit.archived || !deposit.clientId) continue;
+    if (deposit.archived || !deposit.clientId) continue;
     const list = depositsByClient.get(deposit.clientId) || [];
     list.push(deposit);
     depositsByClient.set(deposit.clientId, list);
@@ -94,15 +103,6 @@ function matchFeesToSuccessfulDeposits(deposits: Deposit[], feeOperations: FeeOp
   }
 
   return matched;
-}
-
-function rewardForDeposit(amountCents: number, tiers: Tier[]) {
-  const tier = tiers.find(candidate => {
-    const min = num(candidate.min_cents);
-    const max = candidate.max_cents == null ? Number.POSITIVE_INFINITY : num(candidate.max_cents);
-    return amountCents >= min && amountCents <= max;
-  });
-  return tier ? num(tier.reward_cents) : 0;
 }
 
 export async function GET() {
@@ -129,7 +129,6 @@ export async function GET() {
     const accounts = new Map(accountsRows.map(row => [row.source_id, row.payload]));
     const clients = new Map(clientsRows.map(row => [row.source_id, row.payload]));
     const deposits = buildDeposits(depositRows);
-    const successfulDeposits = deposits.filter(deposit => SUCCESSFUL_DEPOSIT_STATUSES.has(deposit.status) && !deposit.archived);
 
     const feeOperations: FeeOperation[] = operationRows
       .filter(row => str(row.payload.type) === "fee")
@@ -141,58 +140,51 @@ export async function GET() {
       }))
       .filter(row => row.clientId && row.amountCents > 0);
 
-    const feeByDeposit = matchFeesToSuccessfulDeposits(deposits, feeOperations);
-    const feeOperationsTotalCents = feeOperations.reduce((sum, operation) => sum + operation.amountCents, 0);
-    const matchedSecuringFeesCents = [...feeByDeposit.values()].reduce((sum, operation) => sum + operation.amountCents, 0);
-    const totalSecuredCents = successfulDeposits.reduce((sum, deposit) => sum + deposit.amountCents, 0);
-    const activeAccounts = new Set(successfulDeposits.map(deposit => deposit.accountId).filter(Boolean));
+    const feeByDeposit = matchFeesToDeposits(deposits, feeOperations);
+    const wonDeposits = deposits.filter(deposit => SUCCESSFUL_DEPOSIT_STATUSES.has(deposit.status) && !deposit.archived && feeByDeposit.has(deposit.id));
+    const guaranteeProvidedCents = wonDeposits.reduce((sum, deposit) => sum + deposit.amountCents, 0);
+    const grossRevenueCents = wonDeposits.reduce((sum, deposit) => sum + (feeByDeposit.get(deposit.id)?.amountCents || 0), 0);
+    const activeAccounts = new Set(wonDeposits.map(deposit => deposit.accountId).filter(Boolean));
 
     const paidCaptures = captureRows.filter(row => str(row.payload.status) === "paid");
     const paidCaptureAmountCents = paidCaptures.reduce((sum, row) => sum + num(row.payload.amount_cents), 0);
     const acceptedGuarantees = guaranteeRows.filter(row => str(row.payload.status) === "accepted");
 
-    const rules = (rulesResult.data || []) as Row[];
-    const remuneration = rules.map(rule => {
+    let partnerCostCents = 0;
+    for (const rule of (rulesResult.data || []) as Row[]) {
+      if (!bool(rule.enabled) || !str(rule.account_id)) continue;
       const accountId = str(rule.account_id);
-      const tiers = Array.isArray(rule.tiers) ? (rule.tiers as Tier[]) : [];
-      const enabled = bool(rule.enabled);
-      const actorDeposits = successfulDeposits.filter(deposit => deposit.accountId === accountId);
-      const eligibleDeposits = enabled
-        ? actorDeposits.filter(deposit => feeByDeposit.has(deposit.id) && rewardForDeposit(deposit.amountCents, tiers) > 0)
-        : [];
-      const cashbackDueCents = eligibleDeposits.reduce((sum, deposit) => sum + rewardForDeposit(deposit.amountCents, tiers), 0);
-      const eligibleTdvCents = eligibleDeposits.reduce((sum, deposit) => sum + deposit.amountCents, 0);
-      const eligibleSecuringFeesCents = eligibleDeposits.reduce((sum, deposit) => sum + (feeByDeposit.get(deposit.id)?.amountCents || 0), 0);
-      const account = accountId ? accounts.get(accountId) : null;
+      const mode = str(rule.calculation_mode) || "fixed_tier";
+      const rateBps = num(rule.rate_bps);
+      const tiers = Array.isArray(rule.tiers) ? rule.tiers as Tier[] : [];
+      const effectiveFrom = timestamp(rule.effective_from);
+      const effectiveTo = timestamp(rule.effective_to);
 
-      return {
-        actorKey: str(rule.actor_key),
-        actorLabel: str(rule.actor_label),
-        accountId: accountId || null,
-        accountName: account ? str(account.display_name) || str(account.company_name) || null : null,
-        mechanism: str(rule.mechanism),
-        configured: enabled && Boolean(accountId),
-        eligibleDeposits: eligibleDeposits.length,
-        successfulDeposits: actorDeposits.length,
-        eligibleTdvCents,
-        eligibleSecuringFeesCents,
-        cashbackDueCents,
-        tiers,
-        notes: str(rule.notes) || null,
-      };
-    });
+      for (const deposit of wonDeposits) {
+        if (deposit.accountId !== accountId) continue;
+        const fee = feeByDeposit.get(deposit.id);
+        if (!fee || fee.createdAt == null) continue;
+        if (effectiveFrom != null && fee.createdAt < effectiveFrom) continue;
+        if (effectiveTo != null && fee.createdAt > effectiveTo + 86400000 - 1) continue;
 
-    const insuranceUnitCents = settingsResult.data?.insurance_cost_per_won_deposit_cents == null
-      ? null
-      : num(settingsResult.data.insurance_cost_per_won_deposit_cents);
-    const insuranceTotalCents = insuranceUnitCents == null ? null : successfulDeposits.length * insuranceUnitCents;
-    const cashbackTotalCents = remuneration.reduce((sum, row) => sum + row.cashbackDueCents, 0);
-    const contributionAfterCashbackAndInsuranceCents = insuranceTotalCents == null
-      ? null
-      : matchedSecuringFeesCents - cashbackTotalCents - insuranceTotalCents;
+        if (mode === "active_volume_rate") {
+          if (deposit.status === "active" && rateBps > 0) {
+            partnerCostCents += Math.round(deposit.amountCents * rateBps / 10000);
+          }
+        } else {
+          partnerCostCents += rewardForDeposit(deposit.amountCents, tiers);
+        }
+      }
+    }
+
+    const insuranceRateBps = settingsResult.data?.insurance_rate_bps == null
+      ? DEFAULT_INSURANCE_RATE_BPS
+      : num(settingsResult.data.insurance_rate_bps);
+    const insuranceTotalCents = Math.round(guaranteeProvidedCents * insuranceRateBps / 10000);
+    const measuredContributionCents = grossRevenueCents - partnerCostCents - insuranceTotalCents;
 
     const matchedDepositCount = feeByDeposit.size;
-    const successfulWithoutMatchedFee = Math.max(0, successfulDeposits.length - matchedDepositCount);
+    const successfulDepositCount = deposits.filter(deposit => SUCCESSFUL_DEPOSIT_STATUSES.has(deposit.status) && !deposit.archived).length;
     const lastSyncedAt = (syncResult.data || [])
       .map(row => row.last_completed_at)
       .filter(Boolean)
@@ -201,7 +193,7 @@ export async function GET() {
 
     const accountRows = [...activeAccounts].map(accountId => {
       const account = accounts.get(accountId) || {};
-      const accountDeposits = successfulDeposits.filter(deposit => deposit.accountId === accountId);
+      const accountDeposits = wonDeposits.filter(deposit => deposit.accountId === accountId);
       const accountFees = accountDeposits.reduce((sum, deposit) => sum + (feeByDeposit.get(deposit.id)?.amountCents || 0), 0);
       return {
         accountId,
@@ -219,30 +211,34 @@ export async function GET() {
         sourceTables: (syncResult.data || []).filter(row => row.status === "success").length,
       },
       core: {
-        successfulDeposits: successfulDeposits.length,
+        successfulDeposits: wonDeposits.length,
         activeAccounts: activeAccounts.size,
-        totalSecuredCents,
-        averageDepositCents: successfulDeposits.length ? Math.round(totalSecuredCents / successfulDeposits.length) : 0,
-        securingFeesPaidCents: feeOperationsTotalCents,
-        matchedSecuringFeesCents,
+        guaranteeProvidedCents,
+        averageGuaranteeCents: wonDeposits.length ? Math.round(guaranteeProvidedCents / wonDeposits.length) : 0,
+        grossRevenueCents,
+        grossRevenuePerCautionCents: wonDeposits.length ? Math.round(grossRevenueCents / wonDeposits.length) : 0,
         paidCaptures: paidCaptures.length,
         paidCaptureAmountCents,
         acceptedGuarantees: acceptedGuarantees.length,
       },
       economics: {
-        cashbackDueCents: cashbackTotalCents,
-        insuranceCostPerWonDepositCents: insuranceUnitCents,
+        insuranceRateBps,
         insuranceTotalCents,
-        contributionAfterCashbackAndInsuranceCents,
+        insurancePerCautionCents: wonDeposits.length ? Math.round(insuranceTotalCents / wonDeposits.length) : 0,
+        partnerCostCents,
+        partnerCostPerCautionCents: wonDeposits.length ? Math.round(partnerCostCents / wonDeposits.length) : 0,
+        measuredContributionCents,
+        measuredContributionPerCautionCents: wonDeposits.length ? Math.round(measuredContributionCents / wonDeposits.length) : 0,
+        grossRevenueYield: guaranteeProvidedCents > 0 ? grossRevenueCents / guaranteeProvidedCents : null,
+        measuredContributionYield: guaranteeProvidedCents > 0 ? measuredContributionCents / guaranteeProvidedCents : null,
       },
       quality: {
         feeOperations: feeOperations.length,
-        matchedFeeOperations: matchedDepositCount,
+        matchedFeeOperations: wonDeposits.length,
         unmatchedFeeOperations: Math.max(0, feeOperations.length - matchedDepositCount),
-        successfulDepositsWithoutMatchedFee: successfulWithoutMatchedFee,
+        successfulDepositsWithoutMatchedFee: Math.max(0, successfulDepositCount - wonDeposits.length),
         feeMatchWindowDays: FEE_MATCH_WINDOW_MS / 86400000,
       },
-      remuneration,
       accounts: accountRows,
       metadata: {
         clients: clients.size,
@@ -253,44 +249,6 @@ export async function GET() {
     console.error("Live business KPI failed", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Impossible de calculer les KPI produit." },
-      { status: 500 },
-    );
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const access = await requireCockpitAccess();
-    if (access.role === "commercial") {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
-    }
-
-    const body = await request.json().catch(() => ({}));
-    const raw = body?.insuranceCostPerWonDepositEuros;
-    let cents: number | null = null;
-    if (raw !== null && raw !== undefined && raw !== "") {
-      const euros = Number(raw);
-      if (!Number.isFinite(euros) || euros < 0 || euros > 10000) {
-        return NextResponse.json({ error: "Coût assurance invalide." }, { status: 400 });
-      }
-      cents = Math.round(euros * 100);
-    }
-
-    const { error } = await getSupabaseAdmin()
-      .from("kpi_economics_settings")
-      .upsert({
-        id: "default",
-        insurance_cost_per_won_deposit_cents: cents,
-        updated_at: new Date().toISOString(),
-        updated_by: access.email || null,
-      }, { onConflict: "id" });
-    if (error) throw error;
-
-    return NextResponse.json({ success: true, insuranceCostPerWonDepositCents: cents });
-  } catch (error) {
-    console.error("Live KPI settings update failed", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Impossible d’enregistrer le coût assurance." },
       { status: 500 },
     );
   }
