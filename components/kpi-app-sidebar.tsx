@@ -8,6 +8,7 @@ import type { KpiView } from "@/lib/kpi-views"
 
 const sections: Array<{ id: KpiView; label: string; icon: typeof Gauge }> = [
   { id: "lifetime", label: "Vue d’ensemble", icon: Infinity },
+  { id: "remuneration", label: "Rémunération partenaires", icon: WalletCards },
   { id: "system", label: "Système KPI", icon: Network },
   { id: "costs", label: "Cost Control", icon: WalletCards },
   { id: "overview", label: "Dernier mois", icon: Gauge },
