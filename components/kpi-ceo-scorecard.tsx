@@ -127,19 +127,19 @@ export function KpiCeoScorecard() {
       label: "MARGE CONTRIBUTIVE",
       currentValue: data.contribution.perCautionCents == null ? "À fiabiliser" : `${euroCents(data.contribution.perCautionCents)} / caution`,
       currentDetail: `${euroCents(data.contribution.measuredContributionCents)} mesurés ce mois`,
-      currentSub: "Avant PSP + pertes finales",
+      currentSub: "Avant PSP + perte nette Gando",
       lifetimeValue: data.contribution.totalPerCautionCents == null ? "À fiabiliser" : `${euroCents(data.contribution.totalPerCautionCents)} / caution`,
       lifetimeDetail: `${euroCents(data.contribution.totalMeasuredContributionCents)} cumulés`,
-      lifetimeSub: "Avant PSP + pertes finales",
+      lifetimeSub: "Avant PSP + perte nette Gando",
     },
     {
-      label: "LOSS RATE",
+      label: data.loss.isProxy ? "RISQUE ACTIVÉ" : "LOSS RATE NET",
       currentValue: percent(data.loss.currentRate, 2),
       currentDetail: `${euroCents(data.loss.currentAmountCents)} ce mois`,
-      currentSub: data.loss.isProxy ? "Proxy garanties activées" : "Taux de perte réel",
+      currentSub: data.loss.isProxy ? "Garanties Gando activées / volume garanti" : "Perte nette Gando / volume garanti",
       lifetimeValue: percent(data.loss.rate, 2),
       lifetimeDetail: `${euroCents(data.loss.amountCents)} depuis le début`,
-      lifetimeSub: data.loss.basis,
+      lifetimeSub: data.loss.isProxy ? "Ce ratio n’est pas encore la perte économique finale de Gando" : data.loss.basis,
     },
   ]
 
@@ -195,7 +195,7 @@ export function KpiCeoScorecard() {
 
       {!data.contribution.complete || data.loss.isProxy ? (
         <div className="border-t border-border px-4 py-2 text-[10px] text-muted-foreground">
-          Fiabilité CFO : la marge reste mesurée avant PSP et pertes finales nettes de recouvrement. Le Loss Rate reste un proxy basé sur les garanties Gando activées.
+          Fiabilité CFO : la marge reste mesurée avant PSP et perte nette Gando après récupération. Le ratio de risque affiché reste un proxy basé sur les garanties Gando activées tant que les pertes clôturées ne sont pas reliées.
         </div>
       ) : null}
     </Card>
