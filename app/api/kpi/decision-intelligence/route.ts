@@ -74,9 +74,6 @@ function reward(amountCents: number, tiers: Tier[]) {
   });
   return tier ? num(tier.reward_cents) : 0;
 }
-function safeRatio(top: number, bottom: number) {
-  return bottom > 0 ? top / bottom : null;
-}
 function avg(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
@@ -409,7 +406,7 @@ export async function GET() {
         rmseCautions: regression.rmse,
         confidence: confidenceLabel(regressionWindow.length, regression.r2),
         next90Days: forecast,
-        currentMonthRunRateCautions,
+        currentMonthRunRateCautions: currentRunRateCautions,
         trailing: {
           avgTdvPerCautionCents: Math.round(avgTdvPerCautionCents),
           avgRevenuePerCautionCents: Math.round(avgRevenuePerCautionCents),
