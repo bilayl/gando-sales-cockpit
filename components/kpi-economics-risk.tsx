@@ -53,6 +53,10 @@ function euroCents(value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value / 100)
 }
+function signedEuroCents(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return value < 0 ? `− ${euroCents(Math.abs(value))}` : euroCents(value)
+}
 function percent(value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { style: "percent", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value)
@@ -95,7 +99,7 @@ export function KpiEconomicsRisk() {
   if (loading) return <Skeleton className="h-[650px] w-full rounded-xl" />
   if (error || !scorecard || !live) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error || "Données indisponibles"}</div>
 
-  const waterfall = [
+  const waterfall: Array<{ label: string; value: number | null; detail: string }> = [
     { label: "Gross Revenue", value: scorecard.contribution.grossRevenueCents, detail: `${euroCents(scorecard.contribution.grossRevenuePerCautionCents)} / caution` },
     { label: "− Assurance", value: -scorecard.contribution.insuranceCostCents, detail: `${percentBps(scorecard.guarantee.insuranceRateBps)} du volume assuré` },
     { label: "− Partenaires", value: -scorecard.contribution.partnerCostCents, detail: `${euroCents(scorecard.contribution.partnerCostPerCautionCents)} / caution` },
@@ -146,7 +150,7 @@ export function KpiEconomicsRisk() {
                 <div className="mt-0.5 text-[10px] text-muted-foreground">{item.detail}</div>
               </div>
               <div className={`text-sm tabular-nums ${index === waterfall.length - 1 ? "font-bold" : "font-semibold"}`}>
-                {item.value < 0 ? `− ${euroCents(Math.abs(item.value))}` : euroCents(item.value)}
+                {signedEuroCents(item.value)}
               </div>
             </div>
           ))}
