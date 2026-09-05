@@ -1,1 +1,9 @@
-export type KpiView = "lifetime" | "remuneration" | "system" | "costs" | "overview" | "funnel" | "history"
+export type KpiView =
+  | "ceo"
+  | "growth"
+  | "economics"
+  | "acquisition"
+  | "cash"
+  | "remuneration"
+  | "history"
+  | "data"
