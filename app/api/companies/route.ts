@@ -44,19 +44,29 @@ function localProperties(row: any) {
   const raw = row.raw_data?.properties ?? {};
   return {
     ...raw,
-    // Les colonnes Cockpit restent la source de repli lorsqu'une propriété HubSpot
-    // est absente du cache JSON ou que HubSpot n'est pas disponible.
     name: raw.name || row.name || undefined,
     domain: raw.domain || row.domain || undefined,
     phone: raw.phone || row.phone || undefined,
     website: raw.website || row.website || undefined,
     city: raw.city || row.city || undefined,
-    zip: raw.zip || row.postal_code || undefined,
-    postal_code: raw.postal_code || row.postal_code || undefined,
+    zip: raw.zip || raw.postal_code || row.postal_code || undefined,
+    postal_code: raw.postal_code || raw.zip || row.postal_code || undefined,
+    state: raw.state || undefined,
     country: raw.country || row.country || undefined,
     hubspot_owner_id: raw.hubspot_owner_id || row.owner_hubspot_id || undefined,
     ...qualificationProperties(row),
   };
+}
+
+function nonEmptyProperties(properties: Record<string, unknown> | undefined) {
+  if (!properties) return {};
+  return Object.fromEntries(
+    Object.entries(properties).filter(([, propertyValue]) => {
+      if (propertyValue === null || propertyValue === undefined) return false;
+      if (typeof propertyValue === "string" && !propertyValue.trim()) return false;
+      return true;
+    }),
+  );
 }
 
 function toHubSpotRecord(row: any) {
@@ -107,7 +117,7 @@ export async function GET(request: NextRequest) {
           method: "POST",
           body: JSON.stringify({ properties: COMPANY_PROSPECTION_PROPERTIES, inputs: ids.map(id => ({ id })) }),
         });
-        const freshById = new Map((fresh.results ?? []).map((record: any) => [String(record.id), record.properties ?? {}]));
+        const freshById = new Map((fresh.results ?? []).map((record: any) => [String(record.id), nonEmptyProperties(record.properties)]));
         results = cached.map(record => ({
           ...record,
           properties: {
@@ -118,7 +128,6 @@ export async function GET(request: NextRequest) {
         }));
         hubspotFresh = true;
       } catch (hubspotError) {
-        // HubSpot ne doit jamais masquer les 1 700+ entreprises déjà stockées.
         console.warn("Companies HubSpot refresh unavailable, serving Cockpit cache:", hubspotError);
       }
     }
@@ -146,8 +155,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const props: Record<string, string> = Object.fromEntries(
       Object.entries(body.properties ?? {})
-        .filter(([key, value]) => COMPANY_CREATE_ALLOWED.includes(key) && value !== undefined && value !== null && String(value).trim() !== "")
-        .map(([key, value]) => [key, String(value).trim()]),
+        .filter(([key, propertyValue]) => COMPANY_CREATE_ALLOWED.includes(key) && propertyValue !== undefined && propertyValue !== null && String(propertyValue).trim() !== "")
+        .map(([key, propertyValue]) => [key, String(propertyValue).trim()]),
     );
     if (!props.name && !props.domain) {
       return NextResponse.json({ error: "Renseignez au moins un nom d’entreprise ou un domaine." }, { status: 400 });
