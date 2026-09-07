@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from "react"
 import { BookOpen, Building2, Check, ChevronDown, ChevronUp, Circle, ExternalLink, Lightbulb, MessageSquareText, PhoneCall, Sparkles, Target } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CallScriptLibrary } from "@/components/call-script-library"
 import { generateCallScript, type SalesCallScript, type ScriptContact } from "@/lib/call-scripts"
 
 type Props = {
   contact: ScriptContact
   remaining: number
-  script: SalesCallScript
   onOpenContact: () => void
 }
 
@@ -17,24 +17,54 @@ function contextValue(value?: string | null) {
   return value?.trim() || "À qualifier"
 }
 
-export function CallSessionPrep({ contact, remaining, script, onOpenContact }: Props) {
+export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
   const [open, setOpen] = useState(true)
   const [checked, setChecked] = useState<number[]>([])
+  const [scripts, setScripts] = useState<SalesCallScript[]>([])
+  const [selectedScriptId, setSelectedScriptId] = useState("")
+  const [canManageScripts, setCanManageScripts] = useState(false)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch("/api/call-scripts", { signal: controller.signal, cache: "no-store" })
+      .then(async response => {
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(payload.error || "Impossible de charger les scripts")
+        const loaded = (payload.results || []) as SalesCallScript[]
+        setScripts(loaded)
+        setCanManageScripts(Boolean(payload.canManage))
+        setSelectedScriptId(current => current || loaded.find(item => item.is_default)?.id || loaded[0]?.id || "")
+      })
+      .catch(error => {
+        if ((error as Error).name !== "AbortError") console.error("Call scripts:", error)
+      })
+    return () => controller.abort()
+  }, [])
+
+  const selectedScript = useMemo(() => scripts.find(item => item.id === selectedScriptId) || scripts.find(item => item.is_default) || scripts[0], [scripts, selectedScriptId])
 
   useEffect(() => {
     setChecked([])
     setOpen(true)
-  }, [contact.id, script.id])
+  }, [contact.id, selectedScriptId])
 
   const p = contact.properties
-  const generated = useMemo(() => generateCallScript(script, contact), [script, contact])
+  const generated = useMemo(() => selectedScript ? generateCallScript(selectedScript, contact) : null, [selectedScript, contact])
   const completed = checked.length
-  const progress = generated.discoveryQuestions.length ? Math.round((completed / generated.discoveryQuestions.length) * 100) : 0
+  const questionCount = generated?.discoveryQuestions.length || 0
+  const progress = questionCount ? Math.round((completed / questionCount) * 100) : 0
   const name = [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Contact"
   const location = [p.zip, p.city, p.state, p.country].filter(Boolean).join(" · ") || "À qualifier"
 
   function toggle(index: number) {
     setChecked(current => current.includes(index) ? current.filter(item => item !== index) : [...current, index])
+  }
+
+  function handleSaved(script: SalesCallScript) {
+    setScripts(current => {
+      const without = current.filter(item => item.id !== script.id).map(item => script.is_default ? { ...item, is_default: false } : item)
+      return [script, ...without]
+    })
   }
 
   return (
@@ -43,20 +73,21 @@ export function CallSessionPrep({ contact, remaining, script, onOpenContact }: P
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="gap-1"><PhoneCall size={12} /> Script d’appel généré</Badge>
-            <Badge variant="outline" className="gap-1"><BookOpen size={11} /> {script.name}</Badge>
+            {selectedScript ? <Badge variant="outline" className="gap-1"><BookOpen size={11} /> {selectedScript.name}</Badge> : <Badge variant="outline">Chargement du script…</Badge>}
             <span className="text-sm font-semibold">{name}</span>
             <span className="text-xs text-muted-foreground">· {remaining} contact{remaining > 1 ? "s" : ""} restant{remaining > 1 ? "s" : ""}</span>
           </div>
           <div className="mt-1 text-[11px] text-muted-foreground">Le script reprend les informations du prospect et suit 4 étapes : introduction → douleur → proposition adaptée → closing.</div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="tabular-nums">Qualification {completed}/{generated.discoveryQuestions.length} · {progress}%</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          {scripts.length ? <CallScriptLibrary scripts={scripts} selectedId={selectedScriptId} canManage={canManageScripts} onSelect={setSelectedScriptId} onSaved={handleSaved} /> : null}
+          <Badge variant="outline" className="tabular-nums">Qualification {completed}/{questionCount} · {progress}%</Badge>
           <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={onOpenContact}><ExternalLink size={13} /> Fiche</Button>
           <Button size="sm" variant="ghost" className="h-8 gap-1.5" onClick={() => setOpen(value => !value)}>{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {open ? "Réduire" : "Afficher"}</Button>
         </div>
       </div>
 
-      {open ? (
+      {open && generated && selectedScript ? (
         <div className="mt-3 space-y-3">
           <div className="grid gap-2 rounded-xl border border-border bg-card p-3 text-[11px] sm:grid-cols-2 xl:grid-cols-5">
             <div><span className="text-muted-foreground">Entreprise</span><div className="mt-0.5 font-semibold">{contextValue(p.company)}</div></div>
@@ -92,7 +123,7 @@ export function CallSessionPrep({ contact, remaining, script, onOpenContact }: P
               <div className="mb-2 flex items-center gap-2"><Badge className="h-5 w-5 justify-center rounded-full p-0">3</Badge><div className="text-xs font-bold">Proposition sur mesure</div><Sparkles size={14} className="ml-auto text-primary" /></div>
               <div className="text-xs leading-5">{generated.valueProposition}</div>
               {p.objections__retours ? <div className="mt-3 rounded-lg border border-border bg-card p-2 text-[10px] leading-4"><strong>Contexte connu :</strong> {p.objections__retours}</div> : null}
-              <div className="mt-3 text-[10px] text-muted-foreground">Ne présenter cette partie qu’après avoir identifié un problème concret. Le texte est adapté aux informations déjà présentes dans le Cockpit.</div>
+              <div className="mt-3 text-[10px] text-muted-foreground">Cette partie est générée avec les informations déjà présentes dans le Cockpit : paiement, flotte, localisation et objections connues.</div>
             </div>
 
             <div className="rounded-xl border border-border bg-card p-3">
@@ -113,7 +144,7 @@ export function CallSessionPrep({ contact, remaining, script, onOpenContact }: P
             </div>
           ) : null}
         </div>
-      ) : null}
+      ) : open ? <div className="mt-3 rounded-xl border border-dashed border-border bg-card p-5 text-center text-xs text-muted-foreground">Aucun script commercial actif. Un responsable peut en créer un depuis la bibliothèque.</div> : null}
     </div>
   )
 }
