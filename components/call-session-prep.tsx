@@ -1,17 +1,20 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { BookOpen, ChevronDown, ChevronUp, ExternalLink, Mail, PhoneCall } from "lucide-react"
+import { ChevronDown, ChevronUp, ExternalLink, Mail, PhoneCall, Sparkles } from "lucide-react"
+import { AiCallPrep } from "@/components/ai-call-prep"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CallObjectionCoachPanel } from "@/components/call-objection-coach-panel"
-import { CallScriptFlow } from "@/components/call-script-flow"
 import { PostCallEmailButton } from "@/components/post-call-email-button"
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach"
-import type { SalesCallScript, ScriptContact } from "@/lib/call-scripts"
+
+type CallPrepContact = {
+  id: string
+  properties: Record<string, string | null | undefined>
+}
 
 type Props = {
-  contact: ScriptContact
+  contact: CallPrepContact
   remaining: number
   onOpenContact: () => void
 }
@@ -22,22 +25,7 @@ function contextValue(value?: string | null) {
 
 export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
   const [open, setOpen] = useState(true)
-  const [scripts, setScripts] = useState<SalesCallScript[]>([])
   const [activityData, setActivityData] = useState<any>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch("/api/call-scripts", { signal: controller.signal, cache: "no-store" })
-      .then(async response => {
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(payload.error || "Impossible de charger les scripts")
-        setScripts((payload.results || []) as SalesCallScript[])
-      })
-      .catch(error => {
-        if ((error as Error).name !== "AbortError") console.error("Call scripts:", error)
-      })
-    return () => controller.abort()
-  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -55,17 +43,12 @@ export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
     return () => controller.abort()
   }, [contact.id])
 
-  const selectedScript = useMemo(
-    () => scripts.find(item => item.is_default && item.is_active) || scripts.find(item => item.is_active) || scripts[0],
-    [scripts],
-  )
-
   useEffect(() => {
     setOpen(true)
-  }, [contact.id, selectedScript?.id])
+  }, [contact.id])
 
   const crmProperties = activityData?.contact?.properties || {}
-  const preparedContact = useMemo<ScriptContact>(() => ({
+  const preparedContact = useMemo<CallPrepContact>(() => ({
     id: contact.id,
     properties: { ...contact.properties, ...crmProperties },
   }), [contact, crmProperties])
@@ -81,18 +64,25 @@ export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
   }), [activityData, p])
   const latestCall = coach.latestCall
   const latestCallProperties = latestCall?.properties || {}
+  const prepContext = activityData ? {
+    ...activityData,
+    contact: {
+      ...(activityData.contact || {}),
+      id: contact.id,
+      properties: preparedContact.properties,
+    },
+  } : null
 
   return (
     <div className="border-y border-primary/15 bg-primary/[0.025] px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="gap-1"><PhoneCall size={12} /> Script d’appel SI → ALORS</Badge>
-            {selectedScript ? <Badge variant="outline" className="gap-1"><BookOpen size={11} /> {selectedScript.name}</Badge> : <Badge variant="outline">Chargement du script…</Badge>}
+            <Badge className="gap-1"><Sparkles size={12} /> Assistant IA avant appel</Badge>
             <span className="text-sm font-semibold">{name}</span>
             <span className="text-xs text-muted-foreground">· {remaining} contact{remaining > 1 ? "s" : ""} restant{remaining > 1 ? "s" : ""}</span>
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">Le Cockpit prépare le flux avec les données CRM et relit les notes d’appels pour anticiper les objections déjà rencontrées.</div>
+          <div className="mt-1 text-[11px] text-muted-foreground">L’IA relit le contexte CRM pour préparer le SDR : résumé, objectif, ouverture, questions et objections à anticiper.</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <PostCallEmailButton
@@ -107,13 +97,12 @@ export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
             buttonLabel="Générer un email"
             buttonClassName="h-8 gap-1.5"
           />
-          <Button asChild size="sm" variant="outline" className="h-8 gap-1.5"><a href="/scripts"><BookOpen size={13} /> Playbook</a></Button>
           <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={onOpenContact}><ExternalLink size={13} /> Fiche</Button>
           <Button size="sm" variant="ghost" className="h-8 gap-1.5" onClick={() => setOpen(value => !value)}>{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {open ? "Réduire" : "Afficher"}</Button>
         </div>
       </div>
 
-      {open && selectedScript ? (
+      {open ? (
         <div className="mt-3 space-y-3">
           <div className="grid gap-2 rounded-xl border border-border bg-card p-3 text-[11px] sm:grid-cols-2 xl:grid-cols-6">
             <div><span className="text-muted-foreground">Entreprise</span><div className="mt-0.5 font-semibold">{contextValue(companyName)}</div></div>
@@ -123,10 +112,13 @@ export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
             <div><span className="text-muted-foreground">Flotte</span><div className="mt-0.5 font-semibold">{contextValue(p.taille_de_flo || p.taille_flotte)}</div></div>
             <div><span className="text-muted-foreground">Paiement actuel</span><div className="mt-0.5 font-semibold">{contextValue(p.solution_paiement_reservation)}</div></div>
           </div>
-          <CallObjectionCoachPanel coach={coach} compact />
-          <CallScriptFlow script={selectedScript} contact={preparedContact} />
+          {prepContext ? (
+            <AiCallPrep context={prepContext} contactId={contact.id} compact />
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-card p-5 text-center text-xs text-muted-foreground">Chargement du contexte CRM avant préparation IA…</div>
+          )}
         </div>
-      ) : open ? <div className="mt-3 rounded-xl border border-dashed border-border bg-card p-5 text-center text-xs text-muted-foreground">Aucun script commercial actif. Un responsable peut en créer un depuis “Scripts commerciaux”.</div> : null}
+      ) : null}
     </div>
   )
 }
