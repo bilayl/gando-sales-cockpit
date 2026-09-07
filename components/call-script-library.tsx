@@ -26,7 +26,7 @@ type Draft = {
   description: string
   source_url: string
   introduction: string
-  discovery_questions: string
+  discovery_questions: string[]
   value_proposition: string
   closing: string
   qualification_rules: string
@@ -42,7 +42,7 @@ const EMPTY: Draft = {
   description: "",
   source_url: "",
   introduction: "",
-  discovery_questions: "",
+  discovery_questions: [],
   value_proposition: "",
   closing: "",
   qualification_rules: "",
@@ -57,7 +57,7 @@ function cloneFlow(flow?: ScriptFlowNode[]) {
 }
 
 function toDraft(script?: SalesCallScript): Draft {
-  if (!script) return { ...EMPTY, flow: [] }
+  if (!script) return { ...EMPTY, discovery_questions: [], flow: [] }
   return {
     id: script.id,
     name: script.name,
@@ -65,7 +65,7 @@ function toDraft(script?: SalesCallScript): Draft {
     description: script.description || "",
     source_url: script.source_url || "",
     introduction: script.introduction,
-    discovery_questions: (script.discovery_questions || []).join("\n"),
+    discovery_questions: [...(script.discovery_questions || [])],
     value_proposition: script.value_proposition,
     closing: script.closing,
     qualification_rules: (script.qualification_rules || []).join("\n"),
@@ -82,7 +82,7 @@ function lines(value: string) {
 
 export function CallScriptLibrary({ scripts, selectedId, canManage, onSelect, onSaved }: Props) {
   const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState<Draft>({ ...EMPTY, flow: [] })
+  const [draft, setDraft] = useState<Draft>({ ...EMPTY, discovery_questions: [], flow: [] })
   const [saving, setSaving] = useState(false)
   const selected = useMemo(() => scripts.find(script => script.id === selectedId) || scripts[0], [scripts, selectedId])
 
@@ -118,7 +118,7 @@ export function CallScriptLibrary({ scripts, selectedId, canManage, onSelect, on
           description: draft.description,
           source_url: draft.source_url,
           introduction: draft.introduction,
-          discovery_questions: lines(draft.discovery_questions),
+          discovery_questions: draft.discovery_questions,
           value_proposition: draft.value_proposition,
           closing: draft.closing,
           qualification_rules: lines(draft.qualification_rules),
@@ -133,7 +133,7 @@ export function CallScriptLibrary({ scripts, selectedId, canManage, onSelect, on
       onSaved(payload)
       onSelect(payload.id)
       setDraft(toDraft(payload))
-      toast.success(draft.id ? "Script et flux mis à jour." : "Script créé.")
+      toast.success(draft.id ? "Playbook mis à jour." : "Playbook créé.")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible d’enregistrer le script")
     } finally {
@@ -146,18 +146,18 @@ export function CallScriptLibrary({ scripts, selectedId, canManage, onSelect, on
   return (
     <>
       <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setOpen(true)}>
-        <BookOpen size={14} /> Scripts
+        <BookOpen size={14} /> Gérer les scripts
         {selected ? <Badge variant="secondary" className="ml-1 max-w-[120px] truncate text-[9px]">{selected.name}</Badge> : null}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-5 py-4">
-            <DialogTitle className="flex items-center gap-2"><Settings2 size={18} className="text-primary" /> Bibliothèque de scripts commerciaux</DialogTitle>
-            <DialogDescription>Construisez le discours et surtout le flux conditionnel : SI le prospect répond X, ALORS le SDR suit automatiquement la branche Y.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><Settings2 size={18} className="text-primary" /> Gestion des scripts commerciaux</DialogTitle>
+            <DialogDescription>La source de vérité du playbook est le flux conditionnel : SI le prospect répond X, ALORS le SDR suit la branche Y.</DialogDescription>
           </DialogHeader>
           <div className="grid min-h-0 flex-1 md:grid-cols-[260px_1fr]">
             <div className="border-r border-border bg-muted/20 p-3">
-              <div className="mb-2 flex items-center justify-between"><span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Scripts</span>{canManage ? <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setDraft({ ...EMPTY, flow: [] })}><Plus size={14} /></Button> : null}</div>
+              <div className="mb-2 flex items-center justify-between"><span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Playbooks</span>{canManage ? <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setDraft({ ...EMPTY, discovery_questions: [], flow: [] })}><Plus size={14} /></Button> : null}</div>
               <div className="space-y-1.5">
                 {scripts.map(script => (
                   <button key={script.id} type="button" onClick={() => edit(script)} className={`w-full rounded-lg border px-3 py-2.5 text-left ${draft.id === script.id ? "border-primary/30 bg-primary/[0.05]" : "border-border bg-card hover:bg-muted/50"}`}>
@@ -169,38 +169,32 @@ export function CallScriptLibrary({ scripts, selectedId, canManage, onSelect, on
             </div>
             <div className="max-h-[74vh] overflow-y-auto p-5 minari-scrollbar">
               {!canManage ? (
-                <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-sm">Script sélectionné : <strong>{selected?.name || "Aucun"}</strong>. Les commerciaux utilisent le flux pendant l’appel ; seuls les responsables peuvent modifier les branches.</div>
+                <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-sm">Playbook sélectionné : <strong>{selected?.name || "Aucun"}</strong>. Les commerciaux peuvent consulter cette catégorie et suivre le flux pendant l’appel ; seuls les responsables peuvent enrichir les branches.</div>
               ) : (
                 <div className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5"><Label>Nom du script</Label><Input value={draft.name} onChange={e => setDraft(current => ({ ...current, name: e.target.value }))} placeholder="Loueurs indépendants — Gando" /></div>
+                    <div className="space-y-1.5"><Label>Nom du playbook</Label><Input value={draft.name} onChange={e => setDraft(current => ({ ...current, name: e.target.value }))} placeholder="Loueurs indépendants — Gando" /></div>
                     <div className="space-y-1.5"><Label>Segment</Label><Input value={draft.segment} onChange={e => setDraft(current => ({ ...current, segment: e.target.value }))} placeholder="Loueurs indépendants" /></div>
                   </div>
                   <div className="space-y-1.5"><Label>Description</Label><Input value={draft.description} onChange={e => setDraft(current => ({ ...current, description: e.target.value }))} /></div>
                   <div className="space-y-1.5"><Label>Source / playbook Notion</Label><Input value={draft.source_url} onChange={e => setDraft(current => ({ ...current, source_url: e.target.value }))} placeholder="https://..." /></div>
 
                   <div className="grid gap-3 lg:grid-cols-3">
-                    <div className="space-y-1.5"><Label>Introduction</Label><textarea className={textareaClass} value={draft.introduction} onChange={e => setDraft(current => ({ ...current, introduction: e.target.value }))} /></div>
-                    <div className="space-y-1.5"><Label>Proposition de valeur</Label><textarea className={textareaClass} value={draft.value_proposition} onChange={e => setDraft(current => ({ ...current, value_proposition: e.target.value }))} /></div>
-                    <div className="space-y-1.5"><Label>Closing / conversion</Label><textarea className={textareaClass} value={draft.closing} onChange={e => setDraft(current => ({ ...current, closing: e.target.value }))} /></div>
+                    <div className="space-y-1.5"><Label>Bloc d’introduction</Label><textarea className={textareaClass} value={draft.introduction} onChange={e => setDraft(current => ({ ...current, introduction: e.target.value }))} /></div>
+                    <div className="space-y-1.5"><Label>Bloc de proposition de valeur</Label><textarea className={textareaClass} value={draft.value_proposition} onChange={e => setDraft(current => ({ ...current, value_proposition: e.target.value }))} /></div>
+                    <div className="space-y-1.5"><Label>Bloc de closing</Label><textarea className={textareaClass} value={draft.closing} onChange={e => setDraft(current => ({ ...current, closing: e.target.value }))} /></div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Variables utilisables dans le flux : {"{{firstname}}"}, {"{{company}}"}, {"{{city}}"}, {"{{fleet}}"}, {"{{payment}}"}, {"{{deposit_hint}}"}, ainsi que {"{{introduction}}"}, {"{{value_proposition}}"} et {"{{closing}}"}.</p>
+                  <p className="text-[10px] text-muted-foreground">Variables utilisables : {"{{firstname}}"}, {"{{company}}"}, {"{{city}}"}, {"{{fleet}}"}, {"{{payment}}"}, {"{{deposit_hint}}"}, ainsi que {"{{introduction}}"}, {"{{value_proposition}}"} et {"{{closing}}"}.</p>
 
                   <CallScriptFlowEditor value={draft.flow} onChange={flow => setDraft(current => ({ ...current, flow }))} />
 
-                  <details className="rounded-xl border border-border bg-muted/15 p-3">
-                    <summary className="cursor-pointer text-xs font-semibold">Champs complémentaires / ancien script linéaire</summary>
-                    <div className="mt-3 space-y-3">
-                      <div className="space-y-1.5"><Label>Questions découverte de repli <span className="text-muted-foreground">(1 par ligne)</span></Label><textarea className={`${textareaClass} min-h-[120px]`} value={draft.discovery_questions} onChange={e => setDraft(current => ({ ...current, discovery_questions: e.target.value }))} /></div>
-                      <div className="grid gap-3 lg:grid-cols-2">
-                        <div className="space-y-1.5"><Label>Qualification <span className="text-muted-foreground">(1 règle par ligne)</span></Label><textarea className={`${textareaClass} min-h-[120px]`} value={draft.qualification_rules} onChange={e => setDraft(current => ({ ...current, qualification_rules: e.target.value }))} /></div>
-                        <div className="space-y-1.5"><Label>Objections / réponses <span className="text-muted-foreground">(1 par ligne)</span></Label><textarea className={`${textareaClass} min-h-[120px]`} value={draft.objections} onChange={e => setDraft(current => ({ ...current, objections: e.target.value }))} /></div>
-                      </div>
-                    </div>
-                  </details>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="space-y-1.5"><Label>Règles de qualification <span className="text-muted-foreground">(1 par ligne)</span></Label><textarea className={`${textareaClass} min-h-[130px]`} value={draft.qualification_rules} onChange={e => setDraft(current => ({ ...current, qualification_rules: e.target.value }))} /></div>
+                    <div className="space-y-1.5"><Label>Base d’objections / réponses <span className="text-muted-foreground">(1 par ligne)</span></Label><textarea className={`${textareaClass} min-h-[130px]`} value={draft.objections} onChange={e => setDraft(current => ({ ...current, objections: e.target.value }))} /></div>
+                  </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant={draft.is_default ? "secondary" : "outline"} size="sm" onClick={() => setDraft(current => ({ ...current, is_default: !current.is_default }))}>{draft.is_default ? "Script par défaut" : "Définir par défaut"}</Button>
+                    <Button type="button" variant={draft.is_default ? "secondary" : "outline"} size="sm" onClick={() => setDraft(current => ({ ...current, is_default: !current.is_default }))}>{draft.is_default ? "Playbook par défaut" : "Définir par défaut"}</Button>
                     <Button type="button" variant={draft.is_active ? "outline" : "secondary"} size="sm" onClick={() => setDraft(current => ({ ...current, is_active: !current.is_active }))}>{draft.is_active ? "Actif" : "Inactif"}</Button>
                   </div>
                 </div>
