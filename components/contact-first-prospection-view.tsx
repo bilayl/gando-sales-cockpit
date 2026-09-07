@@ -19,6 +19,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { CallSessionPrep } from "@/components/call-session-prep";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { NewContactDialog } from "@/components/new-contact-dialog";
 import { ProspectionBoard } from "@/components/prospection-board";
@@ -262,6 +263,7 @@ export function ContactFirstProspectionView() {
       .map(item => item.contact),
     [classified, workFilter, isRecommendationSegment],
   );
+  const currentSessionContact = activeSessionId ? (filteredContacts[0] ?? contacts[0] ?? null) : null;
 
   const actionableCount = isRecommendationSegment
     ? recommendationSummary.ACTIONABLE
@@ -388,7 +390,7 @@ export function ContactFirstProspectionView() {
             <div className="flex items-center gap-2">
               {isRecommendationSegment && !activeSessionId ? (
                 <Button size="sm" className="h-9 gap-1.5" onClick={() => void createSession()} disabled={sessionCreating || recommendationSummary.ACTIONABLE === 0}>
-                  {sessionCreating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Créer une session de 80 appels
+                  {sessionCreating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Démarrer une session de 80 appels
                 </Button>
               ) : null}
               {activeSessionId ? <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={leaveSession}><X size={14} /> Quitter la session</Button> : null}
@@ -396,6 +398,14 @@ export function ContactFirstProspectionView() {
               <Button size="sm" className="h-9 gap-1.5" onClick={() => setNewContactOpen(true)}><Plus size={14} /> Nouveau contact</Button>
             </div>
           </div>
+
+          {activeSessionId && currentSessionContact ? (
+            <CallSessionPrep
+              contact={currentSessionContact}
+              remaining={sessionMeta?.remaining ?? filteredContacts.length}
+              onOpenContact={() => router.push(`/contacts/${currentSessionContact.id}`)}
+            />
+          ) : null}
 
           {isRecommendationSegment && !activeSessionId ? (
             <div className="flex flex-wrap items-center gap-1.5 border-t border-border bg-primary/[0.025] px-4 py-2">
