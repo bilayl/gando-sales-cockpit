@@ -14,6 +14,44 @@ function cleanArray(value: unknown) {
   return value.map(item => String(item).trim()).filter(Boolean)
 }
 
+function cleanFlow(value: unknown) {
+  if (!Array.isArray(value)) return undefined
+  const nodes = value.slice(0, 100).map((raw: any) => {
+    const id = String(raw?.id || "").trim()
+    const type = String(raw?.type || "").trim()
+    const title = String(raw?.title || "").trim()
+    const text = String(raw?.text || "").trim()
+    if (!id || !["message", "question", "close"].includes(type) || !text) return null
+
+    const node: Record<string, unknown> = { id, type, title: title || id, text }
+    const nextId = String(raw?.next_id || "").trim()
+    if (nextId) node.next_id = nextId
+    const outcome = String(raw?.outcome || "").trim()
+    if (outcome) node.outcome = outcome
+
+    if (type === "question") {
+      const answers = Array.isArray(raw?.answers)
+        ? raw.answers.slice(0, 20).map((answer: any) => ({
+            id: String(answer?.id || "").trim(),
+            label: String(answer?.label || "").trim(),
+            next_id: String(answer?.next_id || "").trim(),
+          })).filter((answer: any) => answer.id && answer.label && answer.next_id)
+        : []
+      node.answers = answers
+    }
+    return node
+  }).filter(Boolean)
+
+  const ids = new Set(nodes.map((node: any) => node.id))
+  for (const node of nodes as any[]) {
+    if (node.next_id && !ids.has(node.next_id)) throw new Error(`Le flux pointe vers une étape inconnue : ${node.next_id}`)
+    for (const answer of node.answers || []) {
+      if (!ids.has(answer.next_id)) throw new Error(`La réponse « ${answer.label} » pointe vers une étape inconnue : ${answer.next_id}`)
+    }
+  }
+  return nodes
+}
+
 function normalizePayload(body: any) {
   const payload: Record<string, unknown> = {}
   for (const field of TEXT_FIELDS) {
@@ -24,6 +62,8 @@ function normalizePayload(body: any) {
     const value = cleanArray(body?.[field])
     if (value !== undefined) payload[field] = value
   }
+  const flow = cleanFlow(body?.flow)
+  if (flow !== undefined) payload.flow = flow
   if (body?.is_active !== undefined) payload.is_active = Boolean(body.is_active)
   if (body?.is_default !== undefined) payload.is_default = Boolean(body.is_default)
   return payload
