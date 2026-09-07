@@ -81,35 +81,35 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: Props) {
     event.preventDefault();
     if (saving) return;
     const properties = Object.fromEntries(Object.entries(form).filter(([, value]) => value.trim() !== "").map(([key, value]) => [key, value.trim()]));
-    if (!properties.firstname && !properties.lastname && !properties.email && !properties.phone) {
+    if (!properties.firstname && !properties.lastname && !properties.email && !properties.phone && !properties.mobilephone) {
       setError("Renseignez au moins un nom, un email ou un téléphone.");
       return;
     }
     setSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/contacts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties }) });
+      const response = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ properties, companyIds: selectedCompanies.map(company => company.id) }),
+      });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "HubSpot a rejeté la création");
+      if (!response.ok) throw new Error(payload.error || "Impossible d’enregistrer le contact dans le Cockpit");
 
-      let failedAssociations = 0;
-      await Promise.all(selectedCompanies.map(async company => {
-        const association = await fetch(`/api/contacts/${encodeURIComponent(String(payload.id))}/companies`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ companyId: company.id }),
-        });
-        if (!association.ok) failedAssociations += 1;
-      }));
-
+      const syncPending = payload.sync_status === "pending";
       setForm(EMPTY);
       setCompanyQuery("");
       setCompanyResults([]);
       setSelectedCompanies([]);
       onCreated();
       onOpenChange(false);
-      toast.success(selectedCompanies.length ? "Contact créé et associé dans HubSpot." : "Contact créé dans HubSpot.");
-      if (failedAssociations) toast.warning(`${failedAssociations} association${failedAssociations > 1 ? "s" : ""} n’a pas pu être enregistrée.`);
+
+      if (syncPending) {
+        toast.success("Contact enregistré dans le Cockpit.");
+        toast.info("Synchronisation HubSpot en attente. Elle sera reprise automatiquement dès que HubSpot sera disponible.");
+      } else {
+        toast.success(selectedCompanies.length ? "Contact enregistré et associé, synchronisé avec HubSpot." : "Contact enregistré et synchronisé avec HubSpot.");
+      }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Impossible de créer le contact";
       setError(message);
@@ -124,7 +124,7 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: Props) {
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-display"><UserPlus size={18} className="text-primary" /> Nouveau contact</DialogTitle>
-          <DialogDescription>Crée le contact dans HubSpot et associe-le immédiatement à une ou plusieurs entreprises.</DialogDescription>
+          <DialogDescription>Enregistre immédiatement le contact dans le Cockpit. La synchronisation HubSpot se fait ensuite sans bloquer le commercial.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -147,7 +147,7 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: Props) {
             {companyQuery.trim().length >= 2 ? <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-border bg-card">
               {companyResults.length ? companyResults.map(company => {
                 const selected = selectedCompanies.some(item => item.id === company.id);
-                return <button type="button" key={company.id} onClick={() => toggleCompany(company)} className="flex w-full items-center justify-between gap-3 border-b border-border/60 px-3 py-2.5 text-left last:border-b-0 hover:bg-muted/60"><div className="min-w-0"><div className="truncate text-sm font-semibold">{company.label}</div><div className="truncate text-xs text-muted-foreground">{[company.properties.domain, company.properties.city].filter(Boolean).join(" · ") || "Entreprise HubSpot"}</div></div>{selected ? <Check size={15} className="shrink-0 text-primary" /> : <Building2 size={14} className="shrink-0 text-muted-foreground" />}</button>;
+                return <button type="button" key={company.id} onClick={() => toggleCompany(company)} className="flex w-full items-center justify-between gap-3 border-b border-border/60 px-3 py-2.5 text-left last:border-b-0 hover:bg-muted/60"><div className="min-w-0"><div className="truncate text-sm font-semibold">{company.label}</div><div className="truncate text-xs text-muted-foreground">{[company.properties.domain, company.properties.city].filter(Boolean).join(" · ") || "Entreprise"}</div></div>{selected ? <Check size={15} className="shrink-0 text-primary" /> : <Building2 size={14} className="shrink-0 text-muted-foreground" />}</button>;
               }) : !searchingCompanies ? <div className="px-3 py-4 text-center text-xs text-muted-foreground">Aucune entreprise trouvée.</div> : null}
             </div> : null}
           </div>
@@ -155,7 +155,7 @@ export function NewContactDialog({ open, onOpenChange, onCreated }: Props) {
           {error ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">{error}</div> : null}
           <DialogFooter className="pt-1">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Annuler</Button>
-            <Button type="submit" className="gap-1.5" disabled={saving}>{saving ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />} Créer le contact</Button>
+            <Button type="submit" className="gap-1.5" disabled={saving}>{saving ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />} Enregistrer le contact</Button>
           </DialogFooter>
         </form>
       </DialogContent>
