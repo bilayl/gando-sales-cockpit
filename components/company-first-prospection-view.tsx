@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, ListFilter, Loader2, MapPin, Plus, RefreshCw, Search, SquareKanban, Table2, Users } from "lucide-react";
+import { CompanyMultiFilter } from "@/components/company-multi-filter";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { NewContactDialog } from "@/components/new-contact-dialog";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
@@ -15,6 +16,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  companyMatchesFilters,
+  type CompanyFilters,
+} from "@/lib/company-multi-filters";
 import {
   compareCompanyProspectionPriority,
   getCompanyProspectionDecision,
@@ -53,7 +58,7 @@ function callLabel(value?: string | null) {
 }
 
 function companyLocation(properties: Record<string, string | null | undefined>) {
-  return [properties.zip, properties.city, properties.state, properties.country].filter(Boolean).join(" · ") || "—";
+  return [properties.zip || properties.postal_code, properties.city, properties.state, properties.country].filter(Boolean).join(" · ") || "—";
 }
 
 function companySuggestion(
@@ -82,9 +87,7 @@ export function CompanyFirstProspectionView() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [locationQuery, setLocationQuery] = useState("");
-  const [owner, setOwner] = useState("");
-  const [stageFilter, setStageFilter] = useState<CompanyStage | "">("");
+  const [filters, setFilters] = useState<CompanyFilters>({});
   const [workFilter, setWorkFilter] = useState<SdrWorkFilter>("ACTIONABLE");
   const [view, setView] = useState<ViewMode>("table");
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -95,15 +98,16 @@ export function CompanyFirstProspectionView() {
     const initialPreferences = readProspectionSegmentPreferences();
     setSegmentPreferences(initialPreferences);
     Promise.all([
-      fetch("/api/segments", { cache: "no-store" }).then(response => response.json()),
-      fetch("/api/owners", { cache: "no-store" }).then(response => response.json()),
+      fetch("/api/segments", { cache: "no-store" }).then(response => response.json()).catch(() => ({ lists: [] })),
+      fetch("/api/owners", { cache: "no-store" }).then(response => response.json()).catch(() => ({ results: [] })),
     ])
       .then(([segments, ownerData]) => {
         const companyLists = ((segments.lists || []) as List[]).filter(item => item.objectTypeId === "0-2");
-        const visible = orderVisibleCompanySegments(companyLists, initialPreferences);
         setLists(companyLists);
         setOwners(ownerData.results || []);
-        setSegmentId(visible[0]?.listId || "");
+        // Toutes les entreprises est la vue par défaut afin que le Cockpit affiche
+        // toujours les données Supabase enregistrées, même sans HubSpot.
+        setSegmentId("");
       })
       .catch(cause => setError(cause instanceof Error ? cause.message : "Impossible de charger le Cockpit"));
 
@@ -123,7 +127,7 @@ export function CompanyFirstProspectionView() {
 
   useEffect(() => {
     if (!segmentId) return;
-    if (!visibleLists.some(item => item.listId === segmentId)) setSegmentId(visibleLists[0]?.listId || "");
+    if (!visibleLists.some(item => item.listId === segmentId)) setSegmentId("");
   }, [visibleLists, segmentId]);
 
   const ownerNames = useMemo(() => Object.fromEntries(owners.map(item => [
@@ -137,8 +141,6 @@ export function CompanyFirstProspectionView() {
     try {
       const params = new URLSearchParams();
       if (segmentId) params.set("segmentId", segmentId);
-      if (!segmentId && query) params.set("q", query);
-      if (!segmentId && owner) params.set("owner", owner);
       const payload = await fetchAllPagedResults<Company>(`/api/companies?${params.toString()}`);
       setCompanies(payload.results);
       setTotal(payload.total);
@@ -154,17 +156,16 @@ export function CompanyFirstProspectionView() {
 
   const baseFiltered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const locationNeedle = locationQuery.trim().toLowerCase();
     return companies.filter(company => {
       const p = company.properties;
-      const haystack = [p.name, p.domain, p.phone, p.website, p.industry].filter(Boolean).join(" ").toLowerCase();
-      const locationHaystack = [p.zip, p.city, p.state, p.country].filter(Boolean).join(" ").toLowerCase();
-      return (!needle || haystack.includes(needle))
-        && (!locationNeedle || locationHaystack.includes(locationNeedle))
-        && (!owner || p.hubspot_owner_id === owner)
-        && (!stageFilter || deriveCompanyStage(company) === stageFilter);
+      const haystack = [p.name, p.domain, p.phone, p.website, p.industry, p.city, p.state, p.country, p.zip, p.postal_code]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const stage = deriveCompanyStage(company);
+      return (!needle || haystack.includes(needle)) && companyMatchesFilters(p, filters, stage);
     });
-  }, [companies, query, locationQuery, owner, stageFilter]);
+  }, [companies, query, filters]);
 
   const classified = useMemo(() => {
     const now = Date.now();
@@ -228,7 +229,7 @@ export function CompanyFirstProspectionView() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">Prospection</span>
-              <span className="text-[10px] text-muted-foreground">{total} comptes chargés</span>
+              <span className="text-[10px] text-muted-foreground">{total} entreprises enregistrées dans le Cockpit</span>
             </div>
             <p className="mt-0.5 text-sm font-semibold text-foreground">Travaillez le prochain compte utile, sans chercher quoi faire ensuite.</p>
           </div>
@@ -277,20 +278,10 @@ export function CompanyFirstProspectionView() {
               <Button variant={view === "board" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("board")}><SquareKanban size={14} /> Pipeline</Button>
             </div>
 
-            <Select value={owner || "all"} onValueChange={value => setOwner(value === "all" ? "" : value)}>
-              <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="Commercial" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Tous les commerciaux</SelectItem>{owners.map(item => <SelectItem key={item.id} value={item.id}>{ownerNames[item.id]}</SelectItem>)}</SelectContent>
-            </Select>
-
-            <Select value={stageFilter || "all"} onValueChange={value => setStageFilter(value === "all" ? "" : value as CompanyStage)}>
-              <SelectTrigger className="h-9 w-[165px]"><SelectValue placeholder="Statut" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Tous les statuts</SelectItem>{COMPANY_PIPELINE.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
-            </Select>
-
-            <div className="relative"><MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={locationQuery} onChange={event => setLocationQuery(event.target.value)} placeholder="Ville, région, pays…" className="h-9 w-48 pl-9" /></div>
-            <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, domaine…" className="h-9 w-48 pl-9" /></div>
+            <CompanyMultiFilter companies={companies} owners={owners} value={filters} onChange={setFilters} />
+            <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, domaine, ville…" className="h-9 w-56 pl-9" /></div>
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>{syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}</Button>
-            <span className="ml-auto hidden text-[11px] text-muted-foreground 2xl:inline">Ces filtres s'appliquent aussi à la prochaine session d'appels.</span>
+            <span className="ml-auto hidden text-[11px] text-muted-foreground 2xl:inline">Les filtres Entreprises s'appliquent aussi à la prochaine session d'appels.</span>
           </div>
 
           {error ? <div className="mx-4 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
