@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncActivities, syncCompanies, syncContacts, syncDeals, syncTasks } from "@/lib/sync";
+import { syncPendingLocalContacts } from "@/lib/contact-sync-outbox";
 import { refreshCompanyQualifications, syncCompanyContactLinks } from "@/lib/company-qualification-sync";
 import { refreshCallRecommendations } from "@/lib/call-recommendations";
 import { apiError, isHubSpotAuthenticated } from "@/lib/hubspot";
@@ -60,6 +61,12 @@ async function refreshDerivedData() {
   });
 }
 
+async function syncContactsBothWays() {
+  const outbound = await syncPendingLocalContacts();
+  const inbound = await syncContacts();
+  return { outbound, inbound };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const expectedCronSecret = process.env.CRON_SECRET?.trim();
@@ -81,7 +88,7 @@ export async function GET(request: NextRequest) {
         results = { companies: await runWithSyncLease("companies", () => syncCompanies()) };
         break;
       case "contacts":
-        results = { contacts: await runWithSyncLease("contacts", () => syncContacts()) };
+        results = { contacts: await runWithSyncLease("contacts", () => syncContactsBothWays()) };
         break;
       case "deals":
         results = { deals: await runWithSyncLease("deals", () => syncDeals()) };
@@ -99,7 +106,7 @@ export async function GET(request: NextRequest) {
       }
       case "all": {
         const companies = await runWithSyncLease("companies", () => syncCompanies());
-        const contacts = await runWithSyncLease("contacts", () => syncContacts());
+        const contacts = await runWithSyncLease("contacts", () => syncContactsBothWays());
         const deals = await runWithSyncLease("deals", () => syncDeals());
         const tasks = await runWithSyncLease("tasks", () => syncTasks());
         const activities = await runWithSyncLease("activities", () => syncActivities());
