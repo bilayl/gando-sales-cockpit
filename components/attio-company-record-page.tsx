@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   Building2,
@@ -13,10 +13,8 @@ import {
   Globe2,
   Mail,
   MapPin,
-  MoreHorizontal,
   Phone,
   RefreshCw,
-  Search,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -26,9 +24,7 @@ import { ProfileSourcingButton } from "@/components/profile-sourcing-button";
 import { formatDate } from "@/lib/utils";
 
 type Tab = "overview" | "activity" | "emails" | "calls" | "team" | "notes" | "tasks";
-
 type Props = { recordId: string };
-
 type ActivityItem = {
   id: string;
   type: "note" | "call" | "meeting" | "task";
@@ -37,7 +33,7 @@ type ActivityItem = {
   date?: string | null;
 };
 
-const tabs: Array<{ key: Tab; label: string; icon: typeof Mail; count?: keyof any }> = [
+const tabs: Array<{ key: Tab; label: string; icon: typeof Mail }> = [
   { key: "overview", label: "Vue d’ensemble", icon: Building2 },
   { key: "activity", label: "Activité", icon: Clock3 },
   { key: "emails", label: "Emails", icon: Mail },
@@ -75,7 +71,7 @@ function domainHref(domain?: string, website?: string) {
   return value.startsWith("http") ? value : `https://${value}`;
 }
 
-function FieldRow({ icon: Icon, label, children }: { icon: typeof Globe2; label: string; children: React.ReactNode }) {
+function FieldRow({ icon: Icon, label, children }: { icon: typeof Globe2; label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[18px_112px_minmax(0,1fr)] items-start gap-2 py-2.5 text-[13px]">
       <Icon className="mt-0.5 h-4 w-4 text-[#707070]" strokeWidth={1.7} />
@@ -85,7 +81,7 @@ function FieldRow({ icon: Icon, label, children }: { icon: typeof Globe2; label:
   );
 }
 
-function Highlight({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon: typeof Users }) {
+function Highlight({ label, value, icon: Icon }: { label: string; value: ReactNode; icon: typeof Users }) {
   return (
     <div className="min-h-[112px] rounded-[14px] border border-[#e6e6e6] bg-white px-4 py-3 shadow-[0_1px_1px_rgba(0,0,0,0.02)]">
       <div className="flex items-center justify-between gap-3 text-[13px] text-[#5c5c5c]">
@@ -207,7 +203,6 @@ export function AttioCompanyRecordPage({ recordId }: Props) {
   if (loading) {
     return <div className="grid min-h-screen place-items-center bg-white"><RefreshCw className="h-5 w-5 animate-spin text-[#777]" /></div>;
   }
-
   if (error) {
     return <div className="min-h-screen bg-white p-8 text-sm text-red-600">{error}</div>;
   }
@@ -258,11 +253,9 @@ export function AttioCompanyRecordPage({ recordId }: Props) {
           <span className="text-[13px] text-[#9a9a9a]">/</span>
           <span className="max-w-[260px] truncate text-[13px] font-medium">{name}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg text-[12px] text-[#5f5f5f]" onClick={() => void load()}><RefreshCw className="h-3.5 w-3.5" /> Actualiser</Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-[#777]"><Search className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-[#777]"><MoreHorizontal className="h-4 w-4" /></Button>
-        </div>
+        <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg text-[12px] text-[#5f5f5f]" onClick={() => void load()}>
+          <RefreshCw className="h-3.5 w-3.5" /> Actualiser
+        </Button>
       </div>
 
       <div className="grid min-h-[calc(100vh-48px)] grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -276,16 +269,16 @@ export function AttioCompanyRecordPage({ recordId }: Props) {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-[minmax(0,1fr)_36px_36px_36px] gap-2">
-              {effectiveEmail ? <a href={`mailto:${effectiveEmail}`} className="flex h-9 items-center justify-center gap-2 rounded-lg border border-[#dedede] bg-white px-3 text-[13px] font-medium hover:bg-[#fafafa]"><Mail className="h-4 w-4" /> Composer un email</a> : <div className="flex h-9 items-center justify-center gap-2 rounded-lg border border-[#dedede] bg-[#fafafa] px-3 text-[13px] text-[#888]"><Mail className="h-4 w-4" /> Pas d’email</div>}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {effectiveEmail ? <a href={`mailto:${effectiveEmail}`} className="flex h-9 min-w-[160px] flex-1 items-center justify-center gap-2 rounded-lg border border-[#dedede] bg-white px-3 text-[13px] font-medium hover:bg-[#fafafa]"><Mail className="h-4 w-4" /> Composer un email</a> : <div className="flex h-9 min-w-[140px] flex-1 items-center justify-center gap-2 rounded-lg border border-[#dedede] bg-[#fafafa] px-3 text-[13px] text-[#888]"><Mail className="h-4 w-4" /> Pas d’email</div>}
               <NewCRMNoteButton kind="company" recordId={recordId} onCreated={async () => { setTab("notes"); await load(); }} />
-              {effectivePhone ? <a href={`tel:${effectivePhone}`} className="grid h-9 w-9 place-items-center rounded-lg border border-[#dedede] text-[#555] hover:bg-[#fafafa]" title="Appeler"><Phone className="h-4 w-4" /></a> : <span className="grid h-9 w-9 place-items-center rounded-lg border border-[#e5e5e5] text-[#bbb]"><Phone className="h-4 w-4" /></span>}
-              <ProfileSourcingButton entityType="company" entityId={recordId} onCompleted={load} label="Enrichir" />
+              {effectivePhone ? <a href={`tel:${effectivePhone}`} className="grid h-9 w-9 place-items-center rounded-lg border border-[#dedede] text-[#555] hover:bg-[#fafafa]" title="Appeler"><Phone className="h-4 w-4" /></a> : null}
+              <ProfileSourcingButton entityType="company" entityId={recordId} onCompleted={load} label="Enrichir" className="h-9" />
             </div>
           </div>
 
           <div className="border-b border-[#ededed] px-4 py-4">
-            <button className="mb-2 flex items-center gap-1 text-[12px] font-medium text-[#5f5f5f]"><span>Détails de l’entreprise</span><ChevronDown className="h-3.5 w-3.5" /></button>
+            <div className="mb-2 flex items-center gap-1 text-[12px] font-medium text-[#5f5f5f]"><span>Détails de l’entreprise</span><ChevronDown className="h-3.5 w-3.5" /></div>
             <div className="divide-y divide-[#f1f1f1]">
               <FieldRow icon={Globe2} label="Domaine">{website ? <a href={website} target="_blank" rel="noreferrer" className="truncate text-[#4f67e8] hover:underline">{domain || p.website}</a> : <span className="text-[#8a8a8a]">Définir une valeur…</span>}</FieldRow>
               <FieldRow icon={Building2} label="Nom"><span className="font-medium">{name}</span></FieldRow>
@@ -297,7 +290,7 @@ export function AttioCompanyRecordPage({ recordId }: Props) {
               <FieldRow icon={Users} label="Flotte"><span>{p.taille_flotte || "Définir une valeur…"}</span></FieldRow>
               <FieldRow icon={CheckSquare} label="Prospection"><span>{p.statut_prospection || p.hs_lead_status || "Définir une valeur…"}</span></FieldRow>
             </div>
-            <div className="mt-2"><AllCRMProperties properties={p} /></div>
+            <div className="mt-3"><AllCRMProperties kind="company" recordId={recordId} /></div>
           </div>
 
           <div className="px-4 py-4">
@@ -378,7 +371,7 @@ export function AttioCompanyRecordPage({ recordId }: Props) {
             ) : null}
 
             {tab === "team" ? (
-              <section><div className="mb-4"><h2 className="text-[18px] font-medium">Équipe</h2><p className="mt-1 text-[12px] text-[#777]">Contacts associés à {name}.</p></div><div className="grid gap-2 md:grid-cols-2">{contacts.map((contact: any) => { const cp = contact.properties || {}; const contactName = [cp.firstname, cp.lastname].filter(Boolean).join(" ") || cp.email || "Contact"; return <Link key={contact.id} href={`/contacts/${contact.id}`} className="rounded-xl border border-[#e6e6e6] p-4 hover:bg-[#fafafa]"><div className="text-[13px] font-medium">{contactName}</div><div className="mt-1 text-[12px] text-[#777]">{cp.jobtitle || "Contact"}</div><div className="mt-3 flex gap-3 text-[11px] text-[#666]">{cp.email ? <span>{cp.email}</span> : null}{cp.phone || cp.mobilephone ? <span>{cp.phone || cp.mobilephone}</span> : null}</div></Link>; })}{!contacts.length ? <div className="text-[13px] text-[#777]">Aucun contact associé.</div> : null}</div></section>
+              <section><div className="mb-4"><h2 className="text-[18px] font-medium">Équipe</h2><p className="mt-1 text-[12px] text-[#777]">Contacts associés à {name}.</p></div><div className="grid gap-2 md:grid-cols-2">{contacts.map((contact: any) => { const cp = contact.properties || {}; const contactName = [cp.firstname, cp.lastname].filter(Boolean).join(" ") || cp.email || "Contact"; return <Link key={contact.id} href={`/contacts/${contact.id}`} className="rounded-xl border border-[#e6e6e6] p-4 hover:bg-[#fafafa]"><div className="text-[13px] font-medium">{contactName}</div><div className="mt-1 text-[12px] text-[#777]">{cp.jobtitle || "Contact"}</div><div className="mt-3 flex flex-wrap gap-3 text-[11px] text-[#666]">{cp.email ? <span>{cp.email}</span> : null}{cp.phone || cp.mobilephone ? <span>{cp.phone || cp.mobilephone}</span> : null}</div></Link>; })}{!contacts.length ? <div className="text-[13px] text-[#777]">Aucun contact associé.</div> : null}</div></section>
             ) : null}
 
             {tab === "notes" ? (
