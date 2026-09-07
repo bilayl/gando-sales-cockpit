@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     const result = await createFilteredSalesCallSession({
       owner: body?.owner ? String(body.owner) : undefined,
       location: body?.location ? String(body.location) : undefined,
+      filters: body?.filters,
       targetCount: body?.targetCount ? Number(body.targetCount) : 80,
       createdBy: body?.createdBy ? String(body.createdBy) : null,
     });
