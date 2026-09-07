@@ -36,12 +36,13 @@ export async function POST(request: NextRequest) {
 
     const scope = scopeFrom(body.scope);
     const snapshot = await buildSalesSnapshot(question, scope);
-    const result = await askOpenRouterSales(question, snapshot);
+    const actor = access.email || access.displayName || "Sales Cockpit";
+    const result = await askOpenRouterSales(question, snapshot, actor);
 
     return NextResponse.json({
       ...result,
       snapshot,
-      askedBy: access.email || access.displayName || "Sales Cockpit",
+      askedBy: actor,
     });
   } catch (error) {
     const e = error as Error & { status?: number };
