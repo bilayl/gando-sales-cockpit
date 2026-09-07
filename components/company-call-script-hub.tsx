@@ -1,15 +1,17 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { BookOpen, Building2, Loader2, MessageSquareText, Sparkles, Target } from "lucide-react"
+import { BookOpen, Building2, Database, Loader2, MapPin, UserRound, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { CallScriptFlow } from "@/components/call-script-flow"
 import { CallScriptLibrary } from "@/components/call-script-library"
-import { generateCallScript, type SalesCallScript, type ScriptContact } from "@/lib/call-scripts"
+import type { SalesCallScript, ScriptContact } from "@/lib/call-scripts"
 
 type Props = { recordId: string }
 
 type CompanyPayload = {
+  source?: "cockpit" | "cockpit+hubspot" | "hubspot"
   company?: { id?: string; properties?: Record<string, string | null | undefined> }
   contacts?: Array<{ id: string; properties?: Record<string, string | null | undefined> }>
 }
@@ -20,9 +22,12 @@ export function CompanyCallScriptHub({ recordId }: Props) {
   const [canManage, setCanManage] = useState(false)
   const [companyData, setCompanyData] = useState<CompanyPayload | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
     const controller = new AbortController()
+    setLoading(true)
+    setError("")
     Promise.all([
       fetch("/api/call-scripts", { cache: "no-store", signal: controller.signal }).then(async response => {
         const payload = await response.json().catch(() => ({}))
@@ -42,8 +47,8 @@ export function CompanyCallScriptHub({ recordId }: Props) {
         setSelectedId(loaded.find(item => item.is_default)?.id || loaded[0]?.id || "")
         setCompanyData(companyPayload)
       })
-      .catch(error => {
-        if ((error as Error).name !== "AbortError") console.error("Company scripts:", error)
+      .catch(cause => {
+        if ((cause as Error).name !== "AbortError") setError(cause instanceof Error ? cause.message : "Impossible de préparer le script")
       })
       .finally(() => setLoading(false))
     return () => controller.abort()
@@ -55,22 +60,23 @@ export function CompanyCallScriptHub({ recordId }: Props) {
   const cp = contact?.properties || {}
 
   const scriptContact = useMemo<ScriptContact>(() => ({
-    id: contact?.id || recordId,
+    id: `${recordId}:${contact?.id || "company"}`,
     properties: {
+      ...company,
       ...cp,
       company: company.name || cp.company || "Cette entreprise",
+      name: company.name,
       city: company.city || cp.city,
       state: company.state || cp.state,
       country: company.country || cp.country,
-      zip: company.zip || cp.zip,
+      zip: company.zip || company.postal_code || cp.zip,
+      postal_code: company.postal_code || company.zip || cp.zip,
       taille_de_flo: company.taille_de_flo || company.taille_flotte || cp.taille_de_flo || cp.taille_flotte,
       taille_flotte: company.taille_flotte || company.taille_de_flo || cp.taille_flotte || cp.taille_de_flo,
       solution_paiement_reservation: company.solution_paiement_reservation || cp.solution_paiement_reservation,
       objections__retours: company.objections__retours || cp.objections__retours,
     },
-  }), [companyData, recordId])
-
-  const generated = useMemo(() => selected ? generateCallScript(selected, scriptContact) : null, [selected, scriptContact])
+  }), [companyData, recordId, company, cp, contact?.id])
 
   function handleSaved(script: SalesCallScript) {
     setScripts(current => {
@@ -80,6 +86,11 @@ export function CompanyCallScriptHub({ recordId }: Props) {
     setSelectedId(script.id)
   }
 
+  const contactName = [cp.firstname, cp.lastname].filter(Boolean).join(" ") || cp.email || "Aucun contact sélectionné"
+  const location = [company.zip || company.postal_code, company.city, company.state, company.country].filter(Boolean).join(" · ") || "À qualifier"
+  const fleet = company.taille_flotte || company.taille_de_flo || cp.taille_flotte || cp.taille_de_flo || "À qualifier"
+  const payment = company.solution_paiement_reservation || cp.solution_paiement_reservation || "À qualifier"
+
   return (
     <div className="page-shell px-4 pt-4 sm:px-6 lg:px-7">
       <div className="mx-auto max-w-[1500px]">
@@ -88,30 +99,30 @@ export function CompanyCallScriptHub({ recordId }: Props) {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className="gap-1"><Building2 size={12} /> Entreprise</Badge>
-                <h2 className="font-display text-base font-bold">Script commercial</h2>
+                <h2 className="font-display text-base font-bold">Script commercial conditionnel</h2>
                 {selected ? <Badge variant="outline"><BookOpen size={11} className="mr-1" />{selected.name}</Badge> : null}
+                {companyData?.source ? <Badge variant="outline" className="gap-1 text-[9px]"><Database size={10} />{companyData.source === "cockpit" ? "Données Cockpit" : "Cockpit + HubSpot"}</Badge> : null}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Le script est préparé au niveau de l’entreprise puis personnalisé avec le contact appelé.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Le SDR choisit la réponse du prospect ; le Cockpit applique le SI → ALORS et affiche automatiquement la bonne question, objection ou sortie.</p>
             </div>
             {scripts.length ? <CallScriptLibrary scripts={scripts} selectedId={selectedId} canManage={canManage} onSelect={setSelectedId} onSaved={handleSaved} /> : null}
           </div>
 
           {loading ? (
-            <div className="grid h-24 place-items-center"><Loader2 className="animate-spin text-primary" /></div>
-          ) : generated ? (
-            <div className="mt-4 grid gap-2 lg:grid-cols-3">
-              <div className="rounded-xl border border-border bg-card p-3">
-                <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"><MessageSquareText size={13} /> 1. Introduction</div>
-                <div className="text-xs leading-5">“{generated.introduction}”</div>
+            <div className="grid h-28 place-items-center"><Loader2 className="animate-spin text-primary" /></div>
+          ) : error ? (
+            <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-xs text-destructive">{error}</div>
+          ) : selected ? (
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="rounded-xl border border-border bg-card p-3"><div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"><Building2 size={11} /> Entreprise</div><div className="mt-1 text-xs font-semibold">{company.name || "Entreprise"}</div></div>
+                <div className="rounded-xl border border-border bg-card p-3"><div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"><UserRound size={11} /> Contact appelé</div><div className="mt-1 text-xs font-semibold">{contactName}</div></div>
+                <div className="rounded-xl border border-border bg-card p-3"><div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"><MapPin size={11} /> Localisation</div><div className="mt-1 text-xs font-semibold">{location}</div></div>
+                <div className="rounded-xl border border-border bg-card p-3"><div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground"><Users size={11} /> Flotte</div><div className="mt-1 text-xs font-semibold">{fleet}</div></div>
+                <div className="rounded-xl border border-border bg-card p-3"><div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Paiement actuel</div><div className="mt-1 text-xs font-semibold">{payment}</div></div>
               </div>
-              <div className="rounded-xl border border-primary/20 bg-card p-3">
-                <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"><Sparkles size={13} /> 3. Proposition adaptée</div>
-                <div className="text-xs leading-5">{generated.valueProposition}</div>
-              </div>
-              <div className="rounded-xl border border-border bg-card p-3">
-                <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground"><Target size={13} /> 4. Closing</div>
-                <div className="text-xs leading-5">“{generated.closing}”</div>
-              </div>
+
+              <CallScriptFlow script={selected} contact={scriptContact} />
             </div>
           ) : (
             <div className="mt-4 rounded-xl border border-dashed border-border bg-card p-4 text-xs text-muted-foreground">Aucun script commercial actif.</div>
