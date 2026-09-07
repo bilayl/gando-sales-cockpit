@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, Filter, Search, X } from "lucide-react";
+import { ArrowLeft, Check, Filter, MapPin, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import {
   COMPANY_FILTER_LABELS,
   activeCompanyFilterCount,
   companyPropertyValues,
+  isCompanyLocationFilter,
   type CompanyFilterKey,
   type CompanyFilters,
 } from "@/lib/company-multi-filters";
@@ -42,6 +43,14 @@ const STAGE_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(item => [item.value
 
 function ownerLabel(owner: Owner) {
   return [owner.firstName, owner.lastName].filter(Boolean).join(" ") || owner.email || owner.id;
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr-FR")
+    .trim();
 }
 
 export function CompanyMultiFilter({ companies, owners, value, onChange }: Props) {
@@ -93,7 +102,10 @@ export function CompanyMultiFilter({ companies, owners, value, onChange }: Props
 
   const currentOptions = activeKey ? optionsByKey[activeKey] : [];
   const selectedValues = activeKey ? value[activeKey] || [] : [];
-  const visibleOptions = currentOptions.filter(option => option.label.toLocaleLowerCase("fr-FR").includes(search.trim().toLocaleLowerCase("fr-FR")));
+  const searchNeedle = normalizeSearch(search);
+  const visibleOptions = currentOptions.filter(option => normalizeSearch(option.label).includes(searchNeedle));
+  const canUseTypedLocation = Boolean(activeKey && isCompanyLocationFilter(activeKey) && search.trim())
+    && !currentOptions.some(option => normalizeSearch(option.value) === searchNeedle);
 
   function displayLabel(key: CompanyFilterKey, optionValue: string) {
     if (key === "owner") return ownerNames.get(optionValue) || optionValue;
@@ -113,6 +125,17 @@ export function CompanyMultiFilter({ companies, owners, value, onChange }: Props
     setValues(key, current.includes(optionValue)
       ? current.filter(item => item !== optionValue)
       : [...current, optionValue]);
+  }
+
+  function addTypedLocation() {
+    if (!activeKey || !isCompanyLocationFilter(activeKey)) return;
+    const typed = search.trim();
+    if (!typed) return;
+    const current = value[activeKey] || [];
+    if (!current.some(item => normalizeSearch(item) === normalizeSearch(typed))) {
+      setValues(activeKey, [...current, typed]);
+    }
+    setSearch("");
   }
 
   function clearAll() {
@@ -175,10 +198,29 @@ export function CompanyMultiFilter({ companies, owners, value, onChange }: Props
               <div className="p-3 pb-2">
                 <div className="relative">
                   <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Rechercher…" className="h-10 pl-9" />
+                  <Input
+                    autoFocus
+                    value={search}
+                    onChange={event => setSearch(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === "Enter" && canUseTypedLocation) {
+                        event.preventDefault();
+                        addTypedLocation();
+                      }
+                    }}
+                    placeholder={isCompanyLocationFilter(activeKey) ? "Rechercher ou saisir une localisation…" : "Rechercher…"}
+                    className="h-10 pl-9"
+                  />
                 </div>
+                {isCompanyLocationFilter(activeKey) ? <div className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground"><MapPin size={11} /> La recherche accepte aussi une valeur partielle : ville, région, pays ou code postal.</div> : null}
               </div>
               <div className="max-h-[330px] overflow-y-auto px-2 pb-2 minari-scrollbar">
+                {canUseTypedLocation ? (
+                  <button type="button" onClick={addTypedLocation} className="mb-1 flex w-full items-center gap-3 rounded-lg border border-primary/20 bg-primary/[0.035] px-2.5 py-2.5 text-left text-sm hover:bg-primary/[0.06]">
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded border border-primary/30 bg-background"><MapPin size={12} className="text-primary" /></span>
+                    <span className="min-w-0 flex-1">Filtrer sur <strong>“{search.trim()}”</strong></span>
+                  </button>
+                ) : null}
                 {visibleOptions.map(option => {
                   const checked = selectedValues.includes(option.value);
                   return (
@@ -189,7 +231,7 @@ export function CompanyMultiFilter({ companies, owners, value, onChange }: Props
                     </button>
                   );
                 })}
-                {!visibleOptions.length ? <div className="px-3 py-8 text-center text-xs text-muted-foreground">Aucune valeur disponible dans les données enregistrées.</div> : null}
+                {!visibleOptions.length && !canUseTypedLocation ? <div className="px-3 py-8 text-center text-xs text-muted-foreground">Aucune valeur disponible dans les données enregistrées.</div> : null}
               </div>
             </>
           ) : (
@@ -204,7 +246,7 @@ export function CompanyMultiFilter({ companies, owners, value, onChange }: Props
                   const options = optionsByKey[key]?.length || 0;
                   return (
                     <button type="button" key={key} onClick={() => openKey(key)} className="flex w-full items-center rounded-lg px-3 py-2.5 text-left hover:bg-muted/70">
-                      <div className="min-w-0 flex-1"><div className="text-sm font-medium">{COMPANY_FILTER_LABELS[key]}</div><div className="text-[10px] text-muted-foreground">{options} valeur{options > 1 ? "s" : ""} disponible{options > 1 ? "s" : ""}</div></div>
+                      <div className="min-w-0 flex-1"><div className="flex items-center gap-1.5 text-sm font-medium">{isCompanyLocationFilter(key) ? <MapPin size={12} className="text-primary" /> : null}{COMPANY_FILTER_LABELS[key]}</div><div className="text-[10px] text-muted-foreground">{options} valeur{options > 1 ? "s" : ""} disponible{options > 1 ? "s" : ""}</div></div>
                       {selected ? <Badge variant="secondary" className="mr-2 text-[10px]">{selected}</Badge> : null}
                       <span className="text-muted-foreground">›</span>
                     </button>
