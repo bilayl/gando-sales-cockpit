@@ -11,15 +11,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { isPostCallEmailKind, POST_CALL_EMAIL_LABELS, type PostCallEmailKind } from "@/lib/post-call-email-types";
 
 export type PostCallEmailButtonProps = {
-  contactId: string;
+  contactId?: string;
   callId?: string;
-  email: string;
+  email?: string;
   firstName?: string;
   companyName?: string;
   senderName?: string;
   callTitle?: string;
   callBody?: string;
-  transcription: string;
+  transcription?: string;
   emailKind?: PostCallEmailKind;
   buttonLabel?: string;
   buttonClassName?: string;
@@ -36,13 +36,13 @@ function modelLabel(value: string) {
 export function PostCallEmailButton({
   contactId,
   callId,
-  email,
+  email = "",
   firstName,
   companyName,
   senderName,
   callTitle,
   callBody,
-  transcription,
+  transcription = "",
   emailKind = "recap",
   buttonLabel,
   buttonClassName,
@@ -101,6 +101,7 @@ export function PostCallEmailButton({
   }
 
   async function logSentEmail() {
+    if (!contactId) return;
     try {
       const marker = callId ? `[GANDO_POST_CALL_EMAIL:${callId}]\n` : "";
       const note = `${marker}Email envoyé depuis le Sales Cockpit\nType : ${POST_CALL_EMAIL_LABELS[kind]}\nDestinataire : ${to.trim()}\n\nObjet : ${subject.trim()}\n\n${body.trim()}`;
@@ -129,8 +130,8 @@ export function PostCallEmailButton({
           to,
           subject,
           body,
-          contactId,
-          callId,
+          contactId: contactId || "",
+          callId: callId || "",
           kind,
         }),
       });
@@ -161,9 +162,9 @@ export function PostCallEmailButton({
         </button>
 
         <div className="pr-10">
-          <div className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles size={16} /> Automatisation après appel</div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles size={16} /> Email commercial assisté</div>
           <h3 className="mt-1 text-xl font-bold tracking-tight">{POST_CALL_EMAIL_LABELS[kind]}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">L'email est généré à partir du contexte HubSpot. Quand vous cliquez sur Envoyer, il part directement depuis le backend du Sales Cockpit via SMTP2GO puis est enregistré dans l'historique.</p>
+          <p className="mt-1 text-sm text-muted-foreground">L'email est généré à partir du contexte CRM, des notes et des appels disponibles. Le destinataire reste modifiable avant l'envoi.</p>
           {modelUsed ? <p className="mt-2 text-xs font-medium text-muted-foreground">IA utilisée : <span className="text-foreground">{modelLabel(modelUsed)}</span></p> : null}
         </div>
 
@@ -183,6 +184,7 @@ export function PostCallEmailButton({
           <div className="space-y-1.5">
             <Label>Destinataire</Label>
             <Input type="email" value={to} onChange={event => setTo(event.target.value)} placeholder="prospect@entreprise.fr" />
+            {!email ? <p className="text-[10px] text-muted-foreground">Aucun email n'est encore enregistré : saisissez le destinataire ici.</p> : null}
           </div>
           <div className="space-y-1.5">
             <Label>Objet</Label>
