@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  createSalesCallSession,
   getSalesCallSession,
   updateSalesCallSessionItem,
   type SalesCallSessionItemStatus,
 } from "@/lib/call-recommendations";
+import { createFilteredSalesCallSession } from "@/lib/call-session-builder";
 import { apiError, isHubSpotAuthenticated } from "@/lib/hubspot";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +32,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Reconnectez HubSpot pour continuer." }, { status: 401 });
     }
     const body = await request.json().catch(() => ({}));
-    const result = await createSalesCallSession({
+    const result = await createFilteredSalesCallSession({
       owner: body?.owner ? String(body.owner) : undefined,
+      location: body?.location ? String(body.location) : undefined,
       targetCount: body?.targetCount ? Number(body.targetCount) : 80,
       createdBy: body?.createdBy ? String(body.createdBy) : null,
     });
