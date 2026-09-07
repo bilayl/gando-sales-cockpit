@@ -27,12 +27,19 @@ export const COMPANY_FILTER_LABELS: Record<CompanyFilterKey, string> = {
 
 export const COMPANY_FILTER_KEYS = Object.keys(COMPANY_FILTER_LABELS) as CompanyFilterKey[];
 
+const LOCATION_KEYS = new Set<CompanyFilterKey>(["zip", "city", "state", "country"]);
+
 function clean(value: unknown) {
   return String(value ?? "").trim();
 }
 
 function normalized(value: unknown) {
-  return clean(value).toLocaleLowerCase("fr-FR");
+  return clean(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr-FR")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function companyPropertyValues(
@@ -70,6 +77,18 @@ export function sanitizeCompanyFilters(input: unknown): CompanyFilters {
   return result;
 }
 
+function matchesSelected(actual: string[], selected: string[], fuzzy = false) {
+  const normalizedActual = actual.map(normalized).filter(Boolean);
+  const normalizedSelected = selected.map(normalized).filter(Boolean);
+  if (!normalizedActual.length || !normalizedSelected.length) return false;
+
+  return normalizedSelected.some(wanted => normalizedActual.some(candidate => {
+    if (candidate === wanted) return true;
+    if (!fuzzy) return false;
+    return candidate.includes(wanted) || wanted.includes(candidate);
+  }));
+}
+
 export function companyMatchesFilters(
   properties: Record<string, string | null | undefined>,
   filters: CompanyFilters,
@@ -78,13 +97,15 @@ export function companyMatchesFilters(
   return COMPANY_FILTER_KEYS.every(key => {
     const selected = filters[key];
     if (!selected?.length) return true;
-    const actual = companyPropertyValues(properties, key, stage).map(normalized).filter(Boolean);
-    if (!actual.length) return false;
-    const wanted = selected.map(normalized);
-    return wanted.some(value => actual.includes(value));
+    const actual = companyPropertyValues(properties, key, stage).map(clean).filter(Boolean);
+    return matchesSelected(actual, selected, LOCATION_KEYS.has(key));
   });
 }
 
 export function activeCompanyFilterCount(filters: CompanyFilters) {
   return COMPANY_FILTER_KEYS.filter(key => filters[key]?.length).length;
+}
+
+export function isCompanyLocationFilter(key: CompanyFilterKey) {
+  return LOCATION_KEYS.has(key);
 }
