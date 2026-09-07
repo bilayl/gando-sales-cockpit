@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { AlertTriangle, Clock3, PhoneCall, PhoneOutgoing, RefreshCw, Target, UsersRound } from "lucide-react"
+import { Clock3, PhoneCall, PhoneOutgoing, RefreshCw, Target, UsersRound } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -86,13 +86,6 @@ function time(value: string | null | undefined) {
   return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(date)
 }
 
-function dateTime(value: string | null | undefined) {
-  if (!value) return "Jamais reçu"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Date inconnue"
-  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date)
-}
-
 export function AnalyticsOnoffLive() {
   const [data, setData] = useState<LiveStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -150,13 +143,6 @@ export function AnalyticsOnoffLive() {
             </Button>
           </div>
         </div>
-
-        {data?.freshness.isStale ? (
-          <div className="flex gap-2 border-b border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-            <div><strong>Le flux n’est pas frais.</strong> Dernier CDR Onoff reçu : {dateTime(data.freshness.lastReceivedAt)}. Un zéro aujourd’hui ne doit donc pas être interprété comme “aucun appel”.</div>
-          </div>
-        ) : null}
 
         <div className="grid divide-y divide-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-6">
           {[
