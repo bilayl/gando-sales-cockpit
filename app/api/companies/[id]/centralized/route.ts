@@ -54,10 +54,99 @@ async function loadContactWithAssociations(contactId: string) {
   );
 }
 
+function qualificationProperties(row: any) {
+  const stringValue = (input: unknown) => input === undefined || input === null ? undefined : String(input);
+  return {
+    qualification_status: stringValue(row.qualification_status || row.prospecting_status),
+    qualification_score: stringValue(row.qualification_score),
+    qualification_reason: stringValue(row.qualification_reason),
+    qualification_last_activity_at: stringValue(row.qualification_last_activity_at),
+    qualification_next_action_at: stringValue(row.qualification_next_action_at),
+    qualification_contacts_count: stringValue(row.qualification_contacts_count),
+    qualification_open_tasks: stringValue(row.qualification_open_tasks),
+    qualification_overdue_tasks: stringValue(row.qualification_overdue_tasks),
+    qualification_deals_count: stringValue(row.qualification_deals_count),
+    qualification_last_call_status: stringValue(row.qualification_last_call_status),
+    qualification_source: stringValue(row.qualification_source),
+  };
+}
+
+async function loadLocalCompanyPayload(companyId: string) {
+  const supabase = getSupabaseAdmin();
+  const { data: localCompany, error: companyError } = await supabase
+    .from("companies")
+    .select("*")
+    .eq("hubspot_id", companyId)
+    .maybeSingle();
+  if (companyError) throw companyError;
+  if (!localCompany) return null;
+
+  const { data: localContacts, error: contactsError } = await supabase
+    .from("contacts")
+    .select("id,hubspot_id,first_name,last_name,email,phone,job_title,owner_hubspot_id,raw_data,hubspot_updated_at")
+    .eq("company_id", localCompany.id)
+    .order("hubspot_updated_at", { ascending: false, nullsFirst: false });
+  if (contactsError) throw contactsError;
+
+  const rawCompany = localCompany.raw_data?.properties || {};
+  const companyProperties = {
+    ...rawCompany,
+    name: rawCompany.name || localCompany.name || undefined,
+    domain: rawCompany.domain || localCompany.domain || undefined,
+    phone: rawCompany.phone || localCompany.phone || undefined,
+    website: rawCompany.website || localCompany.website || undefined,
+    city: rawCompany.city || localCompany.city || undefined,
+    zip: rawCompany.zip || localCompany.postal_code || undefined,
+    postal_code: rawCompany.postal_code || localCompany.postal_code || undefined,
+    country: rawCompany.country || localCompany.country || undefined,
+    hubspot_owner_id: rawCompany.hubspot_owner_id || localCompany.owner_hubspot_id || undefined,
+    ...qualificationProperties(localCompany),
+    __hubspot_id: companyId,
+  };
+
+  const contacts = (localContacts || []).map(row => {
+    const raw = row.raw_data?.properties || {};
+    return {
+      ...(row.raw_data || {}),
+      id: String(row.hubspot_id),
+      properties: {
+        ...raw,
+        firstname: raw.firstname || row.first_name || undefined,
+        lastname: raw.lastname || row.last_name || undefined,
+        email: raw.email || row.email || undefined,
+        phone: raw.phone || raw.mobilephone || row.phone || undefined,
+        jobtitle: raw.jobtitle || row.job_title || undefined,
+        hubspot_owner_id: raw.hubspot_owner_id || row.owner_hubspot_id || undefined,
+        company: raw.company || localCompany.name || undefined,
+        __hubspot_id: String(row.hubspot_id),
+      },
+    };
+  });
+
+  return {
+    source: "cockpit" as const,
+    company: {
+      ...(localCompany.raw_data || {}),
+      id: companyId,
+      properties: companyProperties,
+    },
+    contacts,
+    notes: [],
+    calls: [],
+    meetings: [],
+    tasks: [],
+    deals: [],
+    nextMeeting: null,
+    associationWarnings: 0,
+    activitySummary: { notes: 0, calls: 0, meetings: 0, tasks: 0, total: 0 },
+  };
+}
+
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  await requireCockpitAccess();
+  const { id: companyId } = await params;
+
   try {
-    await requireCockpitAccess();
-    const { id: companyId } = await params;
     const company = await hubspotJson(
       `/crm/objects/2026-03/companies/${encodeURIComponent(companyId)}?properties=${encodeURIComponent(COMPANY_PROPERTIES.join(","))}&associations=contacts,deals,notes,calls,meetings,tasks`,
     );
@@ -152,6 +241,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }
 
     return NextResponse.json({
+      source: "cockpit+hubspot",
       company: { ...company, id: String(company.id), properties: { ...(company.properties || {}), __hubspot_id: String(company.id) } },
       contacts: contacts.map(contact => ({
         ...contact,
@@ -172,10 +262,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         tasks: tasks.length,
         total: notes.length + calls.length + meetings.length + tasks.length,
       },
-    });
-  } catch (error) {
-    const e = error as Error & { status?: number };
-    console.error("Centralized HubSpot company:", e);
-    return NextResponse.json({ error: e.message || "Impossible de centraliser l’activité HubSpot" }, { status: e.status || 500 });
+    }, { headers: { "cache-control": "no-store" } });
+  } catch (hubspotError) {
+    console.warn("Centralized HubSpot company unavailable, serving Cockpit data:", hubspotError);
+    try {
+      const localPayload = await loadLocalCompanyPayload(companyId);
+      if (localPayload) return NextResponse.json(localPayload, { headers: { "cache-control": "no-store" } });
+    } catch (localError) {
+      console.error("Local company fallback:", localError);
+    }
+
+    const e = hubspotError as Error & { status?: number };
+    return NextResponse.json({ error: e.message || "Impossible de charger l’entreprise" }, { status: e.status === 404 ? 404 : 500 });
   }
 }
