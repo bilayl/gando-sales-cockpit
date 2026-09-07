@@ -10,6 +10,7 @@ export type CockpitAccess = {
   displayName?: string;
   role: CockpitRole;
   canAccessDealRoom: boolean;
+  canAccessKpi: boolean;
   canManageTeam: boolean;
 };
 
@@ -49,6 +50,7 @@ export async function getCockpitAccess(): Promise<CockpitAccess | null> {
     displayName,
     role,
     canAccessDealRoom: role !== "commercial",
+    canAccessKpi: role !== "commercial",
     canManageTeam: role === "admin",
   };
 }
