@@ -1,4 +1,5 @@
 export type CompanyFilterKey =
+  | "location"
   | "zip"
   | "city"
   | "state"
@@ -13,6 +14,7 @@ export type CompanyFilterKey =
 export type CompanyFilters = Partial<Record<CompanyFilterKey, string[]>>;
 
 export const COMPANY_FILTER_LABELS: Record<CompanyFilterKey, string> = {
+  location: "Localisation",
   zip: "Code postal",
   city: "Ville",
   state: "Région",
@@ -32,7 +34,22 @@ function clean(value: unknown) {
 }
 
 function normalized(value: unknown) {
-  return clean(value).toLocaleLowerCase("fr-FR");
+  return clean(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr-FR")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function locationValues(properties: Record<string, string | null | undefined>) {
+  return [
+    properties.zip,
+    properties.postal_code,
+    properties.city,
+    properties.state,
+    properties.country,
+  ];
 }
 
 export function companyPropertyValues(
@@ -41,6 +58,7 @@ export function companyPropertyValues(
   stage?: string,
 ) {
   switch (key) {
+    case "location": return locationValues(properties);
     case "zip": return [properties.zip, properties.postal_code];
     case "city": return [properties.city];
     case "state": return [properties.state];
