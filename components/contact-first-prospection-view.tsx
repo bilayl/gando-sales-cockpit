@@ -302,7 +302,7 @@ export function ContactFirstProspectionView() {
       const response = await fetch("/api/call-recommendations/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ owner: owner || undefined, targetCount: 80 }),
+        body: JSON.stringify({ owner: owner || undefined, location: locationQuery.trim() || undefined, targetCount: 80 }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Impossible de créer la session d'appels");
