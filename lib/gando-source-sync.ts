@@ -12,6 +12,7 @@ import {
 type Row = Record<string, unknown>;
 
 const PAGE_SIZE = 250;
+const SENSITIVE_KEY_PATTERN = /(password|passwd|secret|access[_-]?token|refresh[_-]?token|api[_-]?key|private[_-]?key|authorization)/i;
 
 function toIsoTimestamp(value: unknown) {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -26,6 +27,22 @@ function sourceUpdatedAt(row: Row) {
     toIsoTimestamp(row.created_at) ||
     null
   );
+}
+
+function sanitizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(item => sanitizeValue(item));
+  if (!value || typeof value !== "object") return value;
+
+  const result: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (SENSITIVE_KEY_PATTERN.test(key)) continue;
+    result[key] = sanitizeValue(child);
+  }
+  return result;
+}
+
+function sanitizeRow(row: Row): Row {
+  return sanitizeValue(row) as Row;
 }
 
 function formatError(error: unknown) {
@@ -91,7 +108,7 @@ async function syncOneTable(config: GandoSourceTableConfig) {
           source_schema: config.schema,
           source_table: config.table,
           source_id: String(rawId),
-          payload: row,
+          payload: sanitizeRow(row),
           source_updated_at: sourceUpdatedAt(row),
           sync_run_id: runId,
           synced_at: new Date().toISOString(),
