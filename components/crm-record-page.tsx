@@ -6,17 +6,14 @@ import {
   ArrowLeft,
   Building2,
   CalendarClock,
-  CheckCircle2,
   Clock,
   FileText,
   Globe,
   History,
-  ListTodo,
   Loader2,
   Mail,
   MapPin,
   Phone,
-  PhoneCall,
   RefreshCw,
   UserRound,
   Users,
@@ -25,10 +22,13 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CallObjectionCoachPanel } from "@/components/call-objection-coach-panel";
 import { EditableCRMTaskCard } from "@/components/editable-crm-task-card";
+import { PostCallEmailButton } from "@/components/post-call-email-button";
 import { ProfileSourcingButton } from "@/components/profile-sourcing-button";
 import { AllCRMProperties, NewCRMNoteButton } from "@/components/crm-record-tools";
 import { QualificationProperties } from "@/components/qualification-properties";
+import { buildCallObjectionCoach } from "@/lib/call-objection-coach";
 import { formatDate, initials } from "@/lib/utils";
 
 type Kind = "contact" | "company";
@@ -139,18 +139,6 @@ function MeetingCard({ meeting }: { meeting: any }) {
   );
 }
 
-function TaskCard({ task, owners }: { task: any; owners: Record<string, string> }) {
-  const p = task.properties || {};
-  const body = plainText(p.hs_task_body);
-  return (
-    <article className="rounded-xl border border-border bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div className="font-semibold">{p.hs_task_subject || "Tâche"}</div><div className="text-xs text-muted-foreground">{p.hs_timestamp ? formatDate(p.hs_timestamp) : "—"}</div></div>
-      <div className="mt-2 flex flex-wrap gap-1.5"><Badge variant="outline">{p.hs_task_status || "À faire"}</Badge><Badge variant="outline">{ownerLabel(owners, p.hubspot_owner_id)}</Badge></div>
-      {body ? <div className="mt-3 whitespace-pre-wrap text-sm leading-6">{body}</div> : null}
-    </article>
-  );
-}
-
 export function CRMRecordPage({ kind, recordId }: Props) {
   const [data, setData] = useState<any>(null);
   const [owners, setOwners] = useState<Record<string, string>>({});
@@ -200,6 +188,22 @@ export function CRMRecordPage({ kind, recordId }: Props) {
   const effectivePhone = p.phone || p.mobilephone || associatedPhone;
   const phoneLabel = p.phone || p.mobilephone ? "Téléphone" : associatedPhone ? "Téléphone contact associé" : "Téléphone";
 
+  const associatedEmailRecord = kind === "company"
+    ? linkedRecords.find((item: any) => item?.properties?.email)
+    : null;
+  const effectiveEmail = p.email || associatedEmailRecord?.properties?.email || "";
+  const emailContactId = kind === "contact" ? recordId : associatedEmailRecord?.id ? String(associatedEmailRecord.id) : "";
+  const emailContactProperties = kind === "contact" ? p : associatedEmailRecord?.properties || {};
+  const emailFirstName = emailContactProperties.firstname || undefined;
+  const companyName = kind === "company" ? name : linkedRecords[0]?.properties?.name || p.company || "";
+  const coach = useMemo(() => buildCallObjectionCoach({
+    properties: { ...p, ...(kind === "company" ? emailContactProperties : {}) },
+    notes: data?.notes || [],
+    calls: data?.calls || [],
+  }), [data, p, kind, emailContactProperties]);
+  const latestCall = coach.latestCall;
+  const latestCallProperties = latestCall?.properties || {};
+
   return (
     <div className="page-shell min-h-screen p-4 sm:p-6 lg:p-7">
       <div className="mx-auto max-w-[1500px]">
@@ -216,25 +220,52 @@ export function CRMRecordPage({ kind, recordId }: Props) {
               <div className="flex flex-wrap items-start justify-between gap-5">
                 <div className="flex min-w-0 items-start gap-4">
                   <Avatar className="h-14 w-14 shrink-0 rounded-xl border border-border bg-muted"><AvatarFallback className="rounded-xl bg-muted text-primary">{kind === "company" ? <Building2 size={25} /> : initials(p.firstname, p.lastname)}</AvatarFallback></Avatar>
-                  <div className="min-w-0"><div className="text-xs font-bold uppercase tracking-[0.15em] text-primary">{kind === "company" ? "Entreprise" : "Contact"}</div><h1 className="mt-1 break-words font-display text-2xl font-bold tracking-tight">{name}</h1><div className="mt-1 text-sm text-muted-foreground">{subtitle || "Fiche CRM HubSpot"}</div><div className="mt-3 flex flex-wrap gap-1.5">{p.statut_prospection ? <Badge>{p.statut_prospection}</Badge> : null}{p.statut_de_lappel ? <Badge variant="outline">{p.statut_de_lappel}</Badge> : null}<Badge variant="outline"><History size={11} /> {counts.notes + counts.calls + counts.meetings + counts.tasks} activités</Badge></div></div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold uppercase tracking-[0.15em] text-primary">{kind === "company" ? "Entreprise" : "Contact"}</div>
+                    <h1 className="mt-1 break-words font-display text-2xl font-bold tracking-tight">{name}</h1>
+                    <div className="mt-1 text-sm text-muted-foreground">{subtitle || "Fiche CRM HubSpot"}</div>
+                    {effectiveEmail ? <a href={`mailto:${effectiveEmail}`} className="mt-1.5 inline-flex max-w-full items-center gap-1.5 text-xs font-medium text-primary hover:underline"><Mail size={12} /><span className="truncate">{effectiveEmail}</span>{kind === "company" ? <span className="text-muted-foreground">· contact associé</span> : null}</a> : <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Mail size={12} /> Email à renseigner</div>}
+                    <div className="mt-3 flex flex-wrap gap-1.5">{p.statut_prospection ? <Badge>{p.statut_prospection}</Badge> : null}{p.statut_de_lappel ? <Badge variant="outline">{p.statut_de_lappel}</Badge> : null}<Badge variant="outline"><History size={11} /> {counts.notes + counts.calls + counts.meetings + counts.tasks} activités</Badge></div>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2"><NewCRMNoteButton kind={kind} recordId={recordId} onCreated={async () => { setTab("notes"); await load(); }} /><ProfileSourcingButton entityType={kind} entityId={recordId} onCompleted={load} label="Enrichir cette fiche" />{effectivePhone ? <Button asChild><a href={`tel:${effectivePhone}`}><Phone size={14} /> Appeler</a></Button> : null}{p.email ? <Button asChild variant="outline"><a href={`mailto:${p.email}`}><Mail size={14} /> Email</a></Button> : null}{kind === "company" && (p.website || p.domain) ? <Button asChild variant="outline"><a href={(p.website || "").startsWith("http") ? p.website : `https://${p.domain || p.website}`} target="_blank" rel="noreferrer"><Globe size={14} /> Site web</a></Button> : null}</div>
+                <div className="flex flex-wrap gap-2">
+                  <NewCRMNoteButton kind={kind} recordId={recordId} onCreated={async () => { setTab("notes"); await load(); }} />
+                  <ProfileSourcingButton entityType={kind} entityId={recordId} onCompleted={load} label="Enrichir cette fiche" />
+                  {effectivePhone ? <Button asChild><a href={`tel:${effectivePhone}`}><Phone size={14} /> Appeler</a></Button> : null}
+                  <PostCallEmailButton
+                    contactId={emailContactId || undefined}
+                    callId={latestCall?.id ? String(latestCall.id) : undefined}
+                    email={effectiveEmail}
+                    firstName={emailFirstName}
+                    companyName={companyName}
+                    callTitle={latestCallProperties.hs_call_title || undefined}
+                    callBody={latestCallProperties.hs_call_body || latestCallProperties.hs_call_summary || undefined}
+                    transcription={coach.transcript}
+                    buttonLabel="Générer un email"
+                    buttonClassName="h-9 gap-1.5"
+                  />
+                  {effectiveEmail ? <Button asChild variant="outline"><a href={`mailto:${effectiveEmail}`}><Mail size={14} /> Email</a></Button> : null}
+                  {kind === "company" && (p.website || p.domain) ? <Button asChild variant="outline"><a href={(p.website || "").startsWith("http") ? p.website : `https://${p.domain || p.website}`} target="_blank" rel="noreferrer"><Globe size={14} /> Site web</a></Button> : null}
+                </div>
               </div>
             </Card>
+
+            <CallObjectionCoachPanel coach={coach} />
 
             <div className="grid gap-5 xl:grid-cols-[330px_minmax(0,1fr)]">
               <div className="space-y-5">
                 <Card className="p-4"><div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Informations</div><div className="grid gap-2">
                   <Info icon={UserRound} label="Commercial" value={ownerLabel(owners, p.hubspot_owner_id)} />
                   <Info icon={Phone} label={phoneLabel} value={effectivePhone} />
-                  {kind === "contact" ? <Info icon={Mail} label="Email" value={p.email} /> : <Info icon={Globe} label="Domaine" value={p.domain || p.website} />}
-                  <Info icon={MapPin} label="Localisation" value={[p.zip, p.city, p.state, p.country].filter(Boolean).join(" · ")} />
+                  <Info icon={Mail} label={kind === "company" ? "Email contact associé" : "Email"} value={effectiveEmail} />
+                  {kind === "company" ? <Info icon={Globe} label="Domaine" value={p.domain || p.website} /> : null}
+                  <Info icon={MapPin} label="Localisation" value={[p.zip || p.postal_code, p.city, p.state, p.country].filter(Boolean).join(" · ")} />
                   <Info icon={Clock} label="Dernière activité" value={p.hs_last_sales_activity_timestamp ? formatDate(p.hs_last_sales_activity_timestamp) : undefined} />
                 </div></Card>
 
                 <Card className="p-4"><QualificationProperties kind={kind} properties={{ ...p, __hubspot_id: p.__hubspot_id || recordId }} fallbackProperties={kind === "company" ? (data?.contacts?.[0]?.properties || {}) : {}} /></Card>
 
-                <Card className="p-4"><div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">{kind === "company" ? <Users size={14} /> : <Building2 size={14} />} {kind === "company" ? "Contacts associés" : "Entreprises associées"}</div><div className="space-y-2">{linkedRecords.length ? linkedRecords.map((item: any) => { const lp = item.properties || {}; const label = kind === "company" ? [lp.firstname, lp.lastname].filter(Boolean).join(" ") || lp.email || "Contact" : lp.name || lp.domain || "Entreprise"; const href = kind === "company" ? `/contacts/${item.id}` : `/companies/${item.id}`; return <Link key={item.id} href={href} className="block rounded-lg border border-border bg-muted/25 p-3 transition hover:border-primary/30 hover:bg-muted/50"><div className="truncate text-sm font-semibold">{label}</div><div className="mt-1 truncate text-xs text-muted-foreground">{kind === "company" ? lp.phone || lp.mobilephone || lp.jobtitle || lp.email : lp.domain || lp.city}</div></Link>; }) : <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Aucun élément associé.</div>}</div></Card>
+                <Card className="p-4"><div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">{kind === "company" ? <Users size={14} /> : <Building2 size={14} />} {kind === "company" ? "Contacts associés" : "Entreprises associées"}</div><div className="space-y-2">{linkedRecords.length ? linkedRecords.map((item: any) => { const lp = item.properties || {}; const label = kind === "company" ? [lp.firstname, lp.lastname].filter(Boolean).join(" ") || lp.email || "Contact" : lp.name || lp.domain || "Entreprise"; const href = kind === "company" ? `/contacts/${item.id}` : `/companies/${item.id}`; return <Link key={item.id} href={href} className="block rounded-lg border border-border bg-muted/25 p-3 transition hover:border-primary/30 hover:bg-muted/50"><div className="truncate text-sm font-semibold">{label}</div><div className="mt-1 truncate text-xs text-muted-foreground">{kind === "company" ? lp.email || lp.phone || lp.mobilephone || lp.jobtitle : lp.domain || lp.city}</div></Link>; }) : <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Aucun élément associé.</div>}</div></Card>
                 <AllCRMProperties kind={kind} recordId={recordId} />
               </div>
 
