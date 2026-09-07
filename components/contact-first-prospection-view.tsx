@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { CallSessionPrep } from "@/components/call-session-prep";
+import { ContactMultiFilter } from "@/components/contact-multi-filter";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { NewContactDialog } from "@/components/new-contact-dialog";
 import { ProspectionBoard } from "@/components/prospection-board";
@@ -31,6 +32,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  contactMatchesFilters,
+  type ContactFilters,
+} from "@/lib/contact-multi-filters";
 import {
   compareContactProspectionPriority,
   getContactProspectionDecision,
@@ -57,7 +62,6 @@ type SessionMeta = { id: string; name: string; remaining: number; totalItems: nu
 
 const CALL_RECOMMENDATIONS_SEGMENT = "__database_call_recommendations__";
 const EMPTY_SUMMARY: RecommendationSummary = { ACTIONABLE: 0, OPPORTUNITY: 0, SNOOZED: 0, EXCLUDED: 0 };
-const PROSPECTION_OPTIONS = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Pas intéressé", "Perdu"];
 const CALL_LABELS: Record<string, string> = {
   interesse: "Intéressé",
   "intéressé": "Intéressé",
@@ -117,32 +121,26 @@ export function ContactFirstProspectionView() {
   const [sessionCreating, setSessionCreating] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [locationQuery, setLocationQuery] = useState("");
-  const [owner, setOwner] = useState("");
-  const [prospectionStatus, setProspectionStatus] = useState("");
+  const [filters, setFilters] = useState<ContactFilters>({});
   const [workFilter, setWorkFilter] = useState<WorkFilter>("ACTIONABLE");
   const [recommendationBucket, setRecommendationBucket] = useState<RecommendationBucket>("ACTIONABLE");
   const [view, setView] = useState<ViewMode>("table");
   const [newContactOpen, setNewContactOpen] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [recommendationSummary, setRecommendationSummary] = useState<RecommendationSummary>(EMPTY_SUMMARY);
-  const [recommendationEvaluatedAt, setRecommendationEvaluatedAt] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionMeta, setSessionMeta] = useState<SessionMeta | null>(null);
 
   const isRecommendationSegment = segmentId === CALL_RECOMMENDATIONS_SEGMENT;
 
   useEffect(() => {
-    const initialPreferences = readProspectionSegmentPreferences();
-    setSegmentPreferences(initialPreferences);
-
+    setSegmentPreferences(readProspectionSegmentPreferences());
     Promise.all([
       fetch("/api/segments", { cache: "no-store" }).then(response => response.json()),
       fetch("/api/owners", { cache: "no-store" }).then(response => response.json()),
     ])
       .then(([segmentData, ownerData]) => {
-        const contactLists = ((segmentData.lists || []) as List[]).filter(item => item.objectTypeId === "0-1");
-        setLists(contactLists);
+        setLists(((segmentData.lists || []) as List[]).filter(item => item.objectTypeId === "0-1"));
         setOwners(ownerData.results || []);
       })
       .catch(cause => setError(cause instanceof Error ? cause.message : "Impossible de charger la prospection contacts"));
@@ -198,15 +196,11 @@ export function ContactFirstProspectionView() {
         setContacts(payload.results || []);
         setTotal(payload.total || payload.results?.length || 0);
         setRecommendationSummary(payload.summary || EMPTY_SUMMARY);
-        setRecommendationEvaluatedAt(payload.evaluatedAt || null);
         return;
       }
 
       const params = new URLSearchParams();
       if (segmentId) params.set("segmentId", segmentId);
-      if (!segmentId && query) params.set("q", query);
-      if (!segmentId && owner) params.set("owner", owner);
-      if (!segmentId && prospectionStatus) params.set("prospection", prospectionStatus);
       const payload = await fetchAllPagedResults<Contact>(`/api/contacts?${params.toString()}`);
       setContacts(payload.results);
       setTotal(payload.total);
@@ -227,21 +221,16 @@ export function ContactFirstProspectionView() {
   }, [isRecommendationSegment]);
 
   const baseFiltered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const locationNeedle = locationQuery.trim().toLowerCase();
+    const needle = query.trim().toLocaleLowerCase("fr-FR");
     return contacts.filter(contact => {
       const p = contact.properties;
       const haystack = [p.firstname, p.lastname, p.email, p.phone, p.mobilephone, p.company, p.jobtitle]
         .filter(Boolean)
         .join(" ")
-        .toLowerCase();
-      const locationHaystack = [p.zip, p.city, p.state, p.country].filter(Boolean).join(" ").toLowerCase();
-      return (!needle || haystack.includes(needle))
-        && (!locationNeedle || locationHaystack.includes(locationNeedle))
-        && (!owner || p.hubspot_owner_id === owner)
-        && (!prospectionStatus || p.statut_prospection === prospectionStatus);
+        .toLocaleLowerCase("fr-FR");
+      return (!needle || haystack.includes(needle)) && contactMatchesFilters(p, filters);
     });
-  }, [contacts, query, locationQuery, owner, prospectionStatus]);
+  }, [contacts, query, filters]);
 
   const classified = useMemo(() => {
     if (isRecommendationSegment) {
@@ -263,20 +252,12 @@ export function ContactFirstProspectionView() {
       .map(item => item.contact),
     [classified, workFilter, isRecommendationSegment],
   );
-  const currentSessionContact = activeSessionId ? (filteredContacts[0] ?? contacts[0] ?? null) : null;
 
-  const actionableCount = isRecommendationSegment
-    ? recommendationSummary.ACTIONABLE
-    : classified.filter(item => item.decision.bucket === "ACTIONABLE").length;
-  const opportunities = isRecommendationSegment
-    ? recommendationSummary.OPPORTUNITY
-    : classified.filter(item => item.decision.bucket === "OPPORTUNITY").length;
-  const snoozed = isRecommendationSegment
-    ? recommendationSummary.SNOOZED
-    : classified.filter(item => item.decision.bucket === "SNOOZED").length;
-  const excluded = isRecommendationSegment
-    ? recommendationSummary.EXCLUDED
-    : classified.filter(item => item.decision.bucket === "EXCLUDED").length;
+  const currentSessionContact = activeSessionId ? (filteredContacts[0] ?? contacts[0] ?? null) : null;
+  const actionableCount = isRecommendationSegment ? recommendationSummary.ACTIONABLE : classified.filter(item => item.decision.bucket === "ACTIONABLE").length;
+  const opportunities = isRecommendationSegment ? recommendationSummary.OPPORTUNITY : classified.filter(item => item.decision.bucket === "OPPORTUNITY").length;
+  const snoozed = isRecommendationSegment ? recommendationSummary.SNOOZED : classified.filter(item => item.decision.bucket === "SNOOZED").length;
+  const excluded = isRecommendationSegment ? recommendationSummary.EXCLUDED : classified.filter(item => item.decision.bucket === "EXCLUDED").length;
   const currentList = visibleLists.find(item => item.listId === segmentId);
   const pageTitle = activeSessionId && sessionMeta ? sessionMeta.name : isRecommendationSegment ? "Suggestions d’appels" : currentList?.name || "Prospection par contact";
 
@@ -302,10 +283,11 @@ export function ContactFirstProspectionView() {
       const response = await fetch("/api/call-recommendations/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ owner: owner || undefined, location: locationQuery.trim() || undefined, targetCount: 80 }),
+        body: JSON.stringify({ filters, targetCount: 80 }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Impossible de créer la session d'appels");
+      setQuery("");
       setActiveSessionId(payload.session.id);
       setSessionMeta({ id: payload.session.id, name: payload.session.name, remaining: payload.remaining || 0, totalItems: payload.totalItems || 0 });
       setContacts(payload.results || []);
@@ -382,15 +364,15 @@ export function ContactFirstProspectionView() {
               {activeSessionId && sessionMeta ? (
                 <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-primary">{sessionMeta.remaining} contacts restant dans la session</strong> · {sessionMeta.totalItems} sélectionnés au départ · les contacts reportés ou exclus sortent automatiquement de la file.</p>
               ) : isRecommendationSegment ? (
-                <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-primary">{actionableCount} contacts à appeler</strong> · {opportunities} RDV/opportunités · {snoozed} à rappeler plus tard · {excluded} exclus / ne plus appeler</p>
+                <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-primary">{filteredContacts.length} contacts visibles avec les filtres</strong> · {actionableCount} à appeler dans la base · {opportunities} opportunités · {snoozed} à rappeler · {excluded} exclus</p>
               ) : (
-                <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-primary">{actionableCount} à appeler</strong> · {opportunities} RDV/opportunités · {snoozed} relances futures · {excluded} exclus · {total} contacts au total</p>
+                <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-primary">{filteredContacts.length} contacts visibles</strong> · {total} contacts dans le segment</p>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {isRecommendationSegment && !activeSessionId ? (
-                <Button size="sm" className="h-9 gap-1.5" onClick={() => void createSession()} disabled={sessionCreating || recommendationSummary.ACTIONABLE === 0}>
-                  {sessionCreating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Démarrer une session de 80 appels
+              {isRecommendationSegment && !activeSessionId && recommendationBucket === "ACTIONABLE" ? (
+                <Button size="sm" className="h-9 gap-1.5" onClick={() => void createSession()} disabled={sessionCreating || filteredContacts.length === 0}>
+                  {sessionCreating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Démarrer une session · {Math.min(filteredContacts.length, 80)} ciblés
                 </Button>
               ) : null}
               {activeSessionId ? <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={leaveSession}><X size={14} /> Quitter la session</Button> : null}
@@ -436,21 +418,13 @@ export function ContactFirstProspectionView() {
                 </SelectContent>
               </Select>
             )}
-            <Select value={owner || "all"} onValueChange={value => setOwner(value === "all" ? "" : value)} disabled={Boolean(activeSessionId)}>
-              <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="Commercial" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Tous les commerciaux</SelectItem>{owners.map(item => <SelectItem key={item.id} value={item.id}>{ownerNames[item.id]}</SelectItem>)}</SelectContent>
-            </Select>
-            <Select value={prospectionStatus || "all"} onValueChange={value => setProspectionStatus(value === "all" ? "" : value)}>
-              <SelectTrigger className="h-9 w-[170px]"><SelectValue placeholder="Statut prospection" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">Tous les statuts</SelectItem>{PROSPECTION_OPTIONS.map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
-            </Select>
-            <div className="relative"><MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={locationQuery} onChange={event => setLocationQuery(event.target.value)} placeholder="Ville, région, pays, CP…" className="h-9 w-52 pl-9" /></div>
+            <ContactMultiFilter contacts={contacts} owners={owners} value={filters} onChange={setFilters} disabled={Boolean(activeSessionId)} />
             <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Contact, société…" className="h-9 w-52 pl-9" /></div>
             {isRecommendationSegment && !activeSessionId ? (
               <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void load(false, true)} disabled={loading}><Database size={14} /> Recalculer les scores</Button>
             ) : null}
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>{syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser HubSpot"}</Button>
-            <span className="ml-auto text-[11px] text-muted-foreground">{isRecommendationSegment ? "Une décision du responsable Sales passe toujours avant le score automatique." : "Les priorités du segment restent calculées depuis les propriétés HubSpot."}</span>
+            <span className="ml-auto text-[11px] text-muted-foreground">Les filtres sélectionnés sont repris automatiquement au démarrage de la session.</span>
           </div>
 
           {error ? <div className="mx-4 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
