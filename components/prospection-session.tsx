@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach";
 import type { SalesCallScript, ScriptContact } from "@/lib/call-scripts";
 import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
+import { getProspectCallTiming } from "@/lib/prospection-call-timing";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
 
@@ -401,6 +402,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   const [reminderAt, setReminderAt] = useState(reminderPreset(1));
   const [note, setNote] = useState("");
   const [savingOutcome, setSavingOutcome] = useState(false);
+  const [timingNow, setTimingNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (!open) return;
@@ -409,6 +411,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
     setError("");
     setFinishOpen(false);
     setOutcome(null);
+    setTimingNow(Date.now());
     const now = Date.now();
     const activeIds = companies
       .filter(company => {
@@ -438,27 +441,50 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
       .finally(() => setLoading(false));
   }, [open, companies]);
 
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setInterval(() => setTimingNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, [open]);
+
   const queue = useMemo(() => {
-    const now = Date.now();
+    const now = timingNow;
     return companies
       .map(company => {
         const stage = deriveCompanyStage(company, now);
-        return { company, stage, summary: summaries[company.id], decision: getCompanyProspectionDecision(company, stage, now) };
+        return {
+          company,
+          stage,
+          summary: summaries[company.id],
+          decision: getCompanyProspectionDecision(company, stage, now),
+          timing: getProspectCallTiming(company.properties, now),
+        };
       })
       .filter(item => item.decision.bucket === "ACTIONABLE")
       .sort((a, b) => {
+        if (a.timing.isCallableNow !== b.timing.isCallableNow) return a.timing.isCallableNow ? -1 : 1;
+
+        if (!a.timing.isCallableNow) {
+          const aNext = a.timing.nextBestCallAt ? Date.parse(a.timing.nextBestCallAt) : Number.MAX_SAFE_INTEGER;
+          const bNext = b.timing.nextBestCallAt ? Date.parse(b.timing.nextBestCallAt) : Number.MAX_SAFE_INTEGER;
+          if (aNext !== bNext) return aNext - bNext;
+        }
+
         const tasks = taskRank(a.summary) - taskRank(b.summary);
         if (tasks !== 0) return tasks;
         const priority = compareCompanyProspectionPriority(a, b, now);
         if (priority !== 0) return priority;
+        const timing = b.timing.score - a.timing.score;
+        if (timing !== 0) return timing;
         const aDue = a.summary?.nextTask?.dueAt ? Date.parse(a.summary.nextTask.dueAt) : Number.MAX_SAFE_INTEGER;
         const bDue = b.summary?.nextTask?.dueAt ? Date.parse(b.summary.nextTask.dueAt) : Number.MAX_SAFE_INTEGER;
         return aDue - bDue;
       });
-  }, [companies, summaries]);
+  }, [companies, summaries, timingNow]);
 
   const remaining = queue.filter(item => !done.has(item.company.id));
   const current = remaining[Math.min(index, Math.max(remaining.length - 1, 0))] || null;
+  const callableNowCount = remaining.filter(item => item.timing.isCallableNow).length;
 
   function advanceAfterOutcome() {
     if (!current) return;
@@ -570,6 +596,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
   const p = current?.company.properties || {};
   const task = current?.summary?.nextTask || null;
+  const timing = current?.timing || null;
   const currentReminder = p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date;
   const needsReminder = outcome === "FOLLOW_UP" || outcome === "NO_ANSWER" || outcome === "WRONG_CONTACT";
 
@@ -582,19 +609,20 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
               <div>
                 <DialogTitle>Session d’appels setter</DialogTitle>
                 <DialogDescription className="mt-1">
-                  Appelle, qualifie le résultat, puis passe automatiquement au compte suivant. Une action ou une sortie pour chaque appel.
+                  La file privilégie automatiquement les comptes qu’il est pertinent d’appeler maintenant selon leur heure locale, puis leur priorité commerciale.
                 </DialogDescription>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{done.size} traité{done.size > 1 ? "s" : ""}</Badge>
                 <Badge variant="secondary">{remaining.length} restant{remaining.length > 1 ? "s" : ""}</Badge>
+                <Badge variant={callableNowCount > 0 ? "default" : "outline"}>{callableNowCount} appelable{callableNowCount > 1 ? "s" : ""} maintenant</Badge>
               </div>
             </div>
           </DialogHeader>
 
           {loading ? (
             <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center">
-              <div><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Préparation de la file d’appels et lecture des tâches HubSpot…</p></div>
+              <div><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Préparation de la file d’appels, des tâches HubSpot et des fuseaux horaires…</p></div>
             </div>
           ) : error ? (
             <div className="m-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
@@ -620,6 +648,25 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                       <p className="mt-1 text-xs text-muted-foreground">{[p.city, p.country, p.domain].filter(Boolean).join(" · ") || "Aucune localisation"}</p>
                     </div>
                   </div>
+
+                  {timing ? (
+                    <div className={`rounded-xl border p-4 ${timing.isCallableNow ? "border-primary/25 bg-primary/[0.05]" : "border-border bg-muted/30"}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${timing.isCallableNow ? "text-primary" : "text-muted-foreground"}`}>Timing d’appel</div>
+                          <div className="mt-1 text-sm font-semibold">{timing.label}</div>
+                        </div>
+                        <Badge variant={timing.isCallableNow ? "default" : "outline"}>{timing.localTimeLabel} local</Badge>
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Fuseau : {timing.timezone}
+                        {timing.timezoneConfidence === "low" ? " · estimé par défaut" : ""}
+                      </div>
+                      {!timing.isCallableNow && timing.nextBestLocalLabel ? (
+                        <div className="mt-2 flex items-center gap-1.5 text-xs font-medium"><CalendarClock size={13} /> Meilleur prochain créneau : {timing.nextBestLocalLabel}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
                     <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">À faire maintenant</div>
@@ -654,9 +701,13 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                     </div>
                   </div>
 
-                  {p.phone ? (
+                  {p.phone && timing?.isCallableNow ? (
                     <Button asChild className="w-full" size="lg">
                       <a href={`tel:${p.phone}`}><PhoneCall size={17} /> Appeler maintenant</a>
+                    </Button>
+                  ) : p.phone ? (
+                    <Button className="w-full" size="lg" variant="outline" disabled>
+                      <CalendarClock size={17} /> {timing?.nextBestLocalLabel ? `À appeler ${timing.nextBestLocalLabel}` : "Hors créneau d’appel"}
                     </Button>
                   ) : (
                     <Button className="w-full" size="lg" variant="outline" onClick={() => onOpenCompany(current.company.id)}>
