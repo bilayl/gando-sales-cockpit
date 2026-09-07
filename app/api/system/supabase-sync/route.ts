@@ -19,19 +19,38 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ success: false, error: message }, { status });
 }
 
+async function bootstrapContinuousScheduler(request: Request) {
+  const endpointUrl = `${new URL(request.url).origin}/api/system/supabase-sync/continuous`;
+  const now = new Date().toISOString();
+  const { error } = await getSupabaseAdmin()
+    .from("gando_source_sync_scheduler")
+    .update({ endpoint_url: endpointUrl, enabled: true, updated_at: now })
+    .eq("id", "default");
+  if (error) throw error;
+}
+
 export async function GET() {
   try {
     await requireCockpitAdmin();
 
     const configuredTables = getConfiguredGandoSourceTables();
-    const { data, error } = await getSupabaseAdmin()
-      .from("gando_source_sync_state")
-      .select(
-        "source_project,source_schema,source_table,id_column,status,rows_synced,last_started_at,last_completed_at,last_error,updated_at",
-      )
-      .order("source_table", { ascending: true });
+    const admin = getSupabaseAdmin();
+    const [{ data, error }, schedulerResult] = await Promise.all([
+      admin
+        .from("gando_source_sync_state")
+        .select(
+          "source_project,source_schema,source_table,id_column,status,rows_synced,last_started_at,last_completed_at,last_error,updated_at",
+        )
+        .order("source_table", { ascending: true }),
+      admin
+        .from("gando_source_sync_scheduler")
+        .select("enabled,endpoint_url,last_started_at,last_completed_at,last_success,last_error,updated_at")
+        .eq("id", "default")
+        .maybeSingle(),
+    ]);
 
     if (error) throw error;
+    if (schedulerResult.error) throw schedulerResult.error;
 
     return NextResponse.json({
       success: true,
@@ -45,6 +64,7 @@ export async function GET() {
         idColumn: table.idColumn,
       })),
       state: data || [],
+      scheduler: schedulerResult.data || null,
     });
   } catch (error) {
     return errorResponse(error);
@@ -54,6 +74,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     await requireCockpitAdmin();
+    await bootstrapContinuousScheduler(request);
 
     const body = await request.json().catch(() => ({}));
     const requestedTables = body?.tables;
