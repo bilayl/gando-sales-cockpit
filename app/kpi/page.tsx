@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic"
 export default async function KpiPage() {
   const access = await getCockpitAccess()
   if (!access) redirect("/login")
+  if (!access.canAccessKpi) redirect("/prospection")
 
   return <KpiClientShell email={access.email} role={access.role} />
 }
