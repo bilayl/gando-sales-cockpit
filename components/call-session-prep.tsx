@@ -1,10 +1,13 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { BookOpen, ChevronDown, ChevronUp, ExternalLink, PhoneCall } from "lucide-react"
+import { BookOpen, ChevronDown, ChevronUp, ExternalLink, Mail, PhoneCall } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CallObjectionCoachPanel } from "@/components/call-objection-coach-panel"
 import { CallScriptFlow } from "@/components/call-script-flow"
+import { PostCallEmailButton } from "@/components/post-call-email-button"
+import { buildCallObjectionCoach } from "@/lib/call-objection-coach"
 import type { SalesCallScript, ScriptContact } from "@/lib/call-scripts"
 
 type Props = {
@@ -20,6 +23,7 @@ function contextValue(value?: string | null) {
 export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
   const [open, setOpen] = useState(true)
   const [scripts, setScripts] = useState<SalesCallScript[]>([])
+  const [activityData, setActivityData] = useState<any>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -35,6 +39,22 @@ export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
     return () => controller.abort()
   }, [])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    setActivityData(null)
+    if (!contact.id) return () => controller.abort()
+    fetch(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { signal: controller.signal, cache: "no-store" })
+      .then(async response => {
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(payload.error || "Contexte CRM indisponible")
+        setActivityData(payload)
+      })
+      .catch(error => {
+        if ((error as Error).name !== "AbortError") console.warn("Call context:", error)
+      })
+    return () => controller.abort()
+  }, [contact.id])
+
   const selectedScript = useMemo(
     () => scripts.find(item => item.is_default && item.is_active) || scripts.find(item => item.is_active) || scripts[0],
     [scripts],
@@ -44,9 +64,23 @@ export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
     setOpen(true)
   }, [contact.id, selectedScript?.id])
 
-  const p = contact.properties
+  const crmProperties = activityData?.contact?.properties || {}
+  const preparedContact = useMemo<ScriptContact>(() => ({
+    id: contact.id,
+    properties: { ...contact.properties, ...crmProperties },
+  }), [contact, crmProperties])
+  const p = preparedContact.properties
   const name = [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Contact"
   const location = [p.zip || p.postal_code, p.city, p.state, p.country].filter(Boolean).join(" · ") || "À qualifier"
+  const companyName = p.company || activityData?.companies?.[0]?.properties?.name || p.name || ""
+  const email = p.email || ""
+  const coach = useMemo(() => buildCallObjectionCoach({
+    properties: p,
+    notes: activityData?.notes || [],
+    calls: activityData?.calls || [],
+  }), [activityData, p])
+  const latestCall = coach.latestCall
+  const latestCallProperties = latestCall?.properties || {}
 
   return (
     <div className="border-y border-primary/15 bg-primary/[0.025] px-4 py-3">
@@ -58,9 +92,21 @@ export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
             <span className="text-sm font-semibold">{name}</span>
             <span className="text-xs text-muted-foreground">· {remaining} contact{remaining > 1 ? "s" : ""} restant{remaining > 1 ? "s" : ""}</span>
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">Le playbook est géré depuis la catégorie “Scripts commerciaux”. Pendant l’appel, le SDR suit uniquement le flux actif.</div>
+          <div className="mt-1 text-[11px] text-muted-foreground">Le Cockpit prépare le flux avec les données CRM et relit les notes d’appels pour anticiper les objections déjà rencontrées.</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <PostCallEmailButton
+            contactId={contact.id}
+            callId={latestCall?.id ? String(latestCall.id) : undefined}
+            email={email}
+            firstName={p.firstname || undefined}
+            companyName={companyName}
+            callTitle={latestCallProperties.hs_call_title || undefined}
+            callBody={latestCallProperties.hs_call_body || latestCallProperties.hs_call_summary || undefined}
+            transcription={coach.transcript}
+            buttonLabel="Générer un email"
+            buttonClassName="h-8 gap-1.5"
+          />
           <Button asChild size="sm" variant="outline" className="h-8 gap-1.5"><a href="/scripts"><BookOpen size={13} /> Playbook</a></Button>
           <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={onOpenContact}><ExternalLink size={13} /> Fiche</Button>
           <Button size="sm" variant="ghost" className="h-8 gap-1.5" onClick={() => setOpen(value => !value)}>{open ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {open ? "Réduire" : "Afficher"}</Button>
@@ -69,14 +115,16 @@ export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
 
       {open && selectedScript ? (
         <div className="mt-3 space-y-3">
-          <div className="grid gap-2 rounded-xl border border-border bg-card p-3 text-[11px] sm:grid-cols-2 xl:grid-cols-5">
-            <div><span className="text-muted-foreground">Entreprise</span><div className="mt-0.5 font-semibold">{contextValue(p.company || p.name)}</div></div>
+          <div className="grid gap-2 rounded-xl border border-border bg-card p-3 text-[11px] sm:grid-cols-2 xl:grid-cols-6">
+            <div><span className="text-muted-foreground">Entreprise</span><div className="mt-0.5 font-semibold">{contextValue(companyName)}</div></div>
+            <div><span className="text-muted-foreground">Email</span><div className="mt-0.5 flex items-center gap-1 font-semibold"><Mail size={11} className="text-primary" /><span className="truncate">{contextValue(email)}</span></div></div>
             <div><span className="text-muted-foreground">Localisation</span><div className="mt-0.5 font-semibold">{location}</div></div>
             <div><span className="text-muted-foreground">Fonction</span><div className="mt-0.5 font-semibold">{contextValue(p.jobtitle)}</div></div>
             <div><span className="text-muted-foreground">Flotte</span><div className="mt-0.5 font-semibold">{contextValue(p.taille_de_flo || p.taille_flotte)}</div></div>
             <div><span className="text-muted-foreground">Paiement actuel</span><div className="mt-0.5 font-semibold">{contextValue(p.solution_paiement_reservation)}</div></div>
           </div>
-          <CallScriptFlow script={selectedScript} contact={contact} />
+          <CallObjectionCoachPanel coach={coach} compact />
+          <CallScriptFlow script={selectedScript} contact={preparedContact} />
         </div>
       ) : open ? <div className="mt-3 rounded-xl border border-dashed border-border bg-card p-5 text-center text-xs text-muted-foreground">Aucun script commercial actif. Un responsable peut en créer un depuis “Scripts commerciaux”.</div> : null}
     </div>
