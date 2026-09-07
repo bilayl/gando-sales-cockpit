@@ -2,6 +2,12 @@ import "server-only";
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { resolveOpenRouterApiKey } from "@/lib/openrouter-key";
+import {
+  executeSalesAgentTool,
+  OPENROUTER_SALES_TOOLS,
+  SALES_AGENT_TOOL_NAMES,
+  type SalesAgentToolName,
+} from "@/lib/sales-agent-tools";
 
 type Scope = "today" | "recent";
 
@@ -143,11 +149,30 @@ export async function buildSalesSnapshot(question: string, scope: Scope = "today
   };
 }
 
-export async function askOpenRouterSales(question: string, snapshot: Awaited<ReturnType<typeof buildSalesSnapshot>>) {
+function isSalesAgentToolName(value: unknown): value is SalesAgentToolName {
+  return SALES_AGENT_TOOL_NAMES.includes(String(value) as SalesAgentToolName);
+}
+
+function writeToolAllowed(question: string, tool: SalesAgentToolName) {
+  const normalizedQuestion = normalize(question);
+  if (tool === "schedule_call_reminder") {
+    return /(programme|planifie|rappel|rappelle|reporte|relance)/.test(normalizedQuestion);
+  }
+  if (tool === "record_call_outcome") {
+    return /(nrp|occupe|a rappeler|interesse|rdv|pas interesse|hors cible|numero invalide|appel|repondu)/.test(normalizedQuestion);
+  }
+  return true;
+}
+
+export async function askOpenRouterSales(
+  question: string,
+  snapshot: Awaited<ReturnType<typeof buildSalesSnapshot>>,
+  actor?: string | null,
+) {
   const { apiKey } = await resolveOpenRouterApiKey();
   const configuredModel = process.env.OPENROUTER_MODEL?.trim() || "~openai/gpt-latest";
   const freeFallbackModel = "openrouter/free";
-  if (!apiKey) return { configured: false as const, answer: "", model: configuredModel };
+  if (!apiKey) return { configured: false as const, answer: "", model: configuredModel, actions: [] };
 
   const baseUrl = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/$/, "");
   const context = {
@@ -163,17 +188,20 @@ export async function askOpenRouterSales(question: string, snapshot: Awaited<Ret
   };
   if (process.env.OPENROUTER_ZDR?.trim().toLowerCase() === "true") provider.zdr = true;
 
-  const messages = [
+  const messages: any[] = [
     {
       role: "system",
       content: [
         "Tu es le copilote commercial interne de Gando.",
         "Réponds en français, de façon courte, structurée et opérationnelle.",
-        "Utilise uniquement les données CRM, tâches et transcriptions fournies comme faits.",
+        "Utilise les tools disponibles lorsque leur donnée est nécessaire au lieu d'inventer une information.",
+        "Pour savoir qui appeler maintenant, appelle get_today_sales_queue et respecte timing.callNow et le fuseau local.",
+        "Utilise uniquement les données CRM, tâches, transcriptions et résultats de tools comme faits.",
         "Distingue clairement les faits observés, tes interprétations et les informations manquantes.",
         "Ne fabrique jamais ce qu'un prospect aurait dit, un intérêt, une objection, une prochaine étape ou un chiffre.",
+        "N'appelle schedule_call_reminder que sur demande explicite de l'utilisateur.",
+        "N'appelle record_call_outcome que si l'utilisateur fournit explicitement le résultat réel d'un appel.",
         "Quand c'est pertinent, classe les entreprises à prioriser et explique en une phrase pourquoi.",
-        "Si la question porte sur ce qu'un prospect a dit, cite seulement une reformulation fidèle de la transcription disponible.",
       ].join(" "),
     },
     {
@@ -197,6 +225,8 @@ export async function askOpenRouterSales(question: string, snapshot: Awaited<Ret
         max_completion_tokens: 1200,
         provider,
         messages,
+        tools: OPENROUTER_SALES_TOOLS,
+        tool_choice: "auto",
       }),
       cache: "no-store",
     });
@@ -205,32 +235,73 @@ export async function askOpenRouterSales(question: string, snapshot: Awaited<Ret
   }
 
   let usedModel = configuredModel;
-  let { response, payload } = await requestModel(usedModel);
+  let fallbackUsed = false;
+  const actions: Array<{ tool: string; ok: boolean; result?: unknown; error?: string }> = [];
 
-  if (!response.ok && usedModel !== freeFallbackModel) {
-    const errorMessage = String(payload?.error?.message || payload?.message || "").toLowerCase();
-    const insufficientCredits = response.status === 402 || errorMessage.includes("insufficient credits") || errorMessage.includes("purchase credits");
-    if (insufficientCredits) {
-      usedModel = freeFallbackModel;
-      ({ response, payload } = await requestModel(usedModel));
+  for (let round = 0; round < 5; round += 1) {
+    let { response, payload } = await requestModel(usedModel);
+
+    if (!response.ok && usedModel !== freeFallbackModel) {
+      const errorMessage = String(payload?.error?.message || payload?.message || "").toLowerCase();
+      const insufficientCredits = response.status === 402 || errorMessage.includes("insufficient credits") || errorMessage.includes("purchase credits");
+      if (insufficientCredits) {
+        usedModel = freeFallbackModel;
+        fallbackUsed = true;
+        ({ response, payload } = await requestModel(usedModel));
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(payload?.error?.message || payload?.message || `OpenRouter HTTP ${response.status}`);
+    }
+
+    const assistantMessage = payload?.choices?.[0]?.message || {};
+    const toolCalls = Array.isArray(assistantMessage.tool_calls) ? assistantMessage.tool_calls : [];
+    if (!toolCalls.length) {
+      const content = assistantMessage.content;
+      const answer = typeof content === "string"
+        ? content
+        : Array.isArray(content)
+          ? content.map((part: any) => part?.text || "").join("\n").trim()
+          : "";
+      return {
+        configured: true as const,
+        answer: answer || "Réponse OpenRouter vide.",
+        model: String(payload?.model || usedModel),
+        fallbackUsed,
+        actions,
+      };
+    }
+
+    messages.push({
+      role: "assistant",
+      content: assistantMessage.content || null,
+      tool_calls: toolCalls,
+    });
+
+    for (const call of toolCalls) {
+      const name = call?.function?.name;
+      let result: unknown;
+      let ok = false;
+      let errorMessage = "";
+      try {
+        if (!isSalesAgentToolName(name)) throw new Error(`Tool non autorisé: ${String(name || "")}`);
+        if (!writeToolAllowed(question, name)) throw new Error("Action d'écriture refusée : demande utilisateur explicite requise.");
+        const args = JSON.parse(String(call?.function?.arguments || "{}"));
+        result = await executeSalesAgentTool(name, args, actor);
+        ok = true;
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message : "Erreur tool inconnue";
+        result = { error: errorMessage };
+      }
+      actions.push({ tool: String(name || "unknown"), ok, result: ok ? result : undefined, error: ok ? undefined : errorMessage });
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: JSON.stringify(result),
+      });
     }
   }
 
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || payload?.message || `OpenRouter HTTP ${response.status}`);
-  }
-
-  const content = payload?.choices?.[0]?.message?.content;
-  const answer = typeof content === "string"
-    ? content
-    : Array.isArray(content)
-      ? content.map((part: any) => part?.text || "").join("\n").trim()
-      : "";
-
-  return {
-    configured: true as const,
-    answer: answer || "Réponse OpenRouter vide.",
-    model: String(payload?.model || usedModel),
-    fallbackUsed: usedModel === freeFallbackModel && configuredModel !== freeFallbackModel,
-  };
+  throw new Error("L'assistant a dépassé le nombre maximal d'actions autorisées pour une requête.");
 }
