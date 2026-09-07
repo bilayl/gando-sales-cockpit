@@ -24,6 +24,23 @@ function value(input: unknown) {
   return input === undefined || input === null ? undefined : String(input);
 }
 
+function hasMeaningfulValue(input: unknown) {
+  if (input === undefined || input === null) return false;
+  if (typeof input === "string") return input.trim() !== "";
+  return true;
+}
+
+function mergeMeaningfulProperties(
+  base: Record<string, unknown>,
+  fresh: Record<string, unknown>,
+) {
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, freshValue] of Object.entries(fresh)) {
+    if (hasMeaningfulValue(freshValue)) merged[key] = freshValue;
+  }
+  return merged;
+}
+
 function qualificationProperties(row: any) {
   return {
     qualification_status: value(row.qualification_status || row.prospecting_status),
@@ -53,6 +70,7 @@ function localProperties(row: any) {
     city: raw.city || row.city || undefined,
     zip: raw.zip || row.postal_code || undefined,
     postal_code: raw.postal_code || row.postal_code || undefined,
+    state: raw.state || undefined,
     country: raw.country || row.country || undefined,
     hubspot_owner_id: raw.hubspot_owner_id || row.owner_hubspot_id || undefined,
     ...qualificationProperties(row),
@@ -108,17 +126,22 @@ export async function GET(request: NextRequest) {
           body: JSON.stringify({ properties: COMPANY_PROSPECTION_PROPERTIES, inputs: ids.map(id => ({ id })) }),
         });
         const freshById = new Map((fresh.results ?? []).map((record: any) => [String(record.id), record.properties ?? {}]));
-        results = cached.map(record => ({
-          ...record,
-          properties: {
-            ...record.properties,
-            ...(freshById.get(record.id) ?? {}),
-            qualification_status: record.properties.qualification_status,
-          },
-        }));
+        results = cached.map(record => {
+          const merged = mergeMeaningfulProperties(
+            record.properties,
+            (freshById.get(record.id) ?? {}) as Record<string, unknown>,
+          );
+          return {
+            ...record,
+            properties: {
+              ...merged,
+              qualification_status: record.properties.qualification_status,
+            },
+          };
+        });
         hubspotFresh = true;
       } catch (hubspotError) {
-        // HubSpot ne doit jamais masquer les 1 700+ entreprises déjà stockées.
+        // HubSpot ne doit jamais masquer les entreprises déjà stockées dans le Cockpit.
         console.warn("Companies HubSpot refresh unavailable, serving Cockpit cache:", hubspotError);
       }
     }
@@ -146,8 +169,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const props: Record<string, string> = Object.fromEntries(
       Object.entries(body.properties ?? {})
-        .filter(([key, value]) => COMPANY_CREATE_ALLOWED.includes(key) && value !== undefined && value !== null && String(value).trim() !== "")
-        .map(([key, value]) => [key, String(value).trim()]),
+        .filter(([key, input]) => COMPANY_CREATE_ALLOWED.includes(key) && input !== undefined && input !== null && String(input).trim() !== "")
+        .map(([key, input]) => [key, String(input).trim()]),
     );
     if (!props.name && !props.domain) {
       return NextResponse.json({ error: "Renseignez au moins un nom d’entreprise ou un domaine." }, { status: 400 });
