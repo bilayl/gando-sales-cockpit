@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  BookOpen,
   Bot,
   CalendarCheck2,
   CalendarDays,
@@ -37,6 +38,7 @@ const commercialNav: NavSection[] = [
   {
     label: "Préparer",
     items: [
+      { href: "/scripts", label: "Scripts commerciaux", icon: BookOpen },
       { href: "/sourcing", label: "Trouver des prospects", icon: Search },
       { href: "/agenda", label: "Agenda", icon: CalendarDays },
     ],
@@ -63,6 +65,7 @@ const fullNav: NavSection[] = [
   {
     label: "Préparer",
     items: [
+      { href: "/scripts", label: "Scripts commerciaux", icon: BookOpen },
       { href: "/sourcing", label: "Sourcing", icon: Search },
       { href: "/segments", label: "Segments", icon: ListFilter },
       { href: "/ai-sales", label: "IA Sales", icon: Bot },
