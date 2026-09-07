@@ -66,6 +66,7 @@ export default async function Page() {
       iconClassName: "bg-[#fff0e7] text-[#d96c2f]",
     },
   ];
+  const visibleApps = access.canAccessKpi ? apps : apps.filter(app => app.key !== "kpi");
 
   const accountLabel = access.displayName || access.email || "Compte Gando";
 
@@ -114,7 +115,7 @@ export default async function Page() {
           </div>
 
           <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-4 sm:gap-x-10 lg:gap-x-14">
-            {apps.map(app => {
+            {visibleApps.map(app => {
               const Icon = app.icon;
               const content = (
                 <>
