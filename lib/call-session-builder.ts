@@ -8,7 +8,7 @@ import {
 } from "@/lib/contact-multi-filters"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getBestCallTimeForProperties } from "@/lib/call-timing"
-import { claimCockpitCompanies } from "@/lib/cockpit-company-assignment"
+import { claimCockpitCompanies, listCockpitCompanyAssignments } from "@/lib/cockpit-company-assignment"
 
 export async function createFilteredSalesCallSession(input?: {
   owner?: string
@@ -55,9 +55,18 @@ export async function createFilteredSalesCallSession(input?: {
         db_call_timing_reason: item.timing.reason,
       },
     }))
-  const candidateCompanyIds = eligible
+  const allCandidateCompanyIds = [...new Set(eligible
     .map(contact => String((contact.properties as Record<string, string | null | undefined>).db_company_id || ""))
-    .filter(Boolean)
+    .filter(Boolean))]
+  const existingAssignments = await listCockpitCompanyAssignments(allCandidateCompanyIds)
+  const assignedByCompanyId = new Map(existingAssignments.map(row => [
+    String(row.company_id),
+    String(row.assignee_cockpit_email || "").trim().toLowerCase(),
+  ]))
+  const actorEmail = String(input?.createdBy || "").trim().toLowerCase()
+  const candidateCompanyIds = allCandidateCompanyIds
+    .filter(companyId => !assignedByCompanyId.has(companyId) || assignedByCompanyId.get(companyId) === actorEmail)
+    .slice(0, targetCount)
   const claimedCompanyIds = input?.createdBy
     ? new Set(await claimCockpitCompanies(candidateCompanyIds, input.createdBy))
     : new Set<string>()
