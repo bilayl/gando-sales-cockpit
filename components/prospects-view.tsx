@@ -15,6 +15,10 @@ function nameOf(contact: Contact) {
   return [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Sans nom";
 }
 
+function telHref(phone: string) {
+  return `tel:${phone.replace(/[^+\d*#]/g, "")}`;
+}
+
 export function ProspectsView() {
   const router = useRouter();
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -90,7 +94,18 @@ export function ProspectsView() {
                       <td className="px-5 py-3.5"><div className="font-medium text-[13px]">{nameOf(contact)}</div><div className="mt-0.5 text-[11px] text-muted-foreground">ID {contact.id}</div></td>
                       <td className="px-4 py-3.5">{p.company || "—"}</td>
                       <td className="px-4 py-3.5 text-muted-foreground">{p.jobtitle || "—"}</td>
-                      <td className="px-4 py-3.5">{phone ? <span className="inline-flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-muted-foreground" />{phone}</span> : "—"}</td>
+                      <td className="px-4 py-3.5">
+                        {phone ? (
+                          <a
+                            href={telHref(String(phone))}
+                            onClick={event => event.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 font-medium text-foreground transition hover:bg-muted"
+                            title="Appeler avec Allo Click-to-Call"
+                          >
+                            <Phone className="h-3.5 w-3.5 text-muted-foreground" />{phone}
+                          </a>
+                        ) : "—"}
+                      </td>
                       <td className="max-w-[240px] truncate px-4 py-3.5 text-muted-foreground">{p.email || "—"}</td>
                       <td className="px-4 py-3.5 text-muted-foreground">{[p.city, p.state, p.country].filter(Boolean).join(" · ") || "—"}</td>
                       <td className="px-4 py-3.5"><Badge variant="outline" className="rounded-md border-border bg-muted text-foreground">{p.statut_prospection || p.statut_de_lappel || "À qualifier"}</Badge></td>
