@@ -1,5 +1,6 @@
 import { getHubSpotIdentity, isHubSpotAuthenticated, isHubSpotOAuthConfigured } from "@/lib/hubspot";
 import { getCockpitAccess } from "@/lib/cockpit-access";
+import { getWithAlloMe, isWithAlloConfigured } from "@/lib/withallo";
 import { SettingsTeam } from "@/components/settings-team";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,15 @@ export default async function Page({
   const state = connected ? "Opérationnel" : configured ? "À reconnecter" : "Non configuré";
   const reconnectStatus = params?.hubspot;
 
+  const alloConfigured = isWithAlloConfigured();
+  const alloMe = alloConfigured ? await getWithAlloMe().catch(() => null) : null;
+  const alloConnected = Boolean(alloMe?.data);
+  const alloScopes = alloMe?.data?.scopes || [];
+  const alloPowerDialerReady = alloScopes.includes("DIALING_QUEUE_READ_WRITE");
+  const alloConversationsReady = alloScopes.includes("CONVERSATIONS_READ");
+  const alloWebhooksReady = alloScopes.includes("WEBHOOKS_READ_WRITE");
+  const alloState = alloConnected ? "Connecté" : alloConfigured ? "Clé invalide / accès refusé" : "Non configuré";
+
   return <div className="page-shell min-h-screen"><div className="page-content space-y-6">
     <div>
       <h1 className="text-2xl font-bold tracking-[-0.035em]">Paramètres</h1>
@@ -33,6 +43,33 @@ export default async function Page({
     </div>
 
     <SettingsTeam initialCanManage={Boolean(access?.canManageTeam)} />
+
+    <Card className="max-w-2xl">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">Allo <Badge variant={alloConnected ? "default" : "outline"}>{alloState}</Badge></CardTitle>
+        <CardDescription>Allo exécute la téléphonie et le Power Dialer. Gando conserve la logique de priorité, les fuseaux horaires et la session commerciale.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-border bg-muted/45 p-3">
+            <span className="text-muted-foreground">Workspace Allo</span>
+            <div className="mt-1 font-medium">{alloMe?.data?.team?.name || (alloConfigured ? "Connexion à vérifier" : "—")}</div>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/45 p-3">
+            <span className="text-muted-foreground">Power Dialer</span>
+            <div className="mt-1 font-medium">{alloPowerDialerReady ? "Prêt" : alloConnected ? "Scope manquant" : "Indisponible"}</div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant={alloPowerDialerReady ? "default" : "outline"}>Power Dialer</Badge>
+          <Badge variant={alloConversationsReady ? "default" : "outline"}>Conversations</Badge>
+          <Badge variant={alloWebhooksReady ? "default" : "outline"}>Webhooks</Badge>
+        </div>
+        <p className="text-xs leading-5 text-muted-foreground">
+          La clé reste uniquement côté serveur. Lorsqu’une session d’appels est créée, seuls les prospects encore joignables entre 08:00 et 19:00 dans leur heure locale sont envoyés dans la file Allo.
+        </p>
+      </CardContent>
+    </Card>
 
     <Card className="max-w-2xl">
       <CardHeader>
