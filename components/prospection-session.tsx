@@ -27,7 +27,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { CallObjectionCoachPanel } from "@/components/call-objection-coach-panel";
-import { CallScriptFlow } from "@/components/call-script-flow";
 import { PostCallEmailButton } from "@/components/post-call-email-button";
 import { COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
 import { QualificationProperties } from "@/components/qualification-properties";
@@ -36,7 +35,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach";
-import type { SalesCallScript, ScriptContact } from "@/lib/call-scripts";
 import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
 import { getBestCallTimeForProperties } from "@/lib/call-timing";
 
@@ -58,6 +56,15 @@ type TaskSummary = {
     sourceContactPhone?: string | null;
     sourceContactJobTitle?: string | null;
   } | null;
+};
+
+type AlloSessionState = {
+  configured?: boolean;
+  requested?: number;
+  added?: number;
+  skipped?: number;
+  targetEmail?: string | null;
+  error?: { message?: string; code?: string | null; suggestion?: string | null } | string | null;
 };
 
 type Props = {
@@ -171,31 +178,22 @@ function CompanyProfilePanel({
   onOpenCompany: (companyId: string) => void;
 }) {
   const [data, setData] = useState<any>(null);
-  const [scripts, setScripts] = useState<SalesCallScript[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [queueingAllo, setQueueingAllo] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
     setData(null);
     setLoading(true);
     setError("");
-    Promise.all([
-      fetch(`/api/companies/${companyId}/centralized`, { cache: "no-store", signal: controller.signal }).then(async response => {
+    fetch(`/api/companies/${companyId}/centralized`, { cache: "no-store", signal: controller.signal })
+      .then(async response => {
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Impossible de charger la fiche entreprise");
         return body;
-      }),
-      fetch("/api/call-scripts", { cache: "no-store", signal: controller.signal }).then(async response => {
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) return { results: [] };
-        return body;
-      }),
-    ])
-      .then(([companyData, scriptData]) => {
-        setData(companyData);
-        setScripts((scriptData.results || []) as SalesCallScript[]);
       })
+      .then(companyData => setData(companyData))
       .catch(reason => {
         if ((reason as Error).name !== "AbortError") setError(reason instanceof Error ? reason.message : "Impossible de charger la fiche entreprise");
       })
@@ -211,10 +209,6 @@ function CompanyProfilePanel({
   const emailContact = contacts.find((contact: any) => contact?.properties?.email) || contacts[0] || null;
   const referenceContact = emailContact?.properties || contacts[0]?.properties || {};
   const nextMeeting = data?.nextMeeting || null;
-  const selectedScript = useMemo(
-    () => scripts.find(item => item.is_default && item.is_active) || scripts.find(item => item.is_active) || scripts[0],
-    [scripts],
-  );
   const coach = useMemo(() => buildCallObjectionCoach({
     properties: { ...p, ...referenceContact },
     notes: data?.notes || [],
@@ -224,22 +218,39 @@ function CompanyProfilePanel({
   const latestCallProperties = latestCall?.properties || {};
   const email = referenceContact.email || p.email || "";
   const contactName = [referenceContact.firstname, referenceContact.lastname].filter(Boolean).join(" ") || email || "Contact à qualifier";
-  const scriptContact = useMemo<ScriptContact>(() => ({
-    id: emailContact?.id ? String(emailContact.id) : companyId,
-    properties: {
-      ...p,
-      ...referenceContact,
-      name: p.name,
-      company: p.name || referenceContact.company,
-      city: p.city || referenceContact.city,
-      state: p.state || referenceContact.state,
-      country: p.country || referenceContact.country,
-      zip: p.zip || p.postal_code || referenceContact.zip,
-      taille_flotte: p.taille_flotte || p.taille_de_flo || referenceContact.taille_flotte || referenceContact.taille_de_flo,
-      solution_paiement_reservation: p.solution_paiement_reservation || referenceContact.solution_paiement_reservation,
-      objections__retours: p.objections__retours || referenceContact.objections__retours,
-    },
-  }), [companyId, emailContact?.id, p, referenceContact]);
+  const primaryPhone = referenceContact.mobilephone || referenceContact.phone || p.phone || "";
+
+  async function queueCurrentContactInAllo() {
+    if (!primaryPhone || queueingAllo) return;
+    setQueueingAllo(true);
+    try {
+      const response = await fetch("/api/allo/dialing-queue", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          numbers: [{
+            number: primaryPhone,
+            ...(referenceContact.firstname ? { name: referenceContact.firstname } : {}),
+            ...(referenceContact.lastname ? { last_name: referenceContact.lastname } : {}),
+            ...(p.name ? { company: p.name } : {}),
+            ...(referenceContact.jobtitle ? { job_title: referenceContact.jobtitle } : {}),
+            ...(email ? { emails: [email] } : {}),
+            ...(p.domain ? { website: p.domain } : {}),
+          }],
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = payload?.error?.message || payload?.message || "Impossible d’ajouter ce contact dans Allo";
+        throw new Error(message);
+      }
+      toast.success("Contact ajouté à la file Allo. Lance le Power Dialer dans Allo.");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Impossible d’ajouter ce contact dans Allo");
+    } finally {
+      setQueueingAllo(false);
+    }
+  }
 
   const timeline = useMemo(() => {
     if (!data) return [];
@@ -290,7 +301,7 @@ function CompanyProfilePanel({
         ) : (
           <div className="space-y-6">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-              <div className="rounded-lg border border-border bg-muted/30 p-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground"><Phone size={11} /> Téléphone</div><div className="mt-1 truncate text-sm font-semibold">{p.phone || referenceContact.phone || referenceContact.mobilephone || "—"}</div></div>
+              <div className="rounded-lg border border-border bg-muted/30 p-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground"><Phone size={11} /> Téléphone</div><div className="mt-1 truncate text-sm font-semibold">{primaryPhone || "—"}</div></div>
               <div className="rounded-lg border border-border bg-muted/30 p-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground"><Mail size={11} /> Email</div><div className="mt-1 truncate text-sm font-semibold">{email || "À renseigner"}</div></div>
               <div className="rounded-lg border border-border bg-muted/30 p-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground"><Briefcase size={11} /> Secteur</div><div className="mt-1 truncate text-sm font-semibold">{p.industry || "—"}</div></div>
               <div className="rounded-lg border border-border bg-muted/30 p-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground"><Users size={11} /> Contact préparé</div><div className="mt-1 truncate text-sm font-semibold">{contactName}</div></div>
@@ -298,22 +309,12 @@ function CompanyProfilePanel({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {(p.phone || referenceContact.phone || referenceContact.mobilephone) ? <Button asChild size="sm"><a href={`tel:${p.phone || referenceContact.phone || referenceContact.mobilephone}`}><Phone size={14} /> Appeler</a></Button> : null}
+              {primaryPhone ? <Button size="sm" onClick={() => void queueCurrentContactInAllo()} disabled={queueingAllo}>{queueingAllo ? <Loader2 size={14} className="animate-spin" /> : <PhoneCall size={14} />} Ajouter à Allo</Button> : null}
               {email ? <Button asChild size="sm" variant="outline"><a href={`mailto:${email}`}><Mail size={14} /> Email</a></Button> : null}
               {p.domain ? <Button asChild size="sm" variant="outline"><a href={`https://${p.domain}`} target="_blank" rel="noreferrer"><Globe size={14} /> Site web</a></Button> : null}
             </div>
 
             <CallObjectionCoachPanel coach={coach} />
-
-            {selectedScript ? (
-              <section>
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <div><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Script commercial réactif</div><div className="mt-0.5 text-xs font-semibold">{selectedScript.name}</div></div>
-                  <Button asChild variant="outline" size="sm"><a href="/scripts">Modifier le playbook</a></Button>
-                </div>
-                <CallScriptFlow script={selectedScript} contact={scriptContact} />
-              </section>
-            ) : null}
 
             {nextMeeting ? (
               <section>
@@ -339,7 +340,7 @@ function CompanyProfilePanel({
                 {contacts.map((contact: any) => {
                   const cp = contact.properties || {};
                   const name = [cp.firstname, cp.lastname].filter(Boolean).join(" ") || cp.email || "Contact";
-                  const phone = cp.phone || cp.mobilephone;
+                  const phone = cp.mobilephone || cp.phone;
                   return (
                     <div key={contact.id} className="rounded-lg border border-border bg-card p-3">
                       <div className="flex items-start justify-between gap-2">
@@ -395,6 +396,7 @@ function CompanyProfilePanel({
 
 export function ProspectionSession({ open, onOpenChange, companies, onOpenCompany }: Props) {
   const [summaries, setSummaries] = useState<Record<string, TaskSummary>>({});
+  const [allo, setAllo] = useState<AlloSessionState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [index, setIndex] = useState(0);
@@ -411,6 +413,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
     setIndex(0);
     setDone(new Set());
     setError("");
+    setAllo(null);
     setFinishOpen(false);
     setOutcome(null);
     setEvaluationTime(Date.now());
@@ -438,6 +441,14 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Impossible de préparer la session");
         setSummaries(body.summaries || {});
+        const nextAllo = (body.allo || null) as AlloSessionState | null;
+        setAllo(nextAllo);
+        if (nextAllo?.error) {
+          const message = typeof nextAllo.error === "string" ? nextAllo.error : nextAllo.error.message;
+          toast.error(`Allo : ${message || "la file n’a pas pu être synchronisée"}`);
+        } else if (nextAllo?.configured && (nextAllo.requested || 0) > 0) {
+          toast.success(`File Allo prête · ${nextAllo.added || 0} ajouté${(nextAllo.added || 0) > 1 ? "s" : ""}${(nextAllo.skipped || 0) > 0 ? ` · ${nextAllo.skipped} déjà présent${(nextAllo.skipped || 0) > 1 ? "s" : ""}` : ""}.`);
+        }
       })
       .catch(reason => setError(reason instanceof Error ? reason.message : "Impossible de préparer la session"))
       .finally(() => setLoading(false));
@@ -577,6 +588,8 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   const task = current?.summary?.nextTask || null;
   const currentReminder = p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date;
   const needsReminder = outcome === "FOLLOW_UP" || outcome === "NO_ANSWER" || outcome === "WRONG_CONTACT";
+  const alloError = allo?.error ? (typeof allo.error === "string" ? allo.error : allo.error.message) : "";
+  const alloReady = Boolean(allo?.configured && !alloError);
 
   return (
     <>
@@ -590,7 +603,8 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                   Appelle, qualifie le résultat, puis passe automatiquement au compte suivant. Une action ou une sortie pour chaque appel.
                 </DialogDescription>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={alloReady ? "default" : "outline"}>{alloReady ? `Allo · ${allo?.requested || 0} en file` : allo?.configured ? "Allo à vérifier" : "Allo non configuré"}</Badge>
                 <Badge variant="outline">{done.size} traité{done.size > 1 ? "s" : ""}</Badge>
                 <Badge variant="secondary">{remaining.length} restant{remaining.length > 1 ? "s" : ""}</Badge>
               </div>
@@ -599,7 +613,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
           {loading ? (
             <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center">
-              <div><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Préparation de la file d’appels et lecture des tâches HubSpot…</p></div>
+              <div><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Préparation de la file d’appels, synchronisation Allo et lecture des tâches HubSpot…</p></div>
             </div>
           ) : error ? (
             <div className="m-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
@@ -659,14 +673,15 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                     </div>
                   </div>
 
-                  {p.phone ? (
-                    <Button asChild className="w-full" size="lg">
-                      <a href={`tel:${p.phone}`}><PhoneCall size={17} /> Appeler maintenant</a>
-                    </Button>
+                  {alloReady ? (
+                    <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-xs leading-5">
+                      <div className="font-semibold text-primary">File Allo synchronisée</div>
+                      <div className="mt-0.5 text-muted-foreground">Les prospects de cette session sont dans le Power Dialer. Lance la session d’appel depuis Allo.</div>
+                    </div>
+                  ) : allo?.configured ? (
+                    <Button asChild className="w-full" size="lg" variant="outline"><a href="/settings"><PhoneOff size={17} /> Vérifier Allo</a></Button>
                   ) : (
-                    <Button className="w-full" size="lg" variant="outline" onClick={() => onOpenCompany(current.company.id)}>
-                      <UserX size={17} /> Trouver un numéro
-                    </Button>
+                    <Button asChild className="w-full" size="lg" variant="outline"><a href="/settings"><PhoneOff size={17} /> Configurer Allo</a></Button>
                   )}
 
                   <div className="space-y-2 border-t border-border pt-4">

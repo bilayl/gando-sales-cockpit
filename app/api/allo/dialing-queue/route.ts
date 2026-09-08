@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    await requireCockpitAccess();
+    const access = await requireCockpitAccess();
     if (!isWithAlloConfigured()) {
       return NextResponse.json({ error: "WITHALLO_NOT_CONFIGURED" }, { status: 503 });
     }
@@ -35,9 +35,9 @@ export async function POST(request: NextRequest) {
     const result = await appendWithAlloDialingQueue({
       numbers,
       userId: body?.userId ? String(body.userId) : null,
-      email: body?.email ? String(body.email) : null,
+      email: body?.email ? String(body.email) : access.email || null,
     });
-    return NextResponse.json({ ok: true, ...result }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ ok: true, targetEmail: body?.email ? String(body.email) : access.email || null, ...result }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const safe = safeWithAlloError(error);
     const status = Number((error as { status?: number })?.status) || safe.status || 500;
