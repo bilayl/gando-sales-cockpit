@@ -97,6 +97,7 @@ export function SdrWorkQueue({
             <strong className="text-foreground">{callableNowCount} attribuée{callableNowCount > 1 ? "s" : ""} et joignable{callableNowCount > 1 ? "s" : ""} maintenant</strong>
             {blockedByTimingCount ? ` · ${blockedByTimingCount} hors créneau local` : ""}
             {unassignedCount ? ` · ${unassignedCount} non attribuée${unassignedCount > 1 ? "s" : ""}` : ""}.
+            {callableNowCount === 0 && !loading ? " Le bouton se réactive automatiquement sur les créneaux 09:30–12:00 et 14:00–17:00 du prospect." : ""}
           </p>
         </div>
 

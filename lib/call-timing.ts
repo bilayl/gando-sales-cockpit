@@ -65,7 +65,7 @@ export function getBestCallTimeForProperties(
   date = new Date(),
 ): CallTiming {
   const resolved = resolveProspectTimezone(properties);
-  const recommendedWindows = ["09:30-11:30", "14:00-16:30"];
+  const recommendedWindows = ["09:30-12:00", "14:00-17:00"];
   if (!resolved.timezone) {
     return {
       timezone: null,
@@ -80,8 +80,8 @@ export function getBestCallTimeForProperties(
   const local = localParts(resolved.timezone, date);
   const minutes = local.hour * 60 + local.minute;
   const weekday = !["Sat", "Sun"].includes(local.weekday);
-  const morning = minutes >= 9 * 60 + 30 && minutes <= 11 * 60 + 30;
-  const afternoon = minutes >= 14 * 60 && minutes <= 16 * 60 + 30;
+  const morning = minutes >= 9 * 60 + 30 && minutes < 12 * 60;
+  const afternoon = minutes >= 14 * 60 && minutes < 17 * 60;
   const callNow = weekday && (morning || afternoon);
 
   return {
@@ -97,4 +97,3 @@ export function getBestCallTimeForProperties(
         : "Week-end dans le fuseau du prospect.",
   };
 }
-

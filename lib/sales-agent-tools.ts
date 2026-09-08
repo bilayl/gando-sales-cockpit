@@ -166,7 +166,7 @@ export const OPENROUTER_SALES_TOOLS = [
     type: "function",
     function: {
       name: "get_best_call_time",
-      description: "Calcule de façon déterministe si le contact doit être appelé maintenant selon son fuseau et des fenêtres locales 09:30-11:30 / 14:00-16:30.",
+      description: "Calcule de façon déterministe si le contact doit être appelé maintenant selon son fuseau et des fenêtres locales 09:30-12:00 / 14:00-17:00.",
       parameters: {
         type: "object",
         properties: { contactId: { type: "string" } },
