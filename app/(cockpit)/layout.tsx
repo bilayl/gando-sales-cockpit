@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
+import { GlobalPhoneDialer } from "@/components/global-phone-dialer";
 import { PageTransition } from "@/components/page-transition";
 import { getCockpitAccess } from "@/lib/cockpit-access";
 
@@ -39,6 +40,7 @@ export default async function CockpitLayout({ children }: { children: ReactNode 
         <AppSidebar email={accountLabel} role={access.role} />
       </div>
       <PageTransition>{children}</PageTransition>
+      <GlobalPhoneDialer />
     </main>
   );
 }
