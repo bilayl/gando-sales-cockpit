@@ -1,155 +1,118 @@
-# POC — Allo dans le Gando Sales Cockpit
+# Allo dans le Gando Sales Cockpit
 
-> Statut : architecture de test. Documentation publique Allo vérifiée le 8 septembre 2026. Avant de brancher la production, valider les schémas exacts dans l'OpenAPI Allo courant.
+> Statut au 8 septembre 2026 : connexion API et envoi vers le Power Dialer implémentés sur la branche `codex/allo-sidebar-call-window`. Le retour par webhooks reste l'étape suivante.
 
-## Objectif
+## Principe
 
-Le Cockpit doit rester le cerveau commercial : il décide **qui appeler, pourquoi, dans quel ordre et à quel moment**. Allo devient la couche téléphonie : **Power Dialer, appel, enregistrement, transcription et résumé**.
+Le Cockpit reste le cerveau commercial : il décide **qui appeler, pourquoi, dans quel ordre et à quel moment**. Allo est la couche téléphonie : **Power Dialer, appels et données de conversation**. HubSpot reste la source de vérité CRM.
 
-La règle de timing Gando est simple : un prospect n'entre dans une session appelable que s'il est entre **08:00 et 19:00 dans son propre fuseau horaire**, du lundi au vendredi. Si le fuseau est inconnu, le contact n'est pas placé dans la file d'appel.
+Un prospect n'entre dans une session appelable que s'il est entre **08:00 inclus et 19:00 exclu dans son propre fuseau horaire**, du lundi au vendredi. Si le fuseau est inconnu, le contact n'est pas envoyé dans la file d'appel.
 
-## Responsabilités
+## API Allo utilisée
 
-### Gando Cockpit
+Documentation officielle :
 
-- source la liste depuis HubSpot / Supabase ;
-- applique owner, filtres, score et priorités ;
-- résout le fuseau du prospect ;
-- bloque les appels hors 08:00–19:00 heure locale ;
-- construit la session commerciale ;
-- conserve le statut de la session et le résultat commercial ;
-- pousse uniquement les numéros éligibles vers Allo.
-
-### Allo
-
-- exécute la file Power Dialer ;
-- passe les appels ;
-- enregistre et transcrit les conversations selon la configuration du workspace ;
-- produit les résumés IA ;
-- renvoie les événements d'appel au Cockpit via webhook.
-
-### HubSpot
-
-HubSpot reste la source de vérité CRM. Une intégration Allo ne doit pas créer un deuxième pipeline commercial parallèle.
-
-## Flux cible
-
-```text
-Prospection Gando
-  -> filtres / owner / score
-  -> contrôle du fuseau du prospect
-  -> autorisé uniquement entre 08:00 et 19:00 localement
-  -> création de la session Gando
-  -> push des numéros vers la file Power Dialer Allo
-  -> appels dans Allo
-  -> webhook Allo call.triggered / call.answered / call.completed
-  -> rapprochement avec le contact + l'item de session Gando
-  -> résultat, durée, résumé, transcription, recording URL
-  -> mise à jour Cockpit / HubSpot
-```
-
-## API Allo à tester
-
-La documentation publique Allo expose notamment :
-
-- authentification par clé API côté serveur ;
-- `GET /v2/api/me` pour vérifier la clé, les scopes et les limites ;
-- les conversations et données d'appels ;
-- les webhooks temps réel ;
-- les files d'appel du Power Dialer, avec lecture de la file courante, ajout de numéros et lecture d'une session ;
-- les événements `call.triggered`, `call.answered` et `call.completed` ;
-- sur `call.completed`, les données de fin d'appel peuvent inclure résumé, transcription et enregistrement.
+- `GET https://api.withallo.com/v2/api/me` : vérification de la clé, des scopes, du workspace et des limites ;
+- `POST https://api.withallo.com/v2/api/dialing-queues/current/numbers` : ajout de numéros à la file Power Dialer courante ;
+- authentification : `Authorization: Api-Key <clé>` ;
+- scope nécessaire au Power Dialer : `DIALING_QUEUE_READ_WRITE`.
 
 Références :
 
-- https://www.withallo.com/fr/api
 - https://help.withallo.com/en/v2/api-reference/introduction
-- https://help.withallo.com/en/integrations/webhooks
-- https://help.withallo.com/en/features/power-dialer
+- https://help.withallo.com/en/v2/api-reference/users/me
+- https://help.withallo.com/en/v2/api-reference/dialing-queues/append-numbers
+- https://help.withallo.com/en/v2/api-reference/guides/authentication
 
-> Attention : certaines pages publiques Allo ne présentent pas exactement le même préfixe de route pour les webhooks. Ne pas figer un endpoint à partir d'un exemple marketing : utiliser l'OpenAPI du workspace/API courant comme référence avant l'implémentation.
+## Variables serveur
 
-## Variables serveur prévues
-
-```text
-ALLO_API_KEY=...
-ALLO_WEBHOOK_SECRET=...
-ALLO_BASE_URL=https://api.withallo.com
-```
-
-`ALLO_API_KEY` et `ALLO_WEBHOOK_SECRET` doivent rester exclusivement côté serveur et ne jamais être préfixées par `NEXT_PUBLIC_`.
-
-## POC recommandé
-
-### Étape 1 — Connexion en lecture seule
-
-1. Ajouter une route serveur de statut.
-2. Appeler `GET /v2/api/me`.
-3. Afficher dans Paramètres : `Allo connecté`, scopes disponibles et erreur éventuelle.
-
-Critère de succès : le Cockpit peut vérifier la connexion sans exposer la clé au navigateur.
-
-### Étape 2 — Envoyer une session vers le Power Dialer
-
-Depuis une session Gando :
-
-1. garder uniquement les contacts `callNow=true` ;
-2. normaliser les téléphones en E.164 ;
-3. pousser la file vers le Power Dialer Allo ;
-4. conserver côté Gando la correspondance entre session, contact et numéro ;
-5. afficher un état `Prêt dans Allo` plutôt qu'un simple lien téléphonique.
-
-Le Cockpit doit rester maître de l'ordre de priorité. Allo ne doit recevoir que la file déjà qualifiée par Gando.
-
-### Étape 3 — Webhook de retour
-
-Créer un endpoint serveur du type :
+La variable recommandée dans Vercel est :
 
 ```text
-POST /api/integrations/allo/webhook
+WITHALLO_API_KEY=ak_live_...
 ```
 
-Traitement minimum :
+Le client accepte également `ALLO_API_KEY` comme alias de compatibilité. La clé ne doit jamais être préfixée par `NEXT_PUBLIC_`.
 
-- vérifier la signature avec le secret webhook et le body brut ;
-- dédupliquer les événements, car Allo documente une livraison au moins une fois ;
-- répondre rapidement en `200` puis traiter la persistance ;
-- sur `call.triggered` : passer l'item en cours ;
-- sur `call.answered` : mémoriser qu'il y a eu connexion ;
-- sur `call.completed` : marquer l'appel terminé et stocker les données utiles ;
-- rapprocher le contact par identifiant connu ou numéro E.164, jamais par nom seul.
+Variables optionnelles :
 
-### Étape 4 — Boucle commerciale
+```text
+WITHALLO_QUEUE_EMAIL=commercial@entreprise.com
+WITHALLO_BASE_URL=https://api.withallo.com
+```
 
-Une fois `call.completed` reçu :
+Sans `WITHALLO_QUEUE_EMAIL`, Allo ajoute les numéros à la file de l'utilisateur propriétaire de la clé API. Avec cette variable, le Cockpit cible la file du membre Allo correspondant à cet email.
 
-- préremplir le résultat d'appel dans le Cockpit ;
-- rendre le résumé et la transcription consultables depuis la fiche ;
-- proposer la prochaine action : rendez-vous, rappel, email, qualification ou sortie ;
-- synchroniser le résultat utile vers HubSpot ;
-- passer automatiquement au prochain prospect encore dans la fenêtre locale 08:00–19:00.
+## Ce qui est déjà implémenté
 
-## Comportement attendu lorsque l'heure change
+### 1. Client API serveur
 
-Le contrôle du fuseau ne doit pas être fait uniquement au moment de créer la session. Avant de lancer le prospect suivant, le Cockpit doit recalculer `callNow` avec l'heure courante.
+`lib/withallo.ts` :
 
-Exemple : une file contient un prospect à Tahiti et un en métropole. Chacun est appelable uniquement lorsque **son heure locale** est comprise entre 08:00 inclus et 19:00 exclu. Un prospect qui passe à 19:00 pendant la session doit sortir de la file active et rester disponible pour une session ultérieure.
+- lit la clé uniquement côté serveur ;
+- utilise le format d'authentification officiel Allo ;
+- vérifie la connexion avec `/v2/api/me` ;
+- ajoute des numéros au Power Dialer ;
+- déduplique les numéros ;
+- envoie les grosses files par lots ;
+- renvoie des erreurs nettoyées sans exposer la clé.
 
-## Ce que le premier POC ne doit pas faire
+### 2. Vérification de connexion
 
-- remplacer HubSpot comme CRM ;
-- exposer la clé Allo côté client ;
-- importer tous les contacts Gando dans Allo sans besoin ;
-- appeler automatiquement un prospect hors créneau ;
-- considérer un webhook comme livré une seule fois ;
-- construire une seconde logique de scoring dans Allo.
+`GET /api/allo/status` retourne uniquement des informations sûres :
 
-## Décision d'architecture
+- clé configurée ou non ;
+- connexion valide ou non ;
+- workspace Allo ;
+- scopes disponibles ;
+- disponibilité du Power Dialer, des conversations et des webhooks.
 
-La cible est donc :
+La page **Paramètres** effectue aussi cette vérification côté serveur et affiche l'état de l'intégration Allo.
+
+### 3. Envoi manuel protégé
+
+`POST /api/allo/dialing-queue` permet d'ajouter une liste de numéros à Allo depuis une route authentifiée du Cockpit.
+
+### 4. Envoi automatique d'une session Gando
+
+Lors de la création d'une session d'appels :
+
+1. Gando filtre les prospects selon les règles commerciales ;
+2. Gando recalcule leur heure locale ;
+3. seuls les prospects `callNow=true`, donc entre 08:00 et 19:00 localement, sont retenus ;
+4. la session est créée dans Supabase ;
+5. les numéros et métadonnées utiles sont ajoutés à la file Power Dialer Allo ;
+6. la création de la session Gando reste fonctionnelle même si Allo est momentanément indisponible ; la réponse contient alors un état `withAllo.queued=false` et une erreur sûre.
+
+Métadonnées envoyées lorsqu'elles existent : prénom, nom, entreprise, poste, email et site web.
+
+## Flux actuel
+
+```text
+Prospection Gando
+  -> filtres / score / attribution
+  -> contrôle du fuseau
+  -> 08:00–19:00 heure locale uniquement
+  -> création session Gando
+  -> POST Allo Power Dialer
+  -> appel depuis Allo
+```
+
+## Étape suivante : boucle de retour
+
+La prochaine étape est de connecter les webhooks Allo afin que le Cockpit reçoive les événements d'appel et puisse :
+
+- identifier l'appel terminé ;
+- récupérer les données de conversation disponibles ;
+- rapprocher l'appel de l'item de session Gando ;
+- préremplir le résultat d'appel ;
+- synchroniser l'information utile vers HubSpot ;
+- passer au prochain prospect encore dans la fenêtre locale 08:00–19:00.
+
+Avant de coder cette partie, les types d'événements et la vérification de signature doivent être repris directement depuis la documentation officielle Allo courante.
+
+## Règle d'architecture
 
 **Gando = orchestration commerciale et intelligence de priorité.**  
 **Allo = moteur téléphonique et données de conversation.**  
 **HubSpot = source de vérité CRM.**
-
-Cela permet d'obtenir une vraie logique d'appel intégrée au Cockpit sans transformer Gando en dialer téléphonique à maintenir en interne.
