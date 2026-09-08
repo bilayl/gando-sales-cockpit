@@ -8,6 +8,7 @@ import {
 } from "@/lib/contact-multi-filters"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getBestCallTimeForProperties } from "@/lib/call-timing"
+import { claimCockpitCompanies } from "@/lib/cockpit-company-assignment"
 
 export async function createFilteredSalesCallSession(input?: {
   owner?: string
@@ -27,12 +28,11 @@ export async function createFilteredSalesCallSession(input?: {
   const now = new Date()
   const recommendations = await getCallRecommendations({
     bucket: "ACTIONABLE",
-    owner: filters.owner?.length === 1 ? filters.owner[0] : input?.owner,
     limit: 2000,
     forceRefresh: true,
   })
 
-  const selected = recommendations.results
+  const eligible = recommendations.results
     .filter(contact => {
       if (!contactMatchesFilters(contact.properties, filters)) return false
       if (!legacyLocationNeedle) return true
@@ -55,6 +55,14 @@ export async function createFilteredSalesCallSession(input?: {
         db_call_timing_reason: item.timing.reason,
       },
     }))
+  const candidateCompanyIds = eligible
+    .map(contact => String((contact.properties as Record<string, string | null | undefined>).db_company_id || ""))
+    .filter(Boolean)
+  const claimedCompanyIds = input?.createdBy
+    ? new Set(await claimCockpitCompanies(candidateCompanyIds, input.createdBy))
+    : new Set<string>()
+  const selected = eligible
+    .filter(contact => claimedCompanyIds.has(String((contact.properties as Record<string, string | null | undefined>).db_company_id || "")))
     .slice(0, targetCount)
 
   const hubspotIds = selected.map(contact => contact.id)
@@ -64,7 +72,7 @@ export async function createFilteredSalesCallSession(input?: {
       ? `Aucun contact disponible avec les filtres sélectionnés (${summaries.join(" · ")}).`
       : input?.location
         ? `Aucun contact disponible pour une session sur « ${input.location} ».`
-        : "Aucun contact attribué et joignable maintenant. Les prospects hors fuseau optimal ou sans localisation ont été exclus.")
+        : "Aucun contact attribué à votre compte Cockpit et joignable maintenant. Les prospects hors fuseau optimal ou sans localisation ont été exclus.")
   }
 
   const supabase = getSupabaseAdmin()

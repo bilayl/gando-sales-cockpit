@@ -37,6 +37,7 @@ import { getBestCallTimeForProperties } from "@/lib/call-timing";
 type Company = { id: string; properties: Record<string, string | null | undefined> };
 type List = { listId: string; name: string; objectTypeId: string; size?: number };
 type Owner = { id: string; firstName?: string; lastName?: string; email?: string };
+type CockpitAssignment = { company_id: string; assignee_cockpit_email: string };
 type ViewMode = "board" | "table";
 
 const STAGE_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(column => [column.value, column.label]));
@@ -82,6 +83,7 @@ export function CompanyFirstProspectionView() {
   const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
   const [owners, setOwners] = useState<Owner[]>([]);
   const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const [assignments, setAssignments] = useState<CockpitAssignment[]>([]);
   const [segmentId, setSegmentId] = useState("");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [total, setTotal] = useState(0);
@@ -93,6 +95,8 @@ export function CompanyFirstProspectionView() {
   const [workFilter, setWorkFilter] = useState<SdrWorkFilter>("ACTIONABLE");
   const [view, setView] = useState<ViewMode>("table");
   const [sessionOpen, setSessionOpen] = useState(false);
+  const [sessionCompanies, setSessionCompanies] = useState<Company[]>([]);
+  const [sessionCreating, setSessionCreating] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [newContactOpen, setNewContactOpen] = useState(false);
   const [evaluationTime, setEvaluationTime] = useState(Date.now);
@@ -109,12 +113,14 @@ export function CompanyFirstProspectionView() {
       fetch("/api/segments", { cache: "no-store" }).then(response => response.json()).catch(() => ({ lists: [] })),
       fetch("/api/owners", { cache: "no-store" }).then(response => response.json()).catch(() => ({ results: [] })),
       fetch("/api/auth/me", { cache: "no-store" }).then(response => response.json()).catch(() => ({})),
+      fetch("/api/prospection/assignments", { cache: "no-store" }).then(response => response.json()).catch(() => ({ results: [] })),
     ])
-      .then(([segments, ownerData, currentUser]) => {
+      .then(([segments, ownerData, currentUser, assignmentData]) => {
         const companyLists = ((segments.lists || []) as List[]).filter(item => item.objectTypeId === "0-2");
         setLists(companyLists);
         setOwners(ownerData.results || []);
         setCurrentUserEmail(String(currentUser.email || "").trim().toLowerCase());
+        setAssignments(assignmentData.results || []);
         // Toutes les entreprises est la vue par défaut afin que le Cockpit affiche
         // toujours les données Supabase enregistrées, même sans HubSpot.
         setSegmentId("");
@@ -145,9 +151,10 @@ export function CompanyFirstProspectionView() {
     [item.firstName, item.lastName].filter(Boolean).join(" ") || item.email || item.id,
   ])), [owners]);
 
-  const currentOwnerId = useMemo(() => owners.find(owner =>
-    String(owner.email || "").trim().toLowerCase() === currentUserEmail
-  )?.id || "", [owners, currentUserEmail]);
+  const assignmentByCompanyId = useMemo(() => new Map(assignments.map(assignment => [
+    assignment.company_id,
+    String(assignment.assignee_cockpit_email || "").trim().toLowerCase(),
+  ])), [assignments]);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
@@ -201,14 +208,18 @@ export function CompanyFirstProspectionView() {
   const actionableCompanies = useMemo(() => classified
     .filter(item => item.decision.bucket === "ACTIONABLE")
     .map(item => item.company), [classified]);
-  const assignedActionableCompanies = useMemo(() => actionableCompanies.filter(company =>
-    Boolean(currentOwnerId) && company.properties.hubspot_owner_id === currentOwnerId
-  ), [actionableCompanies, currentOwnerId]);
-  const callableCompanies = useMemo(() => assignedActionableCompanies.filter(company =>
-    getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow
-  ), [assignedActionableCompanies, evaluationTime]);
-  const blockedByTimingCount = assignedActionableCompanies.length - callableCompanies.length;
-  const unassignedCount = actionableCompanies.filter(company => !company.properties.hubspot_owner_id).length;
+  const sessionCandidates = useMemo(() => actionableCompanies.filter(company => {
+    const assignee = assignmentByCompanyId.get(company.id);
+    return (!assignee || assignee === currentUserEmail)
+      && getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow;
+  }), [actionableCompanies, assignmentByCompanyId, currentUserEmail, evaluationTime]);
+  const myAssignedCompanies = useMemo(() => actionableCompanies.filter(company =>
+    assignmentByCompanyId.get(company.id) === currentUserEmail
+  ), [actionableCompanies, assignmentByCompanyId, currentUserEmail]);
+  const blockedByTimingCount = myAssignedCompanies.filter(company =>
+    !getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow
+  ).length;
+  const unassignedCount = actionableCompanies.filter(company => !assignmentByCompanyId.has(company.id)).length;
 
   const currentList = visibleLists.find(item => item.listId === segmentId);
   const actionableCount = classified.filter(item => item.decision.bucket === "ACTIONABLE").length;
@@ -227,6 +238,33 @@ export function CompanyFirstProspectionView() {
       setError(cause instanceof Error ? cause.message : "Erreur de synchronisation");
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function startSession() {
+    setSessionCreating(true);
+    setError("");
+    try {
+      const response = await fetch("/api/prospection/assignments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ companyIds: sessionCandidates.slice(0, 100).map(company => company.id) }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || payload.error || "Impossible d’attribuer la session");
+      const claimed = new Set((payload.claimedCompanyIds || []).map(String));
+      const selected = sessionCandidates.filter(company => claimed.has(company.id));
+      if (!selected.length) throw new Error("Aucune entreprise disponible : elles ont peut-être déjà été prises par un autre commercial.");
+      setAssignments(current => {
+        const preserved = current.filter(item => !claimed.has(item.company_id));
+        return [...preserved, ...selected.map(company => ({ company_id: company.id, assignee_cockpit_email: currentUserEmail }))];
+      });
+      setSessionCompanies(selected);
+      setSessionOpen(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Impossible de démarrer la session");
+    } finally {
+      setSessionCreating(false);
     }
   }
 
@@ -283,7 +321,7 @@ export function CompanyFirstProspectionView() {
           <SdrWorkQueue
             activeFilter={workFilter}
             actionableCount={actionableCount}
-            callableNowCount={callableCompanies.length}
+            callableNowCount={sessionCandidates.length}
             blockedByTimingCount={blockedByTimingCount}
             unassignedCount={unassignedCount}
             opportunitiesCount={opportunities}
@@ -291,9 +329,9 @@ export function CompanyFirstProspectionView() {
             excludedCount={excluded}
             totalCount={classified.length}
             segmentName={currentList?.name}
-            loading={loading}
+            loading={loading || sessionCreating}
             onFilterChange={setWorkFilter}
-            onStartSession={() => setSessionOpen(true)}
+            onStartSession={() => void startSession()}
           />
 
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-4 py-2.5">
@@ -365,7 +403,7 @@ export function CompanyFirstProspectionView() {
                         <TableCell className="text-xs text-muted-foreground">{stage === "LATER" || stage === "FOLLOW_UP" ? formatDate(p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date) : "—"}</TableCell>
                         <TableCell>{p.qualification_contacts_count || p.num_associated_contacts || 0}</TableCell>
                         <TableCell>{p.qualification_deals_count || p.num_associated_deals || 0}</TableCell>
-                        <TableCell>{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "—" : "—"}</TableCell>
+                        <TableCell>{assignmentByCompanyId.get(company.id) || "Non attribuée"}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{formatDate(p.qualification_last_activity_at || p.notes_last_updated || p.hs_last_sales_activity_timestamp)}</TableCell>
                       </TableRow>
                     );
@@ -378,7 +416,7 @@ export function CompanyFirstProspectionView() {
         </Card>
       </div>
 
-      <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={callableCompanies} onOpenCompany={id => router.push(`/companies/${id}`)} />
+      <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={sessionCompanies} onOpenCompany={id => router.push(`/companies/${id}`)} />
       <NewCompanyDialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen} onCreated={() => void load(true)} />
       <NewContactDialog open={newContactOpen} onOpenChange={setNewContactOpen} onCreated={() => void load(true)} />
     </div>
