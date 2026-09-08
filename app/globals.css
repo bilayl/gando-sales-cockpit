@@ -56,6 +56,53 @@
   color-scheme: dark;
 }
 
+/* Cockpit palette: Allo-like light UI with a dedicated dark counterpart. */
+.allo-shell {
+  --background: #ffffff;
+  --foreground: #17231f;
+  --card: #ffffff;
+  --card-foreground: #17231f;
+  --popover: #ffffff;
+  --popover-foreground: #17231f;
+  --primary: #1f3a31;
+  --primary-foreground: #ffffff;
+  --secondary: #edf2ef;
+  --secondary-foreground: #253a31;
+  --muted: #f3f6f4;
+  --muted-foreground: #75817b;
+  --accent: #edf2ef;
+  --accent-foreground: #1f3a31;
+  --destructive: #b64e45;
+  --destructive-foreground: #ffffff;
+  --border: #e3e8e5;
+  --input: #dfe5e1;
+  --ring: #547765;
+  color-scheme: light;
+}
+
+.dark .allo-shell {
+  --background: #101512;
+  --foreground: #edf2ef;
+  --card: #151c18;
+  --card-foreground: #edf2ef;
+  --popover: #151c18;
+  --popover-foreground: #edf2ef;
+  --primary: #dce9e2;
+  --primary-foreground: #16221c;
+  --secondary: #202a24;
+  --secondary-foreground: #e8efeb;
+  --muted: #1c2520;
+  --muted-foreground: #94a39b;
+  --accent: #243029;
+  --accent-foreground: #e8efeb;
+  --destructive: #df766b;
+  --destructive-foreground: #1b0c0a;
+  --border: #2a352f;
+  --input: #35413a;
+  --ring: #91a99c;
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -102,7 +149,7 @@ body {
 
 button, input, select, textarea { font: inherit; }
 input, select, textarea { color: var(--foreground); }
-input::placeholder, textarea::placeholder { color: #7c858a; opacity: 1; }
+input::placeholder, textarea::placeholder { color: var(--muted-foreground); opacity: 1; }
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {

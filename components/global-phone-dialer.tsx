@@ -152,7 +152,7 @@ export function GlobalPhoneDialer() {
       <button
         type="button"
         onClick={() => { setOpen(true); setError("") }}
-        className="fixed bottom-6 right-6 z-[55] grid h-12 w-12 place-items-center rounded-full border border-[#dfe5e1] bg-white text-[#26342e] shadow-[0_8px_28px_rgba(23,35,31,0.14)] transition hover:-translate-y-0.5 hover:bg-[#f8faf9]"
+        className="fixed bottom-6 right-6 z-[55] grid h-12 w-12 place-items-center rounded-full border border-border bg-card text-foreground shadow-[0_8px_28px_rgba(0,0,0,0.14)] transition hover:-translate-y-0.5 hover:bg-muted"
         aria-label="Ouvrir le dialer"
         title="Dialer"
       >
@@ -160,21 +160,21 @@ export function GlobalPhoneDialer() {
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Dialer">
-          <div className="relative w-full max-w-[520px] rounded-[26px] border border-[#e5e8ea] bg-white px-8 pb-8 pt-7 shadow-[0_24px_80px_rgba(20,29,25,0.18)] sm:px-12 sm:pb-10">
-            <button type="button" onClick={() => setOpen(false)} className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-full text-[#9aa0a8] transition hover:bg-[#f5f6f7] hover:text-[#263044]" aria-label="Fermer">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Dialer">
+          <div className="relative w-full max-w-[520px] rounded-[26px] border border-border bg-card px-8 pb-8 pt-7 text-card-foreground shadow-[0_24px_80px_rgba(0,0,0,0.24)] sm:px-12 sm:pb-10">
+            <button type="button" onClick={() => setOpen(false)} className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Fermer">
               <X className="h-5 w-5" />
             </button>
 
             <div className="mb-7 pr-10">
-              <div className="text-[18px] font-semibold tracking-[-0.02em] text-[#1f2937]">Téléphone</div>
-              <div className="mt-1 text-[12px] text-[#8a919c]">Composez un numéro ou utilisez le bouton Appeler depuis n’importe quelle fiche.</div>
+              <div className="text-[18px] font-semibold tracking-[-0.02em] text-foreground">Téléphone</div>
+              <div className="mt-1 text-[12px] text-muted-foreground">Composez un numéro ou utilisez le bouton Appeler depuis n’importe quelle fiche.</div>
             </div>
 
-            <div className="flex h-[58px] overflow-hidden rounded-[14px] border border-[#e2e5e9] bg-white">
-              <div className="relative flex w-[116px] shrink-0 items-center border-r border-[#e2e5e9] px-4">
+            <div className="flex h-[58px] overflow-hidden rounded-[14px] border border-border bg-background">
+              <div className="relative flex w-[116px] shrink-0 items-center border-r border-border px-4">
                 <span className="text-[26px] leading-none">{country.flag}</span>
-                <ChevronDown className="ml-auto h-4 w-4 text-[#30384a]" />
+                <ChevronDown className="ml-auto h-4 w-4 text-foreground" />
                 <select value={countryCode} onChange={event => setCountryCode(event.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Indicatif pays">
                   {COUNTRIES.map(item => <option key={item.code} value={item.code}>{item.label} {item.prefix}</option>)}
                 </select>
@@ -186,20 +186,20 @@ export function GlobalPhoneDialer() {
                 autoFocus
                 inputMode="tel"
                 placeholder="Entrer un nom ou numéro"
-                className="min-w-0 flex-1 bg-white px-5 text-[20px] font-normal text-[#273044] outline-none placeholder:text-[#a1a6b0] sm:text-[22px]"
+                className="min-w-0 flex-1 bg-background px-5 text-[20px] font-normal text-foreground outline-none placeholder:text-muted-foreground sm:text-[22px]"
               />
-              {number ? <button type="button" onClick={erase} className="grid w-12 shrink-0 place-items-center text-[#9299a4] hover:text-[#273044]" aria-label="Effacer"><Delete className="h-5 w-5" /></button> : null}
+              {number ? <button type="button" onClick={erase} className="grid w-12 shrink-0 place-items-center text-muted-foreground hover:text-foreground" aria-label="Effacer"><Delete className="h-5 w-5" /></button> : null}
             </div>
 
             <div className="mx-auto mt-8 grid max-w-[310px] grid-cols-3 gap-x-7 gap-y-5">
               {KEYS.map(key => (
-                <button key={key} type="button" onClick={() => append(key)} className="grid aspect-square w-full max-w-[76px] place-items-center justify-self-center rounded-full bg-[#f5f6f7] text-[30px] font-normal text-[#273044] transition hover:bg-[#eceef0] active:scale-95">
-                  {key === "0" ? <span className="flex flex-col items-center leading-none"><span>0</span><span className="mt-1 text-[13px] font-semibold text-[#9da3ad]">+</span></span> : key}
+                <button key={key} type="button" onClick={() => append(key)} className="grid aspect-square w-full max-w-[76px] place-items-center justify-self-center rounded-full bg-muted text-[30px] font-normal text-foreground transition hover:bg-accent active:scale-95">
+                  {key === "0" ? <span className="flex flex-col items-center leading-none"><span>0</span><span className="mt-1 text-[13px] font-semibold text-muted-foreground">+</span></span> : key}
                 </button>
               ))}
             </div>
 
-            {error ? <div className="mx-auto mt-5 max-w-[360px] rounded-xl bg-[#fff5f3] px-4 py-2.5 text-center text-[12px] leading-5 text-[#9b5449]">{error}</div> : null}
+            {error ? <div className="mx-auto mt-5 max-w-[360px] rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-2.5 text-center text-[12px] leading-5 text-destructive">{error}</div> : null}
 
             <button
               type="button"
@@ -209,7 +209,7 @@ export function GlobalPhoneDialer() {
             >
               {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <Phone className="h-6 w-6 fill-current" />}
             </button>
-            <div className="mt-3 text-center text-[10px] text-[#9aa1aa]">Le numéro est synchronisé avec votre Power Dialer Allo.</div>
+            <div className="mt-3 text-center text-[10px] text-muted-foreground">Le numéro est synchronisé avec votre Power Dialer Allo.</div>
           </div>
         </div>
       ) : null}

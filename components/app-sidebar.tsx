@@ -16,6 +16,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type CockpitRole = "admin" | "member" | "commercial";
@@ -55,8 +56,8 @@ function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
       className={cn(
         "group flex h-11 items-center justify-center gap-3 rounded-[13px] px-3 text-[15px] font-medium tracking-[-0.01em] transition-colors lg:justify-start",
         active
-          ? "bg-[#edf1ef] text-[#17231f]"
-          : "text-[#4d5a54] hover:bg-[#f0f3f1] hover:text-[#17231f]",
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
       )}
     >
       <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.7} />
@@ -70,10 +71,10 @@ export function AppSidebar({ email, role = "member" }: { email?: string; role?: 
   const workspaceItems = role === "commercial" ? workspaceNav.filter(item => item.href !== "/segments") : workspaceNav;
 
   return (
-    <aside className="flex h-screen w-[68px] flex-col border-r border-[#e6ebe7] bg-[#f8faf9] px-2 py-4 lg:w-[232px] lg:px-3.5">
+    <aside className="flex h-screen w-[68px] flex-col border-r border-border bg-[color-mix(in_srgb,var(--background)_94%,var(--foreground)_6%)] px-2 py-4 text-foreground transition-colors lg:w-[232px] lg:px-3.5">
       <Link href="/today" className="mb-4 flex h-10 items-center justify-center gap-2.5 px-2 lg:justify-start">
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] bg-[#1f3a31] text-[13px] font-semibold text-white">G</span>
-        <span className="hidden text-[17px] font-semibold tracking-[-0.03em] text-[#17231f] lg:block">Gando</span>
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[8px] bg-primary text-[13px] font-semibold text-primary-foreground">G</span>
+        <span className="hidden text-[17px] font-semibold tracking-[-0.03em] text-foreground lg:block">Gando</span>
       </Link>
 
       <nav className="min-h-0 flex-1 overflow-y-auto minari-scrollbar" aria-label="Navigation principale">
@@ -81,38 +82,40 @@ export function AppSidebar({ email, role = "member" }: { email?: string; role?: 
           {primaryNav.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
         </div>
 
-        <div className="my-5 border-t border-[#e4e9e6]" />
+        <div className="my-5 border-t border-border" />
 
         <div>
-          <div className="mb-2 hidden px-3 text-[13px] font-medium text-[#75817b] lg:block">Workspace</div>
+          <div className="mb-2 hidden px-3 text-[13px] font-medium text-muted-foreground lg:block">Workspace</div>
           <div className="space-y-0.5">
             {workspaceItems.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
           </div>
         </div>
 
-        <div className="my-5 border-t border-[#e4e9e6]" />
+        <div className="my-5 border-t border-border" />
 
         <div>
-          <div className="mb-2 hidden px-3 text-[13px] font-medium text-[#75817b] lg:block">Suivre</div>
+          <div className="mb-2 hidden px-3 text-[13px] font-medium text-muted-foreground lg:block">Suivre</div>
           <div className="space-y-0.5">
             {followUpNav.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
           </div>
         </div>
       </nav>
 
-      <div className="border-t border-[#e4e9e6] pt-3">
+      <div className="border-t border-border pt-3">
         <SidebarLink item={{ href: "/settings", label: "Paramètres", icon: Settings }} pathname={pathname} />
         <div className="mt-2 flex items-center justify-center gap-2.5 rounded-xl px-2 py-2.5 lg:justify-start">
-          <Avatar className="h-7 w-7 shrink-0 border border-[#dce4df]">
-            <AvatarFallback className="bg-[#dcebe3] text-[11px] font-semibold text-[#2c5542]">{(email || "G").slice(0, 1).toUpperCase()}</AvatarFallback>
+          <Avatar className="h-7 w-7 shrink-0 border border-border">
+            <AvatarFallback className="bg-muted text-[11px] font-semibold text-foreground">{(email || "G").slice(0, 1).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="hidden min-w-0 flex-1 lg:block">
-            <div className="truncate text-[12px] font-medium text-[#314139]">{email || "Compte Gando"}</div>
-            <div className="mt-0.5 text-[10px] text-[#87928c]">{roleLabel(role)}</div>
+            <div className="truncate text-[12px] font-medium text-foreground">{email || "Compte Gando"}</div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">{roleLabel(role)}</div>
           </div>
+          <div className="hidden lg:block"><ThemeToggle /></div>
         </div>
+        <div className="flex justify-center lg:hidden"><ThemeToggle /></div>
         <form action="/api/auth/logout" method="post">
-          <button type="submit" title="Se déconnecter" className="flex h-9 w-full items-center justify-center gap-3 rounded-xl px-3 text-[12px] font-medium text-[#718079] transition-colors hover:bg-[#edf1ef] hover:text-[#17231f] lg:justify-start">
+          <button type="submit" title="Se déconnecter" className="flex h-9 w-full items-center justify-center gap-3 rounded-xl px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:justify-start">
             <LogOut className="h-4 w-4" strokeWidth={1.7} /><span className="hidden lg:inline">Se déconnecter</span>
           </button>
         </form>
