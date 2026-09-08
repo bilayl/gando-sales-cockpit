@@ -111,29 +111,27 @@ async function runNativeVoiceProbe() {
 
   return {
     safe: true,
-    note: "Preview-only capability probe. POST candidates use an empty JSON body, so no destination number is supplied and no phone call can be placed by this probe.",
+    note: "Authenticated capability probe. POST candidates use an empty JSON body, so no destination number is supplied and no phone call can be placed by this probe.",
+    environment: process.env.VERCEL_ENV || "unknown",
     probes,
     embed,
   };
 }
 
 export async function GET(request: Request) {
+  const access = await getCockpitAccess();
+  if (!access) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+
   const url = new URL(request.url);
   const wantsProbe = url.searchParams.get("probe") === "1";
 
   if (wantsProbe) {
-    if (process.env.VERCEL_ENV !== "preview") {
-      return NextResponse.json({ error: "Native voice probe is preview-only." }, { status: 403, headers: { "cache-control": "no-store" } });
-    }
     if (!isWithAlloConfigured()) {
-      return NextResponse.json({ error: "WITHALLO_API_KEY is not configured on this preview." }, { status: 503, headers: { "cache-control": "no-store" } });
+      return NextResponse.json({ error: "WITHALLO_API_KEY is not configured on this environment." }, { status: 503, headers: { "cache-control": "no-store" } });
     }
     const probe = await runNativeVoiceProbe();
     return NextResponse.json(probe, { headers: { "cache-control": "no-store" } });
   }
-
-  const access = await getCockpitAccess();
-  if (!access) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   if (!isWithAlloConfigured()) {
     return NextResponse.json({
