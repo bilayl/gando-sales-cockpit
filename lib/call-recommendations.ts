@@ -150,6 +150,7 @@ export async function getCallRecommendations(options?: {
         mobilephone: source.mobilephone,
         jobtitle: contact.job_title ?? source.jobtitle,
         company: company?.name ?? source.company,
+        db_company_id: contact.company_id || undefined,
         hubspot_owner_id: contact.owner_hubspot_id ?? source.hubspot_owner_id,
         statut_de_lappel: row.call_status ?? source.statut_de_lappel,
         statut_prospection: row.prospecting_status ?? source.statut_prospection,
