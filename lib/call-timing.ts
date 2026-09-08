@@ -7,6 +7,10 @@ export type CallTiming = {
   reason: string;
 };
 
+export const CALL_WINDOW_START_HOUR = 8;
+export const CALL_WINDOW_END_HOUR = 19;
+export const CALL_WINDOW_LABEL = "08:00-19:00";
+
 function normalize(value: unknown) {
   return String(value || "")
     .normalize("NFD")
@@ -65,7 +69,7 @@ export function getBestCallTimeForProperties(
   date = new Date(),
 ): CallTiming {
   const resolved = resolveProspectTimezone(properties);
-  const recommendedWindows = ["09:30-12:00", "14:00-17:00"];
+  const recommendedWindows = [CALL_WINDOW_LABEL];
   if (!resolved.timezone) {
     return {
       timezone: null,
@@ -80,9 +84,8 @@ export function getBestCallTimeForProperties(
   const local = localParts(resolved.timezone, date);
   const minutes = local.hour * 60 + local.minute;
   const weekday = !["Sat", "Sun"].includes(local.weekday);
-  const morning = minutes >= 9 * 60 + 30 && minutes < 12 * 60;
-  const afternoon = minutes >= 14 * 60 && minutes < 17 * 60;
-  const callNow = weekday && (morning || afternoon);
+  const insideCallWindow = minutes >= CALL_WINDOW_START_HOUR * 60 && minutes < CALL_WINDOW_END_HOUR * 60;
+  const callNow = weekday && insideCallWindow;
 
   return {
     timezone: resolved.timezone,
@@ -91,9 +94,9 @@ export function getBestCallTimeForProperties(
     recommendedWindows,
     confidence: resolved.source === "crm_timezone" ? "high" : "medium",
     reason: callNow
-      ? "Bonne fenêtre d’appel en heure locale."
+      ? `Appel autorisé : ${CALL_WINDOW_LABEL} en heure locale du prospect.`
       : weekday
-        ? "Hors de la fenêtre d’appel locale."
+        ? `Hors créneau : appeler entre ${CALL_WINDOW_LABEL} en heure locale du prospect.`
         : "Week-end dans le fuseau du prospect.",
   };
 }

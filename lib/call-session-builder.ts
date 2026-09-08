@@ -9,6 +9,32 @@ import {
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getBestCallTimeForProperties } from "@/lib/call-timing"
 import { claimCockpitCompanies, listCockpitCompanyAssignments } from "@/lib/cockpit-company-assignment"
+import {
+  appendWithAlloDialingQueue,
+  isWithAlloConfigured,
+  safeWithAlloError,
+  type WithAlloQueueNumber,
+} from "@/lib/withallo"
+
+function withAlloQueueNumber(properties: Record<string, string | null | undefined>): WithAlloQueueNumber | null {
+  const number = String(properties.phone || properties.mobilephone || "").trim()
+  if (!number) return null
+
+  const websiteValue = String(properties.website || properties.domain || "").trim()
+  const website = websiteValue && !/^https?:\/\//i.test(websiteValue)
+    ? `https://${websiteValue}`
+    : websiteValue
+
+  return {
+    number,
+    ...(properties.firstname ? { name: String(properties.firstname).slice(0, 256) } : {}),
+    ...(properties.lastname ? { last_name: String(properties.lastname).slice(0, 256) } : {}),
+    ...(properties.company ? { company: String(properties.company).slice(0, 256) } : {}),
+    ...(properties.jobtitle ? { job_title: String(properties.jobtitle).slice(0, 256) } : {}),
+    ...(properties.email ? { emails: [String(properties.email)] } : {}),
+    ...(website ? { website: website.slice(0, 500) } : {}),
+  }
+}
 
 export async function createFilteredSalesCallSession(input?: {
   owner?: string
@@ -135,9 +161,46 @@ export async function createFilteredSalesCallSession(input?: {
     if (error) throw error
   }
 
+  const queueNumbers = selected
+    .map(contact => withAlloQueueNumber(contact.properties))
+    .filter((item): item is WithAlloQueueNumber => Boolean(item))
+
+  let withAllo: {
+    configured: boolean
+    queued: boolean
+    requested: number
+    added?: number
+    skipped?: number
+    batches?: number
+    error?: ReturnType<typeof safeWithAlloError>
+  } = {
+    configured: isWithAlloConfigured(),
+    queued: false,
+    requested: queueNumbers.length,
+  }
+
+  if (withAllo.configured && queueNumbers.length) {
+    try {
+      const result = await appendWithAlloDialingQueue({
+        numbers: queueNumbers,
+        email: process.env.WITHALLO_QUEUE_EMAIL?.trim() || null,
+      })
+      withAllo = { configured: true, queued: true, ...result }
+    } catch (error) {
+      console.error("Unable to push Gando call session to Allo Power Dialer", error)
+      withAllo = {
+        configured: true,
+        queued: false,
+        requested: queueNumbers.length,
+        error: safeWithAlloError(error),
+      }
+    }
+  }
+
   return {
     ...(await getSalesCallSession(String(session.id))),
     appliedFilters: filters,
     filterSummary: summaries,
+    withAllo,
   }
 }
