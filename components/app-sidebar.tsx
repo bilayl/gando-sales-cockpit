@@ -5,15 +5,18 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   CalendarCheck2,
+  ContactRound,
+  FileText,
+  Inbox,
   LifeBuoy,
   ListFilter,
   ListTodo,
   LogOut,
   Mail,
-  Phone,
   Search,
   Settings,
-  UsersRound,
+  Zap,
+  Phone,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -23,22 +26,25 @@ type CockpitRole = "admin" | "member" | "commercial";
 type NavIcon = typeof Phone;
 type NavItem = { href: string; label: string; icon: NavIcon };
 
-const primaryNav: NavItem[] = [
-  { href: "/today", label: "Aujourd’hui", icon: Phone },
-  { href: "/prospection", label: "Appels", icon: Phone },
-  { href: "/prospects", label: "Prospects", icon: UsersRound },
-  { href: "/analytics", label: "Analyse", icon: BarChart3 },
+const callNav: NavItem[] = [
+  { href: "/today", label: "Aujourd’hui", icon: Inbox },
+  { href: "/phone", label: "Appels", icon: Phone },
+  { href: "/historique", label: "Résumés", icon: FileText },
+  { href: "/prospection", label: "Power Dialer", icon: Zap },
 ];
 
 const workspaceNav: NavItem[] = [
+  { href: "/prospects", label: "Contacts", icon: ContactRound },
   { href: "/sourcing", label: "Sourcing", icon: Search },
   { href: "/segments", label: "Segments", icon: ListFilter },
   { href: "/tasks", label: "Tâches", icon: ListTodo },
-  { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
+  { href: "/analytics", label: "Analyse", icon: BarChart3 },
+  { href: "/settings", label: "Paramètres", icon: Settings },
 ];
 
 const followUpNav: NavItem[] = [
-  { href: "/emails", label: "Emails envoyés", icon: Mail },
+  { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
+  { href: "/emails", label: "Emails", icon: Mail },
   { href: "/support", label: "Support", icon: LifeBuoy },
 ];
 
@@ -66,13 +72,13 @@ function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
       href={item.href}
       title={item.label}
       className={cn(
-        "group flex h-11 items-center justify-center gap-3 rounded-[13px] px-3 text-[15px] font-medium tracking-[-0.01em] transition-colors lg:justify-start",
+        "group flex h-[50px] items-center justify-center gap-3.5 rounded-[17px] px-3.5 text-[16px] font-medium tracking-[-0.02em] transition-colors lg:justify-start",
         active
-          ? "bg-muted text-foreground"
+          ? "bg-[color-mix(in_srgb,var(--muted)_82%,#dce9e2_18%)] text-foreground"
           : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
       )}
     >
-      <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.7} />
+      <Icon className="h-[20px] w-[20px] shrink-0" strokeWidth={1.65} />
       <span className="hidden truncate lg:block">{item.label}</span>
     </Link>
   );
@@ -83,43 +89,45 @@ export function AppSidebar({ email, role = "member" }: { email?: string; role?: 
   const workspaceItems = role === "commercial" ? workspaceNav.filter(item => item.href !== "/segments") : workspaceNav;
 
   return (
-    <aside className="flex h-screen w-[68px] flex-col border-r border-border bg-[color-mix(in_srgb,var(--background)_94%,var(--foreground)_6%)] px-2 py-4 text-foreground transition-colors lg:w-[232px] lg:px-3.5">
+    <aside className="flex h-screen w-[68px] flex-col border-r border-border bg-[color-mix(in_srgb,var(--background)_96%,var(--foreground)_4%)] px-2 py-4 text-foreground transition-colors lg:w-[248px] lg:px-[18px]">
       <Link href="/today" className="mb-4 flex min-h-14 items-center justify-center gap-3 px-1 lg:justify-start lg:px-2">
         <GandoMark />
         <div className="hidden min-w-0 lg:block">
-          <div className="truncate text-[18px] font-semibold leading-5 tracking-[-0.035em] text-foreground">Gando</div>
+          <div className="truncate text-[20px] font-semibold leading-5 tracking-[-0.04em] text-foreground">Gando</div>
           <div className="mt-1 truncate text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Cockpit · CRM</div>
         </div>
       </Link>
 
       <nav className="min-h-0 flex-1 overflow-y-auto minari-scrollbar" aria-label="Navigation principale">
         <div className="space-y-0.5">
-          {primaryNav.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
+          {callNav.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
         </div>
 
-        <div className="my-5 border-t border-border" />
+        <div className="my-5 border-t border-border/80" />
 
         <div>
-          <div className="mb-2 hidden px-3 text-[13px] font-medium text-muted-foreground lg:block">Workspace</div>
+          <div className="mb-2 hidden items-center gap-1.5 px-3 text-[14px] font-medium tracking-[-0.015em] text-muted-foreground lg:flex">
+            Workspace
+            <span className="text-[12px]">⌄</span>
+          </div>
           <div className="space-y-0.5">
             {workspaceItems.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
           </div>
         </div>
 
-        <div className="my-5 border-t border-border" />
+        <div className="my-5 border-t border-border/80" />
 
         <div>
-          <div className="mb-2 hidden px-3 text-[13px] font-medium text-muted-foreground lg:block">Suivre</div>
+          <div className="mb-2 hidden px-3 text-[14px] font-medium tracking-[-0.015em] text-muted-foreground lg:block">Suivi</div>
           <div className="space-y-0.5">
             {followUpNav.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
           </div>
         </div>
       </nav>
 
-      <div className="border-t border-border pt-3">
-        <SidebarLink item={{ href: "/settings", label: "Paramètres", icon: Settings }} pathname={pathname} />
-        <div className="mt-2 flex items-center justify-center gap-2.5 rounded-xl px-2 py-2.5 lg:justify-start">
-          <Avatar className="h-7 w-7 shrink-0 border border-border">
+      <div className="border-t border-border/80 pt-3">
+        <div className="mt-1 flex items-center justify-center gap-2.5 rounded-2xl px-2 py-2.5 lg:justify-start">
+          <Avatar className="h-8 w-8 shrink-0 border border-border">
             <AvatarFallback className="bg-muted text-[11px] font-semibold text-foreground">{(email || "G").slice(0, 1).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="hidden min-w-0 flex-1 lg:block">
