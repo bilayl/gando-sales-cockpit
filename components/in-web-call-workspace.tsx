@@ -57,22 +57,22 @@ export function InWebCallWorkspace({
   );
 
   return (
-    <div className="fixed inset-0 z-[80] bg-white text-[#17231f]">
+    <div className="fixed inset-0 z-[80] bg-background text-foreground transition-colors">
       <div className="flex h-full flex-col">
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#e7ebe8] px-6">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-border px-6">
           <div className="flex items-center gap-3">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#1f3a31] text-white">
+            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
               <Phone className="h-4 w-4" strokeWidth={1.8} />
             </div>
             <div>
               <div className="text-[14px] font-semibold">Appel en cours de préparation</div>
-              <div className="text-[11px] text-[#7b8781]">Cockpit Gando · {allo?.team?.name || "Allo"}</div>
+              <div className="text-[11px] text-muted-foreground">Cockpit Gando · {allo?.team?.name || "Allo"}</div>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="grid h-9 w-9 place-items-center rounded-lg text-[#68756f] transition hover:bg-[#f1f4f2] hover:text-[#17231f]"
+            className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
             aria-label="Fermer l’interface d’appel"
           >
             <X className="h-4 w-4" />
@@ -80,57 +80,57 @@ export function InWebCallWorkspace({
         </header>
 
         <div className="grid min-h-0 flex-1 xl:grid-cols-[340px_1fr_360px]">
-          <aside className="border-r border-[#e7ebe8] bg-[#fbfcfb] p-6">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-[#e8f0eb] text-[#315444]">
+          <aside className="border-r border-border bg-card p-6">
+            <div className="grid h-12 w-12 place-items-center rounded-full bg-muted text-foreground">
               <UserRound className="h-5 w-5" />
             </div>
             <h1 className="mt-4 text-[24px] font-semibold tracking-[-0.035em]">{fullName(contact)}</h1>
-            <div className="mt-1 text-[13px] text-[#6f7b75]">{p.jobtitle || "Fonction à qualifier"}{p.company ? ` · ${p.company}` : ""}</div>
+            <div className="mt-1 text-[13px] text-muted-foreground">{p.jobtitle || "Fonction à qualifier"}{p.company ? ` · ${p.company}` : ""}</div>
 
             <div className="mt-7 space-y-5 text-[12px]">
               <div>
-                <div className="text-[#89938e]">Téléphone</div>
+                <div className="text-muted-foreground">Téléphone</div>
                 <div className="mt-1 text-[14px] font-medium">{phone || "Aucun numéro"}</div>
               </div>
               <div>
-                <div className="text-[#89938e]">Heure locale</div>
+                <div className="text-muted-foreground">Heure locale</div>
                 <div className="mt-1 text-[14px] font-medium">{p.db_call_local_time || "—"} · {p.db_call_timezone || "Fuseau inconnu"}</div>
               </div>
               <div>
-                <div className="text-[#89938e]">Entreprise</div>
+                <div className="text-muted-foreground">Entreprise</div>
                 <div className="mt-1 text-[14px] font-medium">{p.company || "—"}</div>
               </div>
               <div>
-                <div className="text-[#89938e]">Email</div>
+                <div className="text-muted-foreground">Email</div>
                 <div className="mt-1 break-all text-[13px] font-medium">{p.email || "—"}</div>
               </div>
             </div>
           </aside>
 
-          <main className="flex min-h-0 items-center justify-center bg-white p-8">
+          <main className="flex min-h-0 items-center justify-center bg-background p-8">
             <div className="w-full max-w-[620px] text-center">
-              <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-[#edf2ef] text-[#2f4a40]">
+              <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-muted text-foreground">
                 <Phone className="h-8 w-8" strokeWidth={1.7} />
               </div>
               <div className="mt-6 text-[28px] font-semibold tracking-[-0.04em]">{fullName(contact)}</div>
-              <div className="mt-2 text-[15px] text-[#6f7a74]">{phone || "Numéro indisponible"}</div>
+              <div className="mt-2 text-[15px] text-muted-foreground">{phone || "Numéro indisponible"}</div>
               <div className="mt-5 font-mono text-[30px] tracking-[-0.03em]">{formatDuration(seconds)}</div>
 
-              <div className="mx-auto mt-7 max-w-[480px] rounded-2xl border border-[#e3e8e5] bg-[#fbfcfb] p-5 text-left">
+              <div className="mx-auto mt-7 max-w-[480px] rounded-2xl border border-border bg-card p-5 text-left">
                 <div className="text-[12px] font-semibold">Audio Allo</div>
-                <div className="mt-2 text-[12px] leading-5 text-[#718079]">
+                <div className="mt-2 text-[12px] leading-5 text-muted-foreground">
                   Le prospect est synchronisé dans le Power Dialer de {callTarget}. Cette fenêtre reste le poste de travail commercial dans Gando.
                 </div>
                 {allo?.directCallReady ? (
-                  <div className="mt-3 rounded-lg bg-[#eaf6ee] px-3 py-2 text-[11px] text-[#356849]">Votre clé indique qu’une capacité d’appel direct est disponible. Le branchement de cette action au média Allo peut être fait ici.</div>
+                  <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-300">Votre clé indique qu’une capacité d’appel direct est disponible. Le branchement de cette action au média Allo peut être fait ici.</div>
                 ) : (
-                  <div className="mt-3 rounded-lg bg-[#fff8f5] px-3 py-2 text-[11px] leading-5 text-[#87594c]">La clé API actuelle n’expose pas le moteur audio dans le navigateur. L’interface reste dans Gando, mais le média Allo doit encore être lancé par leur client web/app.</div>
+                  <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] leading-5 text-amber-800 dark:text-amber-300">La clé API actuelle n’expose pas le moteur audio dans le navigateur. L’interface reste dans Gando, mais le média Allo doit encore être lancé par leur client web/app.</div>
                 )}
               </div>
 
               <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
                 <Button
-                  className="h-12 rounded-xl bg-[#1f3a31] px-6 text-white hover:bg-[#183129]"
+                  className="h-12 rounded-xl px-6"
                   onClick={() => setSessionStarted(true)}
                   disabled={sessionStarted}
                 >
@@ -139,34 +139,34 @@ export function InWebCallWorkspace({
                 {!allo?.directCallReady ? (
                   <Button
                     variant="outline"
-                    className="h-12 rounded-xl border-[#dfe5e1] bg-white px-5"
+                    className="h-12 rounded-xl border-border bg-card px-5"
                     onClick={() => window.open("https://web.withallo.com", "_blank", "noopener,noreferrer")}
                   >
                     Ouvrir l’audio Allo <ExternalLink className="ml-2 h-4 w-4" />
                   </Button>
                 ) : null}
-                <Button variant="outline" className="h-12 rounded-xl border-[#ead7d2] bg-white px-5 text-[#9a4e45] hover:bg-[#fff7f5]" onClick={onClose}>
+                <Button variant="outline" className="h-12 rounded-xl border-destructive/25 bg-card px-5 text-destructive hover:bg-destructive/10" onClick={onClose}>
                   <PhoneOff className="mr-2 h-4 w-4" /> Terminer
                 </Button>
               </div>
             </div>
           </main>
 
-          <aside className="border-l border-[#e7ebe8] bg-[#fbfcfb] p-6">
+          <aside className="border-l border-border bg-card p-6">
             <div className="text-[14px] font-semibold">Notes d’appel</div>
-            <div className="mt-1 text-[11px] text-[#7d8882]">À utiliser pendant l’échange sans quitter le dialer.</div>
+            <div className="mt-1 text-[11px] text-muted-foreground">À utiliser pendant l’échange sans quitter le dialer.</div>
             <textarea
               value={notes}
               onChange={event => setNotes(event.target.value)}
               placeholder="Objections, besoin, prochain rappel…"
-              className="mt-4 min-h-[220px] w-full resize-none rounded-xl border border-[#dfe6e1] bg-white p-3 text-[13px] outline-none transition placeholder:text-[#9ca6a1] focus:border-[#9aaca3]"
+              className="mt-4 min-h-[220px] w-full resize-none rounded-xl border border-input bg-background p-3 text-[13px] text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring"
             />
 
-            <div className="mt-6 border-t border-[#e5eae7] pt-5">
-              <div className="text-[11px] text-[#89938e]">Priorité</div>
+            <div className="mt-6 border-t border-border pt-5">
+              <div className="text-[11px] text-muted-foreground">Priorité</div>
               <div className="mt-1 text-[13px] font-medium">{p.db_call_priority_label || `${p.db_call_score || 0}/100`}</div>
-              <div className="mt-4 text-[11px] text-[#89938e]">Raison</div>
-              <div className="mt-1 text-[12px] leading-5 text-[#5f6d66]">{p.db_call_reason || p.db_call_timing_reason || "Prospect prioritaire pour la session du jour."}</div>
+              <div className="mt-4 text-[11px] text-muted-foreground">Raison</div>
+              <div className="mt-1 text-[12px] leading-5 text-muted-foreground">{p.db_call_reason || p.db_call_timing_reason || "Prospect prioritaire pour la session du jour."}</div>
             </div>
           </aside>
         </div>
