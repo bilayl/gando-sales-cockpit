@@ -5,9 +5,11 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   CalendarCheck2,
+  LifeBuoy,
   ListFilter,
   ListTodo,
   LogOut,
+  Mail,
   Phone,
   Search,
   Settings,
@@ -32,6 +34,11 @@ const workspaceNav: NavItem[] = [
   { href: "/segments", label: "Segments", icon: ListFilter },
   { href: "/tasks", label: "Tâches", icon: ListTodo },
   { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
+];
+
+const followUpNav: NavItem[] = [
+  { href: "/emails", label: "Emails envoyés", icon: Mail },
+  { href: "/support", label: "Support", icon: LifeBuoy },
 ];
 
 function roleLabel(role: CockpitRole) {
@@ -80,6 +87,15 @@ export function AppSidebar({ email, role = "member" }: { email?: string; role?: 
           <div className="mb-2 hidden px-3 text-[13px] font-medium text-[#75817b] lg:block">Workspace</div>
           <div className="space-y-0.5">
             {workspaceItems.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
+          </div>
+        </div>
+
+        <div className="my-5 border-t border-[#e4e9e6]" />
+
+        <div>
+          <div className="mb-2 hidden px-3 text-[13px] font-medium text-[#75817b] lg:block">Suivre</div>
+          <div className="space-y-0.5">
+            {followUpNav.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
           </div>
         </div>
       </nav>
