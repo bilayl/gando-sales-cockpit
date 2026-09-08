@@ -7,6 +7,7 @@ import {
   type ContactFilters,
 } from "@/lib/contact-multi-filters"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getBestCallTimeForProperties } from "@/lib/call-timing"
 
 export async function createFilteredSalesCallSession(input?: {
   owner?: string
@@ -23,8 +24,10 @@ export async function createFilteredSalesCallSession(input?: {
   }
 
   const legacyLocationNeedle = input?.location?.trim().toLocaleLowerCase("fr-FR") || ""
+  const now = new Date()
   const recommendations = await getCallRecommendations({
     bucket: "ACTIONABLE",
+    owner: filters.owner?.length === 1 ? filters.owner[0] : input?.owner,
     limit: 2000,
     forceRefresh: true,
   })
@@ -40,6 +43,18 @@ export async function createFilteredSalesCallSession(input?: {
         .toLocaleLowerCase("fr-FR")
       return location.includes(legacyLocationNeedle)
     })
+    .map(contact => ({ contact, timing: getBestCallTimeForProperties(contact.properties, now) }))
+    .filter(item => item.timing.callNow)
+    .sort((a, b) => Number(b.contact.properties.db_call_score || 0) - Number(a.contact.properties.db_call_score || 0))
+    .map(item => ({
+      ...item.contact,
+      properties: {
+        ...item.contact.properties,
+        db_call_local_time: item.timing.localTime,
+        db_call_timezone: item.timing.timezone,
+        db_call_timing_reason: item.timing.reason,
+      },
+    }))
     .slice(0, targetCount)
 
   const hubspotIds = selected.map(contact => contact.id)
@@ -49,7 +64,7 @@ export async function createFilteredSalesCallSession(input?: {
       ? `Aucun contact disponible avec les filtres sélectionnés (${summaries.join(" · ")}).`
       : input?.location
         ? `Aucun contact disponible pour une session sur « ${input.location} ».`
-        : "Aucun contact disponible pour cette session.")
+        : "Aucun contact attribué et joignable maintenant. Les prospects hors fuseau optimal ou sans localisation ont été exclus.")
   }
 
   const supabase = getSupabaseAdmin()
@@ -60,7 +75,6 @@ export async function createFilteredSalesCallSession(input?: {
   if (contactsError) throw contactsError
   const uuidByHubspotId = new Map((contacts || []).map(row => [String(row.hubspot_id), String(row.id)]))
 
-  const now = new Date()
   const summaries = contactFilterSummary(filters)
   const filterCount = activeContactFilterCount(filters)
   const suffix = filterCount

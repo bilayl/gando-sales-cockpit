@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { BookOpen, ChevronDown, ChevronUp, ExternalLink, Mail, PhoneCall } from "lucide-react"
+import { BookOpen, ChevronDown, ChevronUp, Clock3, ExternalLink, Mail, PhoneCall } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CallObjectionCoachPanel } from "@/components/call-objection-coach-panel"
@@ -90,6 +90,7 @@ export function CallSessionPrep({ contact, remaining, onOpenContact }: Props) {
             <Badge className="gap-1"><PhoneCall size={12} /> Script d’appel SI → ALORS</Badge>
             {selectedScript ? <Badge variant="outline" className="gap-1"><BookOpen size={11} /> {selectedScript.name}</Badge> : <Badge variant="outline">Chargement du script…</Badge>}
             <span className="text-sm font-semibold">{name}</span>
+            {p.db_call_local_time ? <Badge variant="secondary" className="gap-1"><Clock3 size={11} /> {p.db_call_local_time} heure locale · {p.db_call_timezone}</Badge> : null}
             <span className="text-xs text-muted-foreground">· {remaining} contact{remaining > 1 ? "s" : ""} restant{remaining > 1 ? "s" : ""}</span>
           </div>
           <div className="mt-1 text-[11px] text-muted-foreground">Le Cockpit prépare le flux avec les données CRM et relit les notes d’appels pour anticiper les objections déjà rencontrées.</div>

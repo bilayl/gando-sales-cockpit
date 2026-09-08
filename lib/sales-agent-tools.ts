@@ -4,6 +4,9 @@ import { getCallRecommendations } from "@/lib/call-recommendations";
 import { hubspotJson } from "@/lib/hubspot";
 import { saveCallOutcome } from "@/lib/hubspot/contacts";
 import { createReminderTask } from "@/lib/hubspot/tasks";
+import { getBestCallTimeForProperties } from "@/lib/call-timing";
+
+export { getBestCallTimeForProperties } from "@/lib/call-timing";
 
 export const SALES_AGENT_TOOL_NAMES = [
   "get_today_sales_queue",
@@ -37,14 +40,6 @@ const WRITE = {
   readOnlyHint: false,
 } as const;
 
-function normalize(value: unknown) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-}
-
 function stringArg(args: ToolArguments, key: string, required = true) {
   const value = String(args[key] || "").trim();
   if (required && !value) throw new Error(`${key} est requis`);
@@ -55,84 +50,6 @@ function numberArg(args: ToolArguments, key: string, fallback: number, min: numb
   const parsed = Number(args[key]);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(Math.max(Math.round(parsed), min), max);
-}
-
-function resolveTimezone(properties: Record<string, string | null | undefined>) {
-  const explicit = String(properties.timezone || properties.time_zone || properties.hs_timezone || "").trim();
-  if (explicit) {
-    try {
-      new Intl.DateTimeFormat("fr-FR", { timeZone: explicit }).format(new Date());
-      return { timezone: explicit, source: "crm_timezone" };
-    } catch {
-      // Ignore invalid CRM timezone and continue with deterministic fallbacks.
-    }
-  }
-
-  const country = normalize(properties.country || properties.pays);
-  const state = normalize(properties.state || properties.region);
-  const city = normalize(properties.city);
-  const phone = String(properties.phone || properties.mobilephone || "").replace(/[\s().-]/g, "");
-  const place = `${country} ${state} ${city}`;
-
-  if (phone.startsWith("+590") || place.includes("guadeloupe")) return { timezone: "America/Guadeloupe", source: "location" };
-  if (phone.startsWith("+596") || place.includes("martinique")) return { timezone: "America/Martinique", source: "location" };
-  if (phone.startsWith("+594") || place.includes("guyane") || place.includes("french guiana")) return { timezone: "America/Cayenne", source: "location" };
-  if (phone.startsWith("+262") || place.includes("reunion")) return { timezone: "Indian/Reunion", source: "location" };
-  if (phone.startsWith("+687") || place.includes("nouvelle caledonie") || place.includes("new caledonia")) return { timezone: "Pacific/Noumea", source: "location" };
-  if (phone.startsWith("+33") || country === "france" || country === "fr") return { timezone: "Europe/Paris", source: "location" };
-
-  return { timezone: null, source: "unknown" };
-}
-
-function localParts(timezone: string, date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: timezone,
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find(part => part.type === type)?.value || "";
-  return {
-    weekday: get("weekday"),
-    hour: Number(get("hour")),
-    minute: Number(get("minute")),
-    display: `${get("hour")}:${get("minute")}`,
-  };
-}
-
-export function getBestCallTimeForProperties(properties: Record<string, string | null | undefined>) {
-  const resolved = resolveTimezone(properties);
-  if (!resolved.timezone) {
-    return {
-      timezone: null,
-      localTime: null,
-      callNow: false,
-      recommendedWindows: ["09:30-11:30", "14:00-16:30"],
-      confidence: "low",
-      reason: "Fuseau horaire non déterminé : compléter le pays, la ville ou le fuseau dans le CRM avant l'appel.",
-    };
-  }
-
-  const local = localParts(resolved.timezone);
-  const minutes = local.hour * 60 + local.minute;
-  const weekday = !["Sat", "Sun"].includes(local.weekday);
-  const morning = minutes >= 9 * 60 + 30 && minutes <= 11 * 60 + 30;
-  const afternoon = minutes >= 14 * 60 && minutes <= 16 * 60 + 30;
-  const callNow = weekday && (morning || afternoon);
-
-  return {
-    timezone: resolved.timezone,
-    localTime: local.display,
-    callNow,
-    recommendedWindows: ["09:30-11:30", "14:00-16:30"],
-    confidence: resolved.source === "crm_timezone" ? "high" : "medium",
-    reason: callNow
-      ? "Le contact est actuellement dans une fenêtre d'appel recommandée en heure locale."
-      : weekday
-        ? "Le contact est hors de la fenêtre d'appel recommandée en heure locale."
-        : "Le contact est actuellement en week-end local.",
-  };
 }
 
 async function fetchContact(contactId: string): Promise<ContactLike> {

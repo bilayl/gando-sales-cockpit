@@ -11,6 +11,9 @@ export type SdrWorkFilter = ProspectionBucket | "ALL";
 type Props = {
   activeFilter: SdrWorkFilter;
   actionableCount: number;
+  callableNowCount: number;
+  blockedByTimingCount: number;
+  unassignedCount: number;
   opportunitiesCount: number;
   snoozedCount: number;
   excludedCount: number;
@@ -62,6 +65,9 @@ const buckets: Array<{
 export function SdrWorkQueue({
   activeFilter,
   actionableCount,
+  callableNowCount,
+  blockedByTimingCount,
+  unassignedCount,
   opportunitiesCount,
   snoozedCount,
   excludedCount,
@@ -88,20 +94,22 @@ export function SdrWorkQueue({
             {segmentName ? <Badge variant="outline" className="max-w-[240px] truncate">{segmentName}</Badge> : null}
           </div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Le cockpit trie automatiquement : <strong className="text-foreground">tâches en retard → relances → recontacts → nouveaux comptes</strong>.
+            <strong className="text-foreground">{callableNowCount} attribuée{callableNowCount > 1 ? "s" : ""} et joignable{callableNowCount > 1 ? "s" : ""} maintenant</strong>
+            {blockedByTimingCount ? ` · ${blockedByTimingCount} hors créneau local` : ""}
+            {unassignedCount ? ` · ${unassignedCount} non attribuée${unassignedCount > 1 ? "s" : ""}` : ""}.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Button
-            disabled={loading || actionableCount === 0}
+            disabled={loading || callableNowCount === 0}
             onClick={onStartSession}
             className="h-9 gap-2"
           >
             <PhoneCall size={15} />
             Démarrer les appels
-            {actionableCount > 0 ? (
-              <Badge variant="secondary" className="bg-background/80 text-foreground">{actionableCount}</Badge>
+            {callableNowCount > 0 ? (
+              <Badge variant="secondary" className="bg-background/80 text-foreground">{callableNowCount}</Badge>
             ) : null}
           </Button>
         </div>

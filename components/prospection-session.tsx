@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach";
 import type { SalesCallScript, ScriptContact } from "@/lib/call-scripts";
 import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
+import { getBestCallTimeForProperties } from "@/lib/call-timing";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
 
@@ -205,6 +206,7 @@ function CompanyProfilePanel({
   }, [companyId]);
 
   const p = data?.company?.properties || fallbackCompany.properties;
+  const timing = getBestCallTimeForProperties(p);
   const contacts = data?.contacts || [];
   const emailContact = contacts.find((contact: any) => contact?.properties?.email) || contacts[0] || null;
   const referenceContact = emailContact?.properties || contacts[0]?.properties || {};
@@ -260,6 +262,7 @@ function CompanyProfilePanel({
             {p.domain ? <span className="inline-flex items-center gap-1"><Globe size={12} />{p.domain}</span> : null}
             {[p.city, p.country].filter(Boolean).length ? <span className="inline-flex items-center gap-1"><MapPin size={12} />{[p.city, p.country].filter(Boolean).join(", ")}</span> : null}
             {email ? <span className="inline-flex min-w-0 items-center gap-1 text-primary"><Mail size={12} /><span className="truncate">{email}</span></span> : null}
+            {timing.localTime ? <Badge variant="secondary" className="gap-1"><CalendarClock size={11} />{timing.localTime} heure locale · {timing.timezone}</Badge> : null}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -401,6 +404,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   const [reminderAt, setReminderAt] = useState(reminderPreset(1));
   const [note, setNote] = useState("");
   const [savingOutcome, setSavingOutcome] = useState(false);
+  const [evaluationTime, setEvaluationTime] = useState(Date.now);
 
   useEffect(() => {
     if (!open) return;
@@ -409,6 +413,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
     setError("");
     setFinishOpen(false);
     setOutcome(null);
+    setEvaluationTime(Date.now());
     const now = Date.now();
     const activeIds = companies
       .filter(company => {
@@ -439,7 +444,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   }, [open, companies]);
 
   const queue = useMemo(() => {
-    const now = Date.now();
+    const now = evaluationTime;
     return companies
       .map(company => {
         const stage = deriveCompanyStage(company, now);
@@ -455,7 +460,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
         const bDue = b.summary?.nextTask?.dueAt ? Date.parse(b.summary.nextTask.dueAt) : Number.MAX_SAFE_INTEGER;
         return aDue - bDue;
       });
-  }, [companies, summaries]);
+  }, [companies, summaries, evaluationTime]);
 
   const remaining = queue.filter(item => !done.has(item.company.id));
   const current = remaining[Math.min(index, Math.max(remaining.length - 1, 0))] || null;

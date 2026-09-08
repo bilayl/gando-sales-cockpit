@@ -32,6 +32,7 @@ import {
   type ProspectionSegmentPreferences,
 } from "@/lib/prospection-segment-preferences";
 import { formatDate } from "@/lib/utils";
+import { getBestCallTimeForProperties } from "@/lib/call-timing";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
 type List = { listId: string; name: string; objectTypeId: string; size?: number };
@@ -80,6 +81,7 @@ export function CompanyFirstProspectionView() {
   const [lists, setLists] = useState<List[]>([]);
   const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
   const [owners, setOwners] = useState<Owner[]>([]);
+  const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [segmentId, setSegmentId] = useState("");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [total, setTotal] = useState(0);
@@ -93,6 +95,12 @@ export function CompanyFirstProspectionView() {
   const [sessionOpen, setSessionOpen] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [newContactOpen, setNewContactOpen] = useState(false);
+  const [evaluationTime, setEvaluationTime] = useState(Date.now);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setEvaluationTime(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const initialPreferences = readProspectionSegmentPreferences();
@@ -100,11 +108,13 @@ export function CompanyFirstProspectionView() {
     Promise.all([
       fetch("/api/segments", { cache: "no-store" }).then(response => response.json()).catch(() => ({ lists: [] })),
       fetch("/api/owners", { cache: "no-store" }).then(response => response.json()).catch(() => ({ results: [] })),
+      fetch("/api/auth/me", { cache: "no-store" }).then(response => response.json()).catch(() => ({})),
     ])
-      .then(([segments, ownerData]) => {
+      .then(([segments, ownerData, currentUser]) => {
         const companyLists = ((segments.lists || []) as List[]).filter(item => item.objectTypeId === "0-2");
         setLists(companyLists);
         setOwners(ownerData.results || []);
+        setCurrentUserEmail(String(currentUser.email || "").trim().toLowerCase());
         // Toutes les entreprises est la vue par défaut afin que le Cockpit affiche
         // toujours les données Supabase enregistrées, même sans HubSpot.
         setSegmentId("");
@@ -134,6 +144,10 @@ export function CompanyFirstProspectionView() {
     item.id,
     [item.firstName, item.lastName].filter(Boolean).join(" ") || item.email || item.id,
   ])), [owners]);
+
+  const currentOwnerId = useMemo(() => owners.find(owner =>
+    String(owner.email || "").trim().toLowerCase() === currentUserEmail
+  )?.id || "", [owners, currentUserEmail]);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
@@ -168,14 +182,14 @@ export function CompanyFirstProspectionView() {
   }, [companies, query, filters]);
 
   const classified = useMemo(() => {
-    const now = Date.now();
+    const now = evaluationTime;
     return baseFiltered
       .map(company => {
         const stage = deriveCompanyStage(company, now);
         return { company, stage, decision: getCompanyProspectionDecision(company, stage, now) };
       })
       .sort((a, b) => compareCompanyProspectionPriority(a, b, now));
-  }, [baseFiltered]);
+  }, [baseFiltered, evaluationTime]);
 
   const filtered = useMemo(
     () => classified
@@ -184,10 +198,17 @@ export function CompanyFirstProspectionView() {
     [classified, workFilter],
   );
 
-  const actionableCompanies = useMemo(
-    () => classified.filter(item => item.decision.bucket === "ACTIONABLE").map(item => item.company),
-    [classified],
-  );
+  const actionableCompanies = useMemo(() => classified
+    .filter(item => item.decision.bucket === "ACTIONABLE")
+    .map(item => item.company), [classified]);
+  const assignedActionableCompanies = useMemo(() => actionableCompanies.filter(company =>
+    Boolean(currentOwnerId) && company.properties.hubspot_owner_id === currentOwnerId
+  ), [actionableCompanies, currentOwnerId]);
+  const callableCompanies = useMemo(() => assignedActionableCompanies.filter(company =>
+    getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow
+  ), [assignedActionableCompanies, evaluationTime]);
+  const blockedByTimingCount = assignedActionableCompanies.length - callableCompanies.length;
+  const unassignedCount = actionableCompanies.filter(company => !company.properties.hubspot_owner_id).length;
 
   const currentList = visibleLists.find(item => item.listId === segmentId);
   const actionableCount = classified.filter(item => item.decision.bucket === "ACTIONABLE").length;
@@ -262,6 +283,9 @@ export function CompanyFirstProspectionView() {
           <SdrWorkQueue
             activeFilter={workFilter}
             actionableCount={actionableCount}
+            callableNowCount={callableCompanies.length}
+            blockedByTimingCount={blockedByTimingCount}
+            unassignedCount={unassignedCount}
             opportunitiesCount={opportunities}
             snoozedCount={snoozed}
             excludedCount={excluded}
@@ -354,7 +378,7 @@ export function CompanyFirstProspectionView() {
         </Card>
       </div>
 
-      <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={actionableCompanies} onOpenCompany={id => router.push(`/companies/${id}`)} />
+      <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={callableCompanies} onOpenCompany={id => router.push(`/companies/${id}`)} />
       <NewCompanyDialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen} onCreated={() => void load(true)} />
       <NewContactDialog open={newContactOpen} onOpenChange={setNewContactOpen} onCreated={() => void load(true)} />
     </div>
