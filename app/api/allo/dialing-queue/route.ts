@@ -2,12 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
 import {
   appendWithAlloDialingQueue,
+  getWithAlloCurrentQueue,
   isWithAlloConfigured,
+  resolveWithAlloTarget,
   safeWithAlloError,
   type WithAlloQueueNumber,
 } from "@/lib/withallo";
 
 export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    const access = await requireCockpitAccess();
+    if (!isWithAlloConfigured()) {
+      return NextResponse.json({ error: "WITHALLO_NOT_CONFIGURED" }, { status: 503 });
+    }
+    const target = await resolveWithAlloTarget(access.email || null);
+    const queue = await getWithAlloCurrentQueue({ userId: target.userId, email: target.email });
+    return NextResponse.json({
+      ok: true,
+      target: { userId: target.userId, email: target.email, name: target.user?.name || null, source: target.source },
+      ...queue,
+    }, { headers: { "cache-control": "no-store" } });
+  } catch (error) {
+    const safe = safeWithAlloError(error);
+    const status = Number((error as { status?: number })?.status) || safe.status || 500;
+    return NextResponse.json({ error: safe }, { status: status >= 400 && status < 600 ? status : 500 });
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,12 +54,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "NUMBERS_REQUIRED", message: "Ajoutez au moins un numéro à la file Allo." }, { status: 400 });
     }
 
-    const result = await appendWithAlloDialingQueue({
-      numbers,
-      userId: body?.userId ? String(body.userId) : null,
-      email: body?.email ? String(body.email) : access.email || null,
-    });
-    return NextResponse.json({ ok: true, targetEmail: body?.email ? String(body.email) : access.email || null, ...result }, { headers: { "cache-control": "no-store" } });
+    const automaticTarget = await resolveWithAlloTarget(access.email || null);
+    const userId = body?.userId ? String(body.userId) : automaticTarget.userId;
+    const email = body?.email ? String(body.email) : automaticTarget.email;
+    const result = await appendWithAlloDialingQueue({ numbers, userId, email });
+    return NextResponse.json({
+      ok: true,
+      target: { userId, email, name: automaticTarget.user?.name || null, source: automaticTarget.source },
+      ...result,
+    }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const safe = safeWithAlloError(error);
     const status = Number((error as { status?: number })?.status) || safe.status || 500;
