@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ShieldCheck, UserPlus, Users } from "lucide-react";
+import { ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ type TeamMember = {
   updated_at: string;
 };
 
-type TeamResponse = { members?: TeamMember[]; canManage?: boolean; error?: string };
+type TeamResponse = { members?: TeamMember[]; canManage?: boolean; currentEmail?: string | null; error?: string };
 
 const ROLE_INFO: Array<{ role: TeamRole; title: string; description: string }> = [
   { role: "admin", title: "Administrateur", description: "Accès complet au Cockpit, à la Deal Room et à la gestion de l’équipe." },
@@ -39,8 +39,10 @@ function roleBadge(role: TeamRole) {
 export function SettingsTeam({ initialCanManage = false }: { initialCanManage?: boolean }) {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [canManage, setCanManage] = useState(initialCanManage);
+  const [currentEmail, setCurrentEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingEmail, setSavingEmail] = useState<string | null>(null);
+  const [deletingEmail, setDeletingEmail] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newMember, setNewMember] = useState({ email: "", displayName: "", role: "member" as TeamRole, password: "" });
 
@@ -52,6 +54,7 @@ export function SettingsTeam({ initialCanManage = false }: { initialCanManage?: 
       if (!response.ok) throw new Error(payload.error || "Chargement impossible");
       setMembers(payload.members || []);
       setCanManage(Boolean(payload.canManage));
+      setCurrentEmail(payload.currentEmail || null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible de charger l’équipe.");
     } finally {
@@ -66,7 +69,7 @@ export function SettingsTeam({ initialCanManage = false }: { initialCanManage?: 
   }
 
   async function saveMember(member: TeamMember) {
-    if (!canManage || savingEmail) return;
+    if (!canManage || savingEmail || deletingEmail) return;
     setSavingEmail(member.email);
     try {
       const response = await fetch("/api/settings/team", {
@@ -88,6 +91,32 @@ export function SettingsTeam({ initialCanManage = false }: { initialCanManage?: 
       await load();
     } finally {
       setSavingEmail(null);
+    }
+  }
+
+  async function deleteMember(member: TeamMember) {
+    if (!canManage || deletingEmail || savingEmail) return;
+    if (member.email.toLowerCase() === currentEmail?.toLowerCase()) {
+      return toast.error("Vous ne pouvez pas supprimer votre propre compte.");
+    }
+    const confirmed = window.confirm(`Supprimer définitivement ${member.display_name || member.email} du Cockpit ?`);
+    if (!confirmed) return;
+
+    setDeletingEmail(member.email);
+    try {
+      const response = await fetch("/api/settings/team", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: member.email }),
+      });
+      const payload = await response.json().catch(() => ({})) as TeamResponse;
+      if (!response.ok) throw new Error(payload.error || "Suppression impossible");
+      setMembers(payload.members || []);
+      toast.success("Membre supprimé du Cockpit.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Suppression impossible");
+    } finally {
+      setDeletingEmail(null);
     }
   }
 
@@ -150,17 +179,25 @@ export function SettingsTeam({ initialCanManage = false }: { initialCanManage?: 
       <div>
         <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">Membres de l’équipe</h3><span className="text-xs text-muted-foreground">{members.length} compte{members.length > 1 ? "s" : ""}</span></div>
         {loading ? <div className="rounded-xl border border-border p-6 text-sm text-muted-foreground">Chargement de l’équipe…</div> : members.length ? <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
-          {members.map(member => <div key={member.email} className="grid gap-3 bg-background p-4 lg:grid-cols-[minmax(160px,1fr)_minmax(220px,1.2fr)_180px_130px_auto] lg:items-center">
-            <div>
-              {canManage ? <Input value={member.display_name || ""} onChange={event => patchMember(member.email, { display_name: event.target.value })} placeholder="Nom / prénom" /> : <div className="text-sm font-semibold">{member.display_name || "Sans nom"}</div>}
-            </div>
-            <div className="min-w-0"><div className="truncate text-sm font-medium">{member.email}</div><div className="mt-1 text-[11px] text-muted-foreground">{member.active ? "Compte actif" : "Compte désactivé"}</div></div>
-            {canManage ? <select value={member.role} onChange={event => patchMember(member.email, { role: event.target.value as TeamRole })} className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20">
-              {ROLE_INFO.map(item => <option key={item.role} value={item.role}>{item.title}</option>)}
-            </select> : <Badge variant="outline" className={`w-fit ${roleBadge(member.role)}`}>{roleLabel(member.role)}</Badge>}
-            {canManage ? <label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={member.active} onChange={event => patchMember(member.email, { active: event.target.checked })} className="h-4 w-4 accent-primary" /> Actif</label> : <span className="text-xs text-muted-foreground">{member.active ? "Actif" : "Désactivé"}</span>}
-            {canManage ? <Button variant="outline" size="sm" onClick={() => void saveMember(member)} disabled={savingEmail === member.email}>{savingEmail === member.email ? "Enregistrement…" : "Enregistrer"}</Button> : null}
-          </div>)}
+          {members.map(member => {
+            const isCurrentUser = member.email.toLowerCase() === currentEmail?.toLowerCase();
+            return <div key={member.email} className="grid gap-3 bg-background p-4 lg:grid-cols-[minmax(160px,1fr)_minmax(220px,1.2fr)_180px_130px_auto] lg:items-center">
+              <div>
+                {canManage ? <Input value={member.display_name || ""} onChange={event => patchMember(member.email, { display_name: event.target.value })} placeholder="Nom / prénom" /> : <div className="text-sm font-semibold">{member.display_name || "Sans nom"}</div>}
+              </div>
+              <div className="min-w-0"><div className="truncate text-sm font-medium">{member.email}</div><div className="mt-1 text-[11px] text-muted-foreground">{isCurrentUser ? "Votre compte" : member.active ? "Compte actif" : "Compte désactivé"}</div></div>
+              {canManage ? <select value={member.role} onChange={event => patchMember(member.email, { role: event.target.value as TeamRole })} className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20">
+                {ROLE_INFO.map(item => <option key={item.role} value={item.role}>{item.title}</option>)}
+              </select> : <Badge variant="outline" className={`w-fit ${roleBadge(member.role)}`}>{roleLabel(member.role)}</Badge>}
+              {canManage ? <label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={member.active} onChange={event => patchMember(member.email, { active: event.target.checked })} className="h-4 w-4 accent-primary" /> Actif</label> : <span className="text-xs text-muted-foreground">{member.active ? "Actif" : "Désactivé"}</span>}
+              {canManage ? <div className="flex items-center justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => void saveMember(member)} disabled={savingEmail === member.email || deletingEmail === member.email}>{savingEmail === member.email ? "Enregistrement…" : "Enregistrer"}</Button>
+                <Button variant="ghost" size="icon" title={isCurrentUser ? "Impossible de supprimer votre propre compte" : "Supprimer le membre"} onClick={() => void deleteMember(member)} disabled={isCurrentUser || deletingEmail === member.email || savingEmail === member.email} className="text-destructive hover:bg-destructive/10 hover:text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div> : null}
+            </div>;
+          })}
         </div> : <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Aucun membre configuré.</div>}
       </div>
     </div>
