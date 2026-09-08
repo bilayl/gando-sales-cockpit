@@ -6,6 +6,8 @@ import { listCockpitCompanyAssignments } from "@/lib/cockpit-company-assignment"
 
 export const dynamic = "force-dynamic";
 
+type ContactProperties = Record<string, string | null | undefined>;
+
 export async function GET() {
   try {
     const access = await requireCockpitAccess();
@@ -14,18 +16,16 @@ export async function GET() {
     const now = new Date();
 
     const timed = recommendations.results.map(contact => {
-      const timing = getBestCallTimeForProperties(contact.properties, now);
-      return {
-        ...contact,
-        properties: {
-          ...contact.properties,
-          db_call_local_time: timing.localTime,
-          db_call_timezone: timing.timezone,
-          db_call_timing_reason: timing.reason,
-          db_call_now: timing.callNow ? "true" : "false",
-        },
-        timing,
+      const original = contact.properties as ContactProperties;
+      const timing = getBestCallTimeForProperties(original, now);
+      const properties: ContactProperties = {
+        ...original,
+        db_call_local_time: timing.localTime,
+        db_call_timezone: timing.timezone,
+        db_call_timing_reason: timing.reason,
+        db_call_now: timing.callNow ? "true" : "false",
       };
+      return { ...contact, properties, timing };
     });
 
     const companyIds = [...new Set(timed
