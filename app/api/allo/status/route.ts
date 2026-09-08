@@ -11,14 +11,17 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type ProbeAuth = "raw" | "api-key" | "bearer" | "x-api-key" | "none";
+
 type ProbeResult = {
   label: string;
   method: string;
   url: string;
-  auth: "raw" | "api-key" | "none";
+  auth: ProbeAuth;
   status: number | null;
   allow: string | null;
   contentType: string | null;
+  wwwAuthenticate: string | null;
   body: string;
   error?: string;
 };
@@ -35,13 +38,15 @@ async function runProbe(input: {
   label: string;
   method: "GET" | "POST";
   url: string;
-  auth: "raw" | "api-key" | "none";
+  auth: ProbeAuth;
   body?: string;
 }): Promise<ProbeResult> {
   const key = alloKey();
   const headers: Record<string, string> = { Accept: "application/json, text/plain, */*" };
   if (input.auth === "raw" && key) headers.Authorization = key;
   if (input.auth === "api-key" && key) headers.Authorization = `Api-Key ${key}`;
+  if (input.auth === "bearer" && key) headers.Authorization = `Bearer ${key}`;
+  if (input.auth === "x-api-key" && key) headers["X-API-Key"] = key;
   if (input.body !== undefined) headers["Content-Type"] = "application/json";
 
   try {
@@ -62,6 +67,7 @@ async function runProbe(input: {
       status: response.status,
       allow: response.headers.get("allow"),
       contentType: response.headers.get("content-type"),
+      wwwAuthenticate: response.headers.get("www-authenticate"),
       body: text.slice(0, 1200),
     };
   } catch (error) {
@@ -73,6 +79,7 @@ async function runProbe(input: {
       status: null,
       allow: null,
       contentType: null,
+      wwwAuthenticate: null,
       body: "",
       error: error instanceof Error ? error.message : "Probe failed",
     };
@@ -86,7 +93,14 @@ async function runNativeVoiceProbe() {
     runProbe({ label: "v1 calls read / Api-Key auth", method: "GET", url: `${base}/v1/api/calls?size=1`, auth: "api-key" }),
     runProbe({ label: "v1 calls create candidate / raw auth", method: "POST", url: `${base}/v1/api/calls`, auth: "raw", body: "{}" }),
     runProbe({ label: "v1 calls create candidate / Api-Key auth", method: "POST", url: `${base}/v1/api/calls`, auth: "api-key", body: "{}" }),
-    runProbe({ label: "marketing candidate POST /v1/calls", method: "POST", url: `${base}/v1/calls`, auth: "raw", body: "{}" }),
+    runProbe({ label: "marketing candidate POST /v1/calls / raw", method: "POST", url: `${base}/v1/calls`, auth: "raw", body: "{}" }),
+    runProbe({ label: "marketing candidate POST /v1/calls / Api-Key", method: "POST", url: `${base}/v1/calls`, auth: "api-key", body: "{}" }),
+    runProbe({ label: "marketing candidate POST /v1/calls / Bearer", method: "POST", url: `${base}/v1/calls`, auth: "bearer", body: "{}" }),
+    runProbe({ label: "marketing candidate POST /v1/calls / X-API-Key", method: "POST", url: `${base}/v1/calls`, auth: "x-api-key", body: "{}" }),
+    runProbe({ label: "marketing candidate GET /v1/calls / raw", method: "GET", url: `${base}/v1/calls`, auth: "raw" }),
+    runProbe({ label: "marketing candidate GET /v1/calls / Api-Key", method: "GET", url: `${base}/v1/calls`, auth: "api-key" }),
+    runProbe({ label: "marketing candidate GET /v1/calls / Bearer", method: "GET", url: `${base}/v1/calls`, auth: "bearer" }),
+    runProbe({ label: "marketing candidate GET /v1/calls / X-API-Key", method: "GET", url: `${base}/v1/calls`, auth: "x-api-key" }),
     runProbe({ label: "v2 direct call candidate", method: "POST", url: `${base}/v2/api/calls`, auth: "api-key", body: "{}" }),
   ]);
 
