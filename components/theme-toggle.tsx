@@ -51,7 +51,6 @@ export function ThemeToggle() {
         }
         return;
       } catch {
-        /* a transition is already running → fall through */
         root.classList.remove("theme-vt");
       }
     }
@@ -64,7 +63,14 @@ export function ThemeToggle() {
   }, []);
 
   return (
-    <Button variant="ghost" size="icon" className="h-8 w-8 overflow-hidden text-muted-foreground hover:text-violet-300" onClick={toggle} aria-label="Basculer le thème clair/sombre" title="Basculer le thème clair/sombre">
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8 overflow-hidden text-muted-foreground hover:bg-muted hover:text-foreground"
+      onClick={toggle}
+      aria-label="Basculer le thème clair/sombre"
+      title={dark ? "Passer en thème clair" : "Passer en thème sombre"}
+    >
       <span key={dark ? "sun" : "moon"} className="animate-scale-in grid place-items-center">
         {dark ? <Sun size={16} /> : <Moon size={16} />}
       </span>
