@@ -12,6 +12,7 @@ import { claimCockpitCompanies, listCockpitCompanyAssignments } from "@/lib/cock
 import {
   appendWithAlloDialingQueue,
   isWithAlloConfigured,
+  resolveWithAlloTarget,
   safeWithAlloError,
   type WithAlloQueueNumber,
 } from "@/lib/withallo"
@@ -172,6 +173,8 @@ export async function createFilteredSalesCallSession(input?: {
     added?: number
     skipped?: number
     batches?: number
+    targetEmail?: string | null
+    targetUserId?: string | null
     error?: ReturnType<typeof safeWithAlloError>
   } = {
     configured: isWithAlloConfigured(),
@@ -181,11 +184,19 @@ export async function createFilteredSalesCallSession(input?: {
 
   if (withAllo.configured && queueNumbers.length) {
     try {
+      const target = await resolveWithAlloTarget(input?.createdBy || null)
       const result = await appendWithAlloDialingQueue({
         numbers: queueNumbers,
-        email: process.env.WITHALLO_QUEUE_EMAIL?.trim() || null,
+        userId: target.userId,
+        email: target.email,
       })
-      withAllo = { configured: true, queued: true, ...result }
+      withAllo = {
+        configured: true,
+        queued: true,
+        targetEmail: target.email,
+        targetUserId: target.userId,
+        ...result,
+      }
     } catch (error) {
       console.error("Unable to push Gando call session to Allo Power Dialer", error)
       withAllo = {
