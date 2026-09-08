@@ -1,3 +1,5 @@
+import { getBestCallTimeForProperties } from "@/lib/call-timing";
+
 export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "DEMO_SCHEDULED" | "OPEN_DEAL" | "WON" | "NOT_INTERESTED" | "LOST";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
@@ -100,6 +102,16 @@ export function getCompanyProspectionDecision(
   const reminder = dateMs(p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date);
   if (Number.isFinite(reminder) && reminder > now) {
     return { bucket: "SNOOZED", priority: 80, priorityLabel: "À échéance", reason: "Prochaine action planifiée dans le futur" };
+  }
+
+  const timing = getBestCallTimeForProperties(p, new Date(now));
+  if (!timing.callNow) {
+    return {
+      bucket: "SNOOZED",
+      priority: 79,
+      priorityLabel: timing.timezone ? "Hors créneau" : "Fuseau inconnu",
+      reason: timing.reason,
+    };
   }
 
   const overdueTasks = Number(p.qualification_overdue_tasks || 0);
