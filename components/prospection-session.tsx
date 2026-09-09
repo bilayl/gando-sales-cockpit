@@ -58,13 +58,12 @@ type TaskSummary = {
   } | null;
 };
 
-type AlloSessionState = {
+type OnoffSessionState = {
   configured?: boolean;
-  requested?: number;
-  added?: number;
-  skipped?: number;
-  targetEmail?: string | null;
-  error?: { message?: string; code?: string | null; suggestion?: string | null } | string | null;
+  connected?: boolean | null;
+  latestProcessingStatus?: string | null;
+  latestReceivedAt?: string | null;
+  error?: string | null;
 };
 
 type Props = {
@@ -180,7 +179,6 @@ function CompanyProfilePanel({
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [queueingAllo, setQueueingAllo] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -219,38 +217,6 @@ function CompanyProfilePanel({
   const email = referenceContact.email || p.email || "";
   const contactName = [referenceContact.firstname, referenceContact.lastname].filter(Boolean).join(" ") || email || "Contact à qualifier";
   const primaryPhone = referenceContact.mobilephone || referenceContact.phone || p.phone || "";
-
-  async function queueCurrentContactInAllo() {
-    if (!primaryPhone || queueingAllo) return;
-    setQueueingAllo(true);
-    try {
-      const response = await fetch("/api/allo/dialing-queue", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          numbers: [{
-            number: primaryPhone,
-            ...(referenceContact.firstname ? { name: referenceContact.firstname } : {}),
-            ...(referenceContact.lastname ? { last_name: referenceContact.lastname } : {}),
-            ...(p.name ? { company: p.name } : {}),
-            ...(referenceContact.jobtitle ? { job_title: referenceContact.jobtitle } : {}),
-            ...(email ? { emails: [email] } : {}),
-            ...(p.domain ? { website: p.domain } : {}),
-          }],
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const message = payload?.error?.message || payload?.message || "Impossible d’ajouter ce contact dans Allo";
-        throw new Error(message);
-      }
-      toast.success("Contact ajouté à la file Allo. Lance le Power Dialer dans Allo.");
-    } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : "Impossible d’ajouter ce contact dans Allo");
-    } finally {
-      setQueueingAllo(false);
-    }
-  }
 
   const timeline = useMemo(() => {
     if (!data) return [];
@@ -309,7 +275,8 @@ function CompanyProfilePanel({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {primaryPhone ? <Button size="sm" onClick={() => void queueCurrentContactInAllo()} disabled={queueingAllo}>{queueingAllo ? <Loader2 size={14} className="animate-spin" /> : <PhoneCall size={14} />} Ajouter à Allo</Button> : null}
+              {primaryPhone ? <Button asChild size="sm"><a href={`tel:${primaryPhone}`}><PhoneCall size={14} /> Appeler avec Onoff</a></Button> : null}
+              <Button asChild size="sm" variant="outline"><a href="/phone"><Phone size={14} /> Webphone Onoff</a></Button>
               {email ? <Button asChild size="sm" variant="outline"><a href={`mailto:${email}`}><Mail size={14} /> Email</a></Button> : null}
               {p.domain ? <Button asChild size="sm" variant="outline"><a href={`https://${p.domain}`} target="_blank" rel="noreferrer"><Globe size={14} /> Site web</a></Button> : null}
             </div>
@@ -344,10 +311,7 @@ function CompanyProfilePanel({
                   return (
                     <div key={contact.id} className="rounded-lg border border-border bg-card p-3">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold">{name}</div>
-                          <div className="mt-0.5 truncate text-xs text-muted-foreground">{cp.jobtitle || cp.statut_prospection || "Contact HubSpot"}</div>
-                        </div>
+                        <div className="min-w-0"><div className="truncate text-sm font-semibold">{name}</div><div className="mt-0.5 truncate text-xs text-muted-foreground">{cp.jobtitle || cp.statut_prospection || "Contact HubSpot"}</div></div>
                         {cp.statut_prospection ? <Badge variant="outline" className="shrink-0 text-[10px]">{cp.statut_prospection}</Badge> : null}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs">
@@ -362,10 +326,7 @@ function CompanyProfilePanel({
             </section>
 
             <section>
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Historique centralisé HubSpot</div>
-                <Badge variant="secondary">{timeline.length}</Badge>
-              </div>
+              <div className="flex items-center justify-between gap-2"><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Historique centralisé HubSpot</div><Badge variant="secondary">{timeline.length}</Badge></div>
               <div className="mt-2 space-y-2">
                 {timeline.slice(0, 12).map((item: any) => {
                   const date = activityDate(item);
@@ -373,14 +334,7 @@ function CompanyProfilePanel({
                   return (
                     <div key={`${item.type}-${item.record.id}`} className="flex gap-3 rounded-lg border border-border bg-card p-3">
                       <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-primary/[0.08] text-primary"><ActivityIcon type={item.type} /></span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="truncate text-sm font-semibold">{activityTitle(item)}</div>
-                          <div className="shrink-0 text-[10px] text-muted-foreground">{date ? formatDateTime(date) : "—"}</div>
-                        </div>
-                        {item.record?.sourceContactName ? <div className="mt-0.5 text-[10px] text-muted-foreground">Via {item.record.sourceContactName}</div> : null}
-                        {body ? <div className="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">{body}</div> : null}
-                      </div>
+                      <div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div className="truncate text-sm font-semibold">{activityTitle(item)}</div><div className="shrink-0 text-[10px] text-muted-foreground">{date ? formatDateTime(date) : "—"}</div></div>{item.record?.sourceContactName ? <div className="mt-0.5 text-[10px] text-muted-foreground">Via {item.record.sourceContactName}</div> : null}{body ? <div className="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">{body}</div> : null}</div>
                     </div>
                   );
                 })}
@@ -396,7 +350,7 @@ function CompanyProfilePanel({
 
 export function ProspectionSession({ open, onOpenChange, companies, onOpenCompany }: Props) {
   const [summaries, setSummaries] = useState<Record<string, TaskSummary>>({});
-  const [allo, setAllo] = useState<AlloSessionState | null>(null);
+  const [onoff, setOnoff] = useState<OnoffSessionState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [index, setIndex] = useState(0);
@@ -413,7 +367,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
     setIndex(0);
     setDone(new Set());
     setError("");
-    setAllo(null);
+    setOnoff(null);
     setFinishOpen(false);
     setOutcome(null);
     setEvaluationTime(Date.now());
@@ -441,14 +395,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "Impossible de préparer la session");
         setSummaries(body.summaries || {});
-        const nextAllo = (body.allo || null) as AlloSessionState | null;
-        setAllo(nextAllo);
-        if (nextAllo?.error) {
-          const message = typeof nextAllo.error === "string" ? nextAllo.error : nextAllo.error.message;
-          toast.error(`Allo : ${message || "la file n’a pas pu être synchronisée"}`);
-        } else if (nextAllo?.configured && (nextAllo.requested || 0) > 0) {
-          toast.success(`File Allo prête · ${nextAllo.added || 0} ajouté${(nextAllo.added || 0) > 1 ? "s" : ""}${(nextAllo.skipped || 0) > 0 ? ` · ${nextAllo.skipped} déjà présent${(nextAllo.skipped || 0) > 1 ? "s" : ""}` : ""}.`);
-        }
+        setOnoff((body.onoff || null) as OnoffSessionState | null);
       })
       .catch(reason => setError(reason instanceof Error ? reason.message : "Impossible de préparer la session"))
       .finally(() => setLoading(false));
@@ -588,8 +535,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   const task = current?.summary?.nextTask || null;
   const currentReminder = p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date;
   const needsReminder = outcome === "FOLLOW_UP" || outcome === "NO_ANSWER" || outcome === "WRONG_CONTACT";
-  const alloError = allo?.error ? (typeof allo.error === "string" ? allo.error : allo.error.message) : "";
-  const alloReady = Boolean(allo?.configured && !alloError);
+  const onoffReady = Boolean(onoff?.configured && onoff?.connected !== false);
 
   return (
     <>
@@ -599,12 +545,10 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <DialogTitle>Session d’appels setter</DialogTitle>
-                <DialogDescription className="mt-1">
-                  Appelle, qualifie le résultat, puis passe automatiquement au compte suivant. Une action ou une sortie pour chaque appel.
-                </DialogDescription>
+                <DialogDescription className="mt-1">Appelle, qualifie le résultat, puis passe automatiquement au compte suivant. Une action ou une sortie pour chaque appel.</DialogDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={alloReady ? "default" : "outline"}>{alloReady ? `Allo · ${allo?.requested || 0} en file` : allo?.configured ? "Allo à vérifier" : "Allo non configuré"}</Badge>
+                <Badge variant={onoffReady ? "default" : "outline"}>{onoffReady ? "Onoff API · prête" : onoff?.configured ? "Onoff API à vérifier" : "Onoff non configuré"}</Badge>
                 <Badge variant="outline">{done.size} traité{done.size > 1 ? "s" : ""}</Badge>
                 <Badge variant="secondary">{remaining.length} restant{remaining.length > 1 ? "s" : ""}</Badge>
               </div>
@@ -612,86 +556,39 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
           </DialogHeader>
 
           {loading ? (
-            <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center">
-              <div><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Préparation de la file d’appels, synchronisation Allo et lecture des tâches HubSpot…</p></div>
-            </div>
+            <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center"><div><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Préparation de la file d’appels, vérification Onoff et lecture des tâches HubSpot…</p></div></div>
           ) : error ? (
             <div className="m-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
           ) : !current ? (
-            <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center">
-              <div>
-                <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><CheckCircle2 /></span>
-                <h3 className="mt-4 text-lg font-semibold">Session terminée</h3>
-                <p className="mt-1 text-sm text-muted-foreground">Tous les comptes actionnables de cette file ont été traités.</p>
-              </div>
-            </div>
+            <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><CheckCircle2 /></span><h3 className="mt-4 text-lg font-semibold">Session terminée</h3><p className="mt-1 text-sm text-muted-foreground">Tous les comptes actionnables de cette file ont été traités.</p></div></div>
           ) : (
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[380px_minmax(0,1fr)]">
               <aside className="min-h-0 overflow-y-auto border-b border-border bg-card p-5 xl:border-b-0 xl:border-r minari-scrollbar">
                 <div className="space-y-4">
                   <div className="flex min-w-0 items-start gap-3">
                     <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent text-primary"><Building2 /></span>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="truncate text-lg font-bold tracking-tight">{p.name || p.domain || "Entreprise sans nom"}</h2>
-                        <Badge variant="secondary">{current.decision.priorityLabel}</Badge>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{[p.city, p.country, p.domain].filter(Boolean).join(" · ") || "Aucune localisation"}</p>
-                    </div>
+                    <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-bold tracking-tight">{p.name || p.domain || "Entreprise sans nom"}</h2><Badge variant="secondary">{current.decision.priorityLabel}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{[p.city, p.country, p.domain].filter(Boolean).join(" · ") || "Aucune localisation"}</p></div>
                   </div>
 
-                  <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">À faire maintenant</div>
-                    <div className="mt-1 text-sm font-semibold">{current.decision.reason}</div>
-                    <div className="mt-2 text-xs text-muted-foreground">{taskLabel(current.summary)}</div>
-                  </div>
+                  <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">À faire maintenant</div><div className="mt-1 text-sm font-semibold">{current.decision.reason}</div><div className="mt-2 text-xs text-muted-foreground">{taskLabel(current.summary)}</div></div>
 
                   {task ? (
                     <div className="rounded-xl border border-border bg-background p-4">
-                      <div className="flex items-start gap-3">
-                        <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-primary"><ListTodo size={16} /></span>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-semibold">{task.subject}</div>
-                          <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
-                            <div className="inline-flex items-center gap-1"><CalendarClock size={12} /> {formatDateTime(task.dueAt)}</div>
-                            {task.sourceContactName ? <div>{task.sourceContactName}{task.sourceContactJobTitle ? ` · ${task.sourceContactJobTitle}` : ""}</div> : <div>Tâche entreprise</div>}
-                            {task.sourceContactPhone ? <a href={`tel:${task.sourceContactPhone}`} className="inline-flex items-center gap-1 text-primary hover:underline"><Phone size={12} /> {task.sourceContactPhone}</a> : null}
-                          </div>
-                        </div>
-                      </div>
+                      <div className="flex items-start gap-3"><span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-primary"><ListTodo size={16} /></span><div className="min-w-0 flex-1"><div className="font-semibold">{task.subject}</div><div className="mt-1.5 space-y-1 text-xs text-muted-foreground"><div className="inline-flex items-center gap-1"><CalendarClock size={12} /> {formatDateTime(task.dueAt)}</div>{task.sourceContactName ? <div>{task.sourceContactName}{task.sourceContactJobTitle ? ` · ${task.sourceContactJobTitle}` : ""}</div> : <div>Tâche entreprise</div>}{task.sourceContactPhone ? <a href={`tel:${task.sourceContactPhone}`} className="inline-flex items-center gap-1 text-primary hover:underline"><Phone size={12} /> {task.sourceContactPhone}</a> : null}</div></div></div>
                     </div>
                   ) : null}
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-lg border border-border p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Dernier résultat</div>
-                      <div className="mt-1 truncate text-sm font-semibold">{p.statut_de_lappel || STAGE_LABELS[current.stage]}</div>
-                    </div>
-                    <div className="rounded-lg border border-border p-3">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Échéance</div>
-                      <div className="mt-1 truncate text-sm font-semibold">{formatDateTime(currentReminder)}</div>
-                    </div>
-                  </div>
+                  <div className="grid grid-cols-2 gap-2"><div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Dernier résultat</div><div className="mt-1 truncate text-sm font-semibold">{p.statut_de_lappel || STAGE_LABELS[current.stage]}</div></div><div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Échéance</div><div className="mt-1 truncate text-sm font-semibold">{formatDateTime(currentReminder)}</div></div></div>
 
-                  {alloReady ? (
-                    <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-xs leading-5">
-                      <div className="font-semibold text-primary">File Allo synchronisée</div>
-                      <div className="mt-0.5 text-muted-foreground">Les prospects de cette session sont dans le Power Dialer. Lance la session d’appel depuis Allo.</div>
-                    </div>
-                  ) : allo?.configured ? (
-                    <Button asChild className="w-full" size="lg" variant="outline"><a href="/settings"><PhoneOff size={17} /> Vérifier Allo</a></Button>
-                  ) : (
-                    <Button asChild className="w-full" size="lg" variant="outline"><a href="/settings"><PhoneOff size={17} /> Configurer Allo</a></Button>
-                  )}
+                  <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-xs leading-5">
+                    <div className="font-semibold text-primary">Téléphonie Onoff</div>
+                    <div className="mt-0.5 text-muted-foreground">{onoffReady ? "API directe disponible. L’appel reste exécuté par le webphone ou Click2Call Onoff." : "Vérifie la clé API Onoff dans les paramètres."}</div>
+                  </div>
+                  <Button asChild className="w-full" size="lg" variant={onoffReady ? "default" : "outline"}><a href="/phone"><PhoneCall size={17} /> Ouvrir le webphone Onoff</a></Button>
 
                   <div className="space-y-2 border-t border-border pt-4">
-                    <Button className="w-full" size="lg" onClick={openFinish}>
-                      <CheckCircle2 size={17} /> Terminer l’appel
-                    </Button>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button variant="outline" size="sm" onClick={previous} disabled={remaining.length <= 1}><ChevronLeft size={15} /> Précédent</Button>
-                      <Button variant="outline" size="sm" onClick={skip} disabled={remaining.length <= 1}><SkipForward size={15} /> Passer pour l’instant</Button>
-                    </div>
+                    <Button className="w-full" size="lg" onClick={openFinish}><CheckCircle2 size={17} /> Terminer l’appel</Button>
+                    <div className="grid grid-cols-2 gap-2"><Button variant="outline" size="sm" onClick={previous} disabled={remaining.length <= 1}><ChevronLeft size={15} /> Précédent</Button><Button variant="outline" size="sm" onClick={skip} disabled={remaining.length <= 1}><SkipForward size={15} /> Passer pour l’instant</Button></div>
                     <p className="text-center text-[10px] leading-4 text-muted-foreground">“Passer” ne modifie aucun statut et ne crée aucune relance.</p>
                   </div>
                 </div>
@@ -705,27 +602,16 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
       <Dialog open={finishOpen} onOpenChange={next => !savingOutcome && setFinishOpen(next)}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Comment s’est terminé l’appel ?</DialogTitle>
-            <DialogDescription>Le choix ci-dessous pilote automatiquement la prochaine action et la file d’appels.</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Comment s’est terminé l’appel ?</DialogTitle><DialogDescription>Le choix ci-dessous pilote automatiquement la prochaine action et la file d’appels.</DialogDescription></DialogHeader>
 
           <div className="grid gap-2 sm:grid-cols-2">
             {OUTCOMES.map(item => {
               const Icon = item.icon;
               const active = outcome === item.value;
               return (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => chooseOutcome(item.value)}
-                  className={`flex items-start gap-3 rounded-xl border p-3 text-left transition ${active ? "border-primary bg-primary/[0.06] ring-1 ring-primary/20" : "border-border bg-card hover:bg-muted/50"}`}
-                >
+                <button key={item.value} type="button" onClick={() => chooseOutcome(item.value)} className={`flex items-start gap-3 rounded-xl border p-3 text-left transition ${active ? "border-primary bg-primary/[0.06] ring-1 ring-primary/20" : "border-border bg-card hover:bg-muted/50"}`}>
                   <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${active ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}><Icon size={17} /></span>
-                  <span>
-                    <span className="block text-sm font-semibold">{item.label}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{item.description}</span>
-                  </span>
+                  <span><span className="block text-sm font-semibold">{item.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{item.description}</span></span>
                 </button>
               );
             })}
@@ -733,36 +619,14 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
           {needsReminder ? (
             <div className="rounded-xl border border-border bg-muted/30 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold">Prochaine relance</div>
-                  <div className="text-xs text-muted-foreground">Le compte disparaît de la file jusqu’à cette échéance.</div>
-                </div>
-                {outcome === "NO_ANSWER" ? <Badge variant="secondary">Auto : demain 09:00</Badge> : null}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => setReminderAt(inTwoHours())}>+2 h</Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => setReminderAt(reminderPreset(1))}>Demain 09:00</Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => setReminderAt(reminderPreset(3))}>J+3 09:00</Button>
-                <Input className="min-w-[210px] flex-1" type="datetime-local" value={reminderAt} onChange={event => setReminderAt(event.target.value)} />
-              </div>
+              <div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold">Prochaine relance</div><div className="text-xs text-muted-foreground">Le compte disparaît de la file jusqu’à cette échéance.</div></div>{outcome === "NO_ANSWER" ? <Badge variant="secondary">Auto : demain 09:00</Badge> : null}</div>
+              <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setReminderAt(inTwoHours())}>+2 h</Button><Button type="button" size="sm" variant="outline" onClick={() => setReminderAt(reminderPreset(1))}>Demain 09:00</Button><Button type="button" size="sm" variant="outline" onClick={() => setReminderAt(reminderPreset(3))}>J+3 09:00</Button><Input className="min-w-[210px] flex-1" type="datetime-local" value={reminderAt} onChange={event => setReminderAt(event.target.value)} /></div>
             </div>
           ) : null}
 
-          {outcome ? (
-            <div>
-              <div className="mb-1.5 text-sm font-semibold">Note rapide <span className="font-normal text-muted-foreground">(facultatif)</span></div>
-              <Input value={note} onChange={event => setNote(event.target.value)} placeholder="Ex. rappeler le directeur, besoin d’intégration, budget à confirmer…" />
-            </div>
-          ) : null}
+          {outcome ? <div><div className="mb-1.5 text-sm font-semibold">Note rapide <span className="font-normal text-muted-foreground">(facultatif)</span></div><Input value={note} onChange={event => setNote(event.target.value)} placeholder="Ex. rappeler le directeur, besoin d’intégration, budget à confirmer…" /></div> : null}
 
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => setFinishOpen(false)} disabled={savingOutcome}>Annuler</Button>
-            <Button onClick={() => void saveOutcome()} disabled={!outcome || savingOutcome || (needsReminder && !reminderAt)}>
-              {savingOutcome ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-              Enregistrer et compte suivant
-            </Button>
-          </div>
+          <div className="flex justify-end gap-2 pt-1"><Button variant="outline" onClick={() => setFinishOpen(false)} disabled={savingOutcome}>Annuler</Button><Button onClick={() => void saveOutcome()} disabled={!outcome || savingOutcome || (needsReminder && !reminderAt)}>{savingOutcome ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Enregistrer et compte suivant</Button></div>
         </DialogContent>
       </Dialog>
     </>
