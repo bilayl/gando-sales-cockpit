@@ -23,9 +23,11 @@ Le premier usage activé dans le Cockpit est la récupération directe des méta
 
 Le statut interne `/api/onoff/status` vérifie la configuration et, lorsqu'un call ID existe, confirme que Gando peut relire cet appel directement auprès d'Onoff.
 
+Les sessions de prospection utilisent également ce statut Onoff côté serveur. Elles ne synchronisent plus de file avec un autre fournisseur de téléphonie.
+
 ## Appel sortant
 
-L'API publique Onoff utilisée par Gando sert actuellement à la gestion et à la lecture des données téléphoniques, notamment des call logs et métadonnées. Le Cockpit ne suppose donc pas l'existence d'un endpoint public de démarrage d'appel.
+L'API publique Onoff utilisée par Gando sert à la gestion et à la lecture des données téléphoniques, notamment des call logs et métadonnées. Le Cockpit ne suppose pas l'existence d'un endpoint public de démarrage d'appel.
 
 Le média de l'appel reste assuré par :
 
