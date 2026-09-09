@@ -6,7 +6,7 @@ import { CheckCircle2, Clock3, ExternalLink, Loader2, Phone, PhoneCall, RefreshC
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const ALLO_CHROME_EXTENSION_URL = "https://chromewebstore.google.com/detail/allo-click-to-call/bjjbpnjndjmamflhendfjfefdbpleclk";
+const ONOFF_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
 
 type Contact = {
   id: string;
@@ -26,15 +26,13 @@ type TodayPayload = {
   error?: string;
 };
 
-type AlloStatus = {
+type OnoffStatus = {
   configured?: boolean;
-  connected?: boolean;
-  powerDialerReady?: boolean;
-  team?: { name?: string } | null;
-  target?: { email?: string | null; name?: string | null; source?: string; availableUsers?: Array<{ email?: string; name?: string }> };
-  queue?: { count?: number; name?: string | null } | null;
-  queueError?: { message?: string; code?: string | null } | null;
-  error?: { message?: string; code?: string | null };
+  connected?: boolean | null;
+  latestCallId?: string | null;
+  latestReceivedAt?: string | null;
+  latestProcessingStatus?: string | null;
+  error?: string | null;
 };
 
 function fullName(contact?: Contact | null) {
@@ -53,24 +51,24 @@ function telHref(number: string) {
 
 export function TodayDialerView() {
   const [today, setToday] = useState<TodayPayload | null>(null);
-  const [allo, setAllo] = useState<AlloStatus | null>(null);
+  const [onoff, setOnoff] = useState<OnoffStatus | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [queueing, setQueueing] = useState(false);
   const [message, setMessage] = useState("");
 
   async function load() {
     setLoading(true);
     setMessage("");
     try {
-      const [todayResponse, alloResponse] = await Promise.all([
+      const [todayResponse, onoffResponse] = await Promise.all([
         fetch("/api/today", { cache: "no-store" }),
-        fetch("/api/allo/status", { cache: "no-store" }),
+        fetch("/api/onoff/status", { cache: "no-store" }),
       ]);
-      const [todayPayload, alloPayload] = await Promise.all([todayResponse.json(), alloResponse.json()]);
+      const todayPayload = await todayResponse.json();
       if (!todayResponse.ok) throw new Error(todayPayload.error || "Impossible de charger les appels du jour");
       setToday(todayPayload);
-      setAllo(alloPayload);
+      if (onoffResponse.ok) setOnoff(await onoffResponse.json());
+      else setOnoff(null);
       const first = todayPayload.results?.[0];
       setSelectedId(current => current && todayPayload.results?.some((item: Contact) => item.id === current) ? current : first?.id || null);
     } catch (error) {
@@ -84,46 +82,9 @@ export function TodayDialerView() {
 
   const results = today?.results || [];
   const selected = useMemo(() => results.find(contact => contact.id === selectedId) || results[0] || null, [results, selectedId]);
-
-  async function prepareSelectedForAllo() {
-    if (!selected) return;
-    const p = selected.properties;
-    const number = numberFor(selected);
-    if (!number) return;
-
-    setQueueing(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/allo/dialing-queue", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ numbers: [{
-          number,
-          name: p.firstname,
-          last_name: p.lastname,
-          company: p.company,
-          job_title: p.jobtitle,
-          emails: p.email ? [p.email] : [],
-          website: p.website || p.domain,
-        }] }),
-        keepalive: true,
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        setMessage(payload?.error?.message || payload?.message || "Le Power Dialer Allo n’a pas pu être synchronisé. Le click-to-call reste utilisable.");
-      }
-      const statusResponse = await fetch("/api/allo/status", { cache: "no-store" });
-      if (statusResponse.ok) setAllo(await statusResponse.json());
-    } catch {
-      setMessage("Le Power Dialer Allo n’a pas pu être synchronisé. Le click-to-call reste utilisable.");
-    } finally {
-      setQueueing(false);
-    }
-  }
-
-  const alloHealthy = Boolean(allo?.configured && allo?.connected && allo?.powerDialerReady);
   const p = selected?.properties || {};
   const selectedNumber = numberFor(selected);
+  const apiHealthy = Boolean(onoff?.configured && onoff?.connected !== false);
 
   return (
     <div className="min-h-screen bg-background px-7 py-6 text-foreground transition-colors">
@@ -147,7 +108,7 @@ export function TodayDialerView() {
             [today?.mineCount || 0, "Attribués à moi"],
             [today?.availableCount || 0, "Disponibles"],
             [today?.callableCount || 0, "Joignables maintenant"],
-            [allo?.queue?.count || 0, "Dans Allo"],
+            [today?.totalActionable || results.length, "À traiter aujourd’hui"],
           ].map(([value, label]) => (
             <div key={String(label)} className="rounded-xl border border-border bg-card px-4 py-3">
               <div className="text-[22px] font-semibold tracking-[-0.03em]">{value}</div>
@@ -158,10 +119,10 @@ export function TodayDialerView() {
 
         {message ? <div className="mb-4 rounded-lg border border-border bg-muted px-4 py-3 text-[13px]">{message}</div> : null}
 
-        <div className="grid min-h-[520px] gap-4 xl:grid-cols-[1fr_360px]">
+        <div className="grid min-h-[520px] gap-4 xl:grid-cols-[1fr_330px]">
           <section className="overflow-hidden rounded-2xl border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <div className="flex items-center gap-2.5"><PhoneCall className="h-4 w-4" strokeWidth={1.7} /><span className="text-[15px] font-semibold">Dialer</span></div>
+              <div className="flex items-center gap-2.5"><PhoneCall className="h-4 w-4" strokeWidth={1.7} /><span className="text-[15px] font-semibold">Dialer Onoff</span></div>
               <Badge variant="outline" className="rounded-md border-border bg-muted text-foreground">{results.length} dans la file</Badge>
             </div>
 
@@ -188,17 +149,14 @@ export function TodayDialerView() {
 
                   <div className="mt-7 flex flex-wrap gap-2">
                     {selectedNumber ? (
-                      <Button asChild className="h-11 rounded-xl px-5">
-                        <a href={telHref(selectedNumber)} onClick={() => void prepareSelectedForAllo()}>
-                          {queueing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Phone className="mr-2 h-4 w-4" />} Appeler avec Allo
-                        </a>
-                      </Button>
+                      <Button asChild className="h-11 rounded-xl px-5"><a href={telHref(selectedNumber)}><Phone className="mr-2 h-4 w-4" />Appeler avec Onoff</a></Button>
                     ) : (
-                      <Button className="h-11 rounded-xl px-5" disabled><Phone className="mr-2 h-4 w-4" /> Appeler avec Allo</Button>
+                      <Button className="h-11 rounded-xl px-5" disabled><Phone className="mr-2 h-4 w-4" />Appeler avec Onoff</Button>
                     )}
+                    <Button variant="outline" className="h-11 rounded-xl border-border bg-card" asChild><Link href="/phone">Ouvrir le webphone</Link></Button>
                     <Button variant="outline" className="h-11 rounded-xl border-border bg-card" asChild><Link href={`/contacts/${selected.id}`}>Voir la fiche <ExternalLink className="ml-2 h-3.5 w-3.5" /></Link></Button>
                   </div>
-                  <p className="mt-3 max-w-2xl text-[11px] leading-5 text-muted-foreground">Le clic utilise maintenant le vrai click-to-call du navigateur/Allo. Le Power Dialer est synchronisé en parallèle, mais il ne bloque plus le lancement de l’appel.</p>
+                  <p className="mt-3 max-w-2xl text-[11px] leading-5 text-muted-foreground">Onoff gère l’appel. L’API directe et les webhooks Gando récupèrent ensuite le call ID, le statut, la durée, les métadonnées, l’enregistrement et le résultat commercial.</p>
                 </div>
 
                 <div className="border-l border-border bg-muted/35 p-3">
@@ -218,18 +176,15 @@ export function TodayDialerView() {
           </section>
 
           <aside className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex items-center justify-between"><h3 className="text-[15px] font-semibold">Connexion Allo</h3><span className={`h-2 w-2 rounded-full ${alloHealthy ? "bg-emerald-500" : "bg-destructive"}`} /></div>
+            <div className="flex items-center justify-between"><h3 className="text-[15px] font-semibold">Téléphonie Onoff</h3><span className={`h-2 w-2 rounded-full ${apiHealthy ? "bg-emerald-500" : "bg-amber-500"}`} /></div>
             <div className="mt-5 space-y-4 text-[12px]">
-              <div><div className="text-muted-foreground">Workspace</div><div className="mt-1 font-medium">{allo?.team?.name || "—"}</div></div>
-              <div><div className="text-muted-foreground">Membre Allo ciblé</div><div className="mt-1 font-medium">{allo?.target?.name || allo?.target?.email || "Propriétaire de la clé API"}</div>{allo?.target?.email ? <div className="mt-0.5 text-muted-foreground">{allo.target.email}</div> : null}</div>
-              <div><div className="text-muted-foreground">Power Dialer API</div><div className="mt-1 font-medium">{allo?.powerDialerReady ? `Prêt · ${allo?.queue?.count || 0} numéro(s)` : "Non disponible avec cette clé"}</div></div>
-              <div>
-                <div className="text-muted-foreground">Appel depuis le Cockpit</div>
-                <div className="mt-1 font-medium">Allo Click-to-Call / application d’appel système</div>
-                <a href={ALLO_CHROME_EXTENSION_URL} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-4">Installer l’extension Allo <ExternalLink className="h-3 w-3" /></a>
-              </div>
+              <div><div className="text-muted-foreground">API directe Onoff</div><div className="mt-1 font-medium">{!onoff?.configured ? "Clé non configurée" : onoff?.connected === true ? "Connectée et vérifiée" : onoff?.connected === false ? "Connexion à vérifier" : "Configurée · en attente d’un call ID"}</div></div>
+              <div><div className="text-muted-foreground">Synchronisation post-appel</div><div className="mt-1 font-medium">Webhook CDR / RECORDING → Gando</div></div>
+              <div><div className="text-muted-foreground">Traitement du dernier appel</div><div className="mt-1 font-medium">{onoff?.latestProcessingStatus || "—"}</div></div>
+              <div><div className="text-muted-foreground">Appel dans le Cockpit</div><div className="mt-1 font-medium">Webphone Onoff embarqué + Click2Call en fallback</div><a href={ONOFF_EXTENSION_URL} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-4">Extension Onoff <ExternalLink className="h-3 w-3" /></a></div>
             </div>
-            {!alloHealthy ? <div className="mt-5 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-[11px] leading-5 text-destructive">{allo?.error?.message || allo?.queueError?.message || "La synchronisation Power Dialer n’est pas disponible, mais le click-to-call peut fonctionner indépendamment via votre session Allo."}</div> : null}
+            {onoff?.error ? <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-[11px] leading-5 text-amber-700 dark:text-amber-300">{onoff.error}</div> : null}
+            <Button className="mt-5 w-full" asChild><Link href="/phone"><Phone className="mr-2 h-4 w-4" />Ouvrir Onoff dans Gando</Link></Button>
           </aside>
         </div>
       </div>
