@@ -36,6 +36,10 @@ Le média de l'appel reste assuré par :
 
 Si Onoff fournit ultérieurement un SDK ou endpoint privé permettant d'initier et transporter l'appel dans une application tierce, il devra être ajouté côté serveur sans exposer la clé API au navigateur.
 
+## Interface
+
+La navigation reprend l'esprit visuel Onoff sans reprendre ses dimensions : la sidebar principale et la sidebar Paramètres sont volontairement plus compactes pour laisser davantage de place au travail commercial. Les labels principaux sont à 13 px et les icônes à 16 px sur desktop.
+
 ## Sécurité
 
 - jamais de clé Onoff dans le client React ;
