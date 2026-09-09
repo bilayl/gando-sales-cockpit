@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  BellRing,
   ChevronLeft,
   CreditCard,
   Hash,
@@ -57,20 +56,26 @@ export function SettingsSidebar() {
   }, []);
 
   return (
-    <aside className="w-full shrink-0 border-b border-border/80 bg-[color-mix(in_srgb,var(--background)_97%,var(--foreground)_3%)] lg:sticky lg:top-0 lg:h-screen lg:w-[224px] lg:border-b-0 lg:border-r">
-      <div className="flex h-full flex-col px-3.5 py-4 lg:px-4 lg:py-5">
-        <div className="mb-4 flex items-center gap-1.5 px-1 lg:mb-5">
-          <a href="/today" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Retour au cockpit">
-            <ChevronLeft className="h-4 w-4" strokeWidth={1.8} />
+    <aside className="w-full shrink-0 border-b border-[#e7ece8] bg-[#f7f9f7] dark:border-border dark:bg-background lg:sticky lg:top-0 lg:h-screen lg:w-[212px] lg:border-b-0 lg:border-r">
+      <div className="flex h-full flex-col px-3 py-4 lg:px-3.5 lg:py-4.5">
+        <div className="mb-4 flex items-center gap-1 px-1">
+          <a
+            href="/today"
+            className="grid h-7 w-7 place-items-center rounded-full text-[#607069] transition hover:bg-[#edf1ee] hover:text-[#34433c] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+            aria-label="Retour au cockpit"
+          >
+            <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={1.8} />
           </a>
-          <div className="text-[18px] font-semibold tracking-[-0.035em]">Paramètres</div>
+          <div className="text-[16px] font-semibold tracking-[-0.03em] text-[#2f3d37] dark:text-foreground">Paramètres</div>
         </div>
 
-        <nav className="flex gap-2 overflow-x-auto pb-2 lg:block lg:min-h-0 lg:flex-1 lg:space-y-5 lg:overflow-y-auto lg:pb-5 minari-scrollbar" aria-label="Navigation des paramètres">
+        <div className="mb-4 border-t border-[#e5eae6] dark:border-border/80" />
+
+        <nav className="flex gap-2 overflow-x-auto pb-2 lg:block lg:min-h-0 lg:flex-1 lg:space-y-5 lg:overflow-y-auto lg:pb-4 minari-scrollbar" aria-label="Navigation des paramètres">
           {groups.map(group => (
-            <div key={group.label} className="min-w-[180px] lg:min-w-0">
-              <div className="mb-1.5 px-2.5 text-[11px] font-medium text-muted-foreground">{group.label}</div>
-              <div className="space-y-0.5">
+            <div key={group.label} className="min-w-[176px] lg:min-w-0">
+              <div className="mb-1.5 px-2 text-[11px] font-medium text-[#68756f] dark:text-muted-foreground">{group.label}</div>
+              <div className="space-y-[2px]">
                 {group.items.map(item => {
                   const Icon = item.icon;
                   const selected = active === item.id;
@@ -80,15 +85,14 @@ export function SettingsSidebar() {
                       href={`#${item.id}`}
                       onClick={() => setActive(item.id)}
                       className={cn(
-                        "flex min-h-9 items-center gap-2.5 rounded-[13px] px-2.5 py-1.5 text-[13px] font-medium tracking-[-0.01em] transition",
+                        "flex h-[35px] items-center gap-2 rounded-[12px] px-2.5 text-[12px] font-medium tracking-[-0.008em] transition",
                         selected
-                          ? "bg-[color-mix(in_srgb,var(--muted)_78%,#dbe8e1_22%)] text-foreground"
-                          : "text-muted-foreground hover:bg-muted/65 hover:text-foreground",
+                          ? "bg-[#e9eeea] text-[#34433c] dark:bg-muted dark:text-foreground"
+                          : "text-[#68756f] hover:bg-[#eef2ef] hover:text-[#34433c] dark:text-muted-foreground dark:hover:bg-muted/70 dark:hover:text-foreground",
                       )}
                     >
-                      <Icon className="h-[16px] w-[16px] shrink-0" strokeWidth={1.65} />
-                      <span>{item.label}</span>
-                      {item.id === "email-notifications" ? <BellRing className="ml-auto hidden h-3 w-3 opacity-50 xl:block" /> : null}
+                      <Icon className="h-[15px] w-[15px] shrink-0" strokeWidth={1.7} />
+                      <span className="truncate">{item.label}</span>
                     </a>
                   );
                 })}
