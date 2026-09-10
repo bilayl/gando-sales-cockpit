@@ -91,14 +91,26 @@ export function TodayDialerView() {
   const selectedNumber = numberFor(selected);
   const apiHealthy = Boolean(onoff?.configured && onoff?.connected !== false);
 
-  async function resolveCompanyId(contact: Contact) {
-    const directId = String(contact.properties.db_company_id || "").trim();
-    if (directId) return directId;
+  async function resolveCompanyIds(contact: Contact) {
+    let candidate = String(contact.properties.db_company_id || "").trim();
 
-    const response = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { cache: "no-store" });
+    if (!candidate) {
+      const response = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Impossible de retrouver l’entreprise associée à ce lead.");
+      candidate = String(payload.companies?.[0]?.id || "").trim();
+    }
+
+    if (!candidate) throw new Error("Ce lead n’a aucune entreprise associée : impossible d’ouvrir la session d’appel.");
+
+    const response = await fetch(`/api/prospection/company-id/${encodeURIComponent(candidate)}`, { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || "Impossible de retrouver l’entreprise associée à ce lead.");
-    return String(payload.companies?.[0]?.id || "").trim();
+    if (!response.ok) throw new Error(payload.error || "Impossible de résoudre l’identifiant HubSpot de cette entreprise.");
+
+    const hubspotId = String(payload.hubspotId || "").trim();
+    const assignmentId = String(payload.localId || candidate).trim();
+    if (!hubspotId) throw new Error("Cette entreprise n’a pas encore d’identifiant HubSpot exploitable.");
+    return { assignmentId, hubspotId };
   }
 
   async function openCallSession() {
@@ -106,20 +118,19 @@ export function TodayDialerView() {
     setSessionStarting(true);
     setMessage("");
     try {
-      const companyId = await resolveCompanyId(selected);
-      if (!companyId) throw new Error("Ce lead n’a aucune entreprise associée : impossible d’ouvrir la session d’appel.");
+      const { assignmentId, hubspotId } = await resolveCompanyIds(selected);
 
       const assignmentResponse = await fetch("/api/prospection/assignments", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ companyIds: [companyId] }),
+        body: JSON.stringify({ companyIds: [assignmentId] }),
       });
       const assignmentPayload = await assignmentResponse.json().catch(() => ({}));
       if (!assignmentResponse.ok) throw new Error(assignmentPayload.message || assignmentPayload.error || "Impossible de préparer la session d’appel.");
       const claimed = new Set((assignmentPayload.claimedCompanyIds || []).map(String));
-      if (!claimed.has(companyId)) throw new Error("Ce lead est déjà pris en charge par un autre commercial.");
+      if (!claimed.has(assignmentId)) throw new Error("Ce lead est déjà pris en charge par un autre commercial.");
 
-      const companyResponse = await fetch(`/api/companies/${encodeURIComponent(companyId)}/centralized`, { cache: "no-store" });
+      const companyResponse = await fetch(`/api/companies/${encodeURIComponent(hubspotId)}/centralized`, { cache: "no-store" });
       const companyPayload = await companyResponse.json().catch(() => ({}));
       if (!companyResponse.ok || !companyPayload.company) throw new Error(companyPayload.error || "Impossible de charger la session d’appel.");
 
