@@ -52,12 +52,7 @@ type OnoffHistoryItem = {
 type HistoryResponse = {
   source?: string;
   total?: number;
-  summary?: {
-    calls: number;
-    recordings: number;
-    transcriptions: number;
-    voicemails: number;
-  };
+  summary?: { calls: number; recordings: number; transcriptions: number; voicemails: number };
   items?: OnoffHistoryItem[];
   error?: string;
 };
@@ -97,8 +92,7 @@ function durationLabel(value?: number | null) {
   if (!total) return "0 s";
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
-  if (minutes) return `${minutes} min ${String(seconds).padStart(2, "0")} s`;
-  return `${seconds} s`;
+  return minutes ? `${minutes} min ${String(seconds).padStart(2, "0")} s` : `${seconds} s`;
 }
 
 function directionLabel(value?: string | null) {
@@ -266,6 +260,12 @@ export function OnoffHistoryView({ compact = false, limit = 500 }: { compact?: b
 
   const shown = compact ? visible.slice(0, 20) : visible;
   const summary = data?.summary || { calls: 0, recordings: 0, transcriptions: 0, voicemails: 0 };
+  const metricCards = [
+    { value: summary.calls, label: "Appels", Icon: PhoneCall },
+    { value: summary.recordings, label: "Enregistrements", Icon: Mic2 },
+    { value: summary.transcriptions, label: "Transcriptions", Icon: MessageSquareText },
+    { value: summary.voicemails, label: "Messages vocaux", Icon: Voicemail },
+  ];
 
   return (
     <div className={cn(compact ? "space-y-4" : "page-shell min-h-screen minari-scrollbar")}>
@@ -285,15 +285,13 @@ export function OnoffHistoryView({ compact = false, limit = 500 }: { compact?: b
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {[
-            [summary.calls, "Appels", PhoneCall],
-            [summary.recordings, "Enregistrements", Mic2],
-            [summary.transcriptions, "Transcriptions", MessageSquareText],
-            [summary.voicemails, "Messages vocaux", Voicemail],
-          ].map(([value, label, Icon]) => (
-            <Card key={String(label)} className="px-3 py-3">
-              <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-muted-foreground">{String(label)}</span>{typeof Icon !== "string" ? <Icon className="h-3.5 w-3.5 text-primary" /> : null}</div>
-              <div className="mt-1 text-xl font-semibold tracking-[-0.03em]">{Number(value)}</div>
+          {metricCards.map(({ value, label, Icon }) => (
+            <Card key={label} className="px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
+                <Icon className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <div className="mt-1 text-xl font-semibold tracking-[-0.03em]">{value}</div>
             </Card>
           ))}
         </div>
@@ -310,7 +308,10 @@ export function OnoffHistoryView({ compact = false, limit = 500 }: { compact?: b
             ))}
           </div>
           {!compact ? (
-            <div className="relative ml-auto w-full sm:w-[280px]"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Numéro, contact, commercial…" className="h-8 pl-8 text-xs" /></div>
+            <div className="relative ml-auto w-full sm:w-[280px]">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Numéro, contact, commercial…" className="h-8 pl-8 text-xs" />
+            </div>
           ) : null}
         </div>
 
@@ -356,7 +357,10 @@ export function OnoffHistoryView({ compact = false, limit = 500 }: { compact?: b
                       </div>
                     </div>
                     {item.type === "call" ? <OnoffCallDetails item={item} /> : item.transcript ? (
-                      <div className="border-t border-border bg-muted/20 px-4 py-3"><div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Transcription du message vocal</div><div className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.transcript}</div></div>
+                      <div className="border-t border-border bg-muted/20 px-4 py-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Transcription du message vocal</div>
+                        <div className="mt-2 whitespace-pre-wrap text-xs leading-5">{item.transcript}</div>
+                      </div>
                     ) : null}
                   </div>
                 );
