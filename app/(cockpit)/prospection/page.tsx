@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Building2, Users } from "lucide-react";
+import { AddContactButton } from "@/components/add-contact-button";
 import { CompanyFirstProspectionView } from "@/components/company-first-prospection-view";
 import { PostCallFollowupQueue } from "@/components/post-call-followup-queue";
 import { ProspectionContactsDirectory } from "@/components/prospection-contacts-directory";
@@ -40,6 +41,7 @@ export default async function ProspectionPage({ searchParams }: { searchParams: 
             <Users size={14} /> Contacts
           </Link>
           <span className="ml-2 hidden text-[11px] text-muted-foreground md:inline">Entreprise = prospect · Contact = personne à joindre</span>
+          <AddContactButton className="ml-auto" />
         </nav>
 
         <div className="min-h-0 flex-1 overflow-hidden [&>.page-shell]:!h-full">
