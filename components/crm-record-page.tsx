@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CallObjectionCoachPanel } from "@/components/call-objection-coach-panel";
+import { EditableContactEmail } from "@/components/editable-contact-email";
 import { EditableCRMTaskCard } from "@/components/editable-crm-task-card";
 import { PostCallEmailButton } from "@/components/post-call-email-button";
 import { ProfileSourcingButton } from "@/components/profile-sourcing-button";
@@ -224,7 +225,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
                     <div className="text-xs font-bold uppercase tracking-[0.15em] text-primary">{kind === "company" ? "Entreprise" : "Contact"}</div>
                     <h1 className="mt-1 break-words font-display text-2xl font-bold tracking-tight">{name}</h1>
                     <div className="mt-1 text-sm text-muted-foreground">{subtitle || "Fiche CRM HubSpot"}</div>
-                    {effectiveEmail ? <a href={`mailto:${effectiveEmail}`} className="mt-1.5 inline-flex max-w-full items-center gap-1.5 text-xs font-medium text-primary hover:underline"><Mail size={12} /><span className="truncate">{effectiveEmail}</span>{kind === "company" ? <span className="text-muted-foreground">· contact associé</span> : null}</a> : <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Mail size={12} /> Email à renseigner</div>}
+                    <EditableContactEmail contactId={emailContactId || undefined} email={effectiveEmail} associated={kind === "company"} compact onSaved={load} />
                     <div className="mt-3 flex flex-wrap gap-1.5">{p.statut_prospection ? <Badge>{p.statut_prospection}</Badge> : null}{p.statut_de_lappel ? <Badge variant="outline">{p.statut_de_lappel}</Badge> : null}<Badge variant="outline"><History size={11} /> {counts.notes + counts.calls + counts.meetings + counts.tasks} activités</Badge></div>
                   </div>
                 </div>
@@ -257,7 +258,10 @@ export function CRMRecordPage({ kind, recordId }: Props) {
                 <Card className="p-4"><div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Informations</div><div className="grid gap-2">
                   <Info icon={UserRound} label="Commercial" value={ownerLabel(owners, p.hubspot_owner_id)} />
                   <Info icon={Phone} label={phoneLabel} value={effectivePhone} />
-                  <Info icon={Mail} label={kind === "company" ? "Email contact associé" : "Email"} value={effectiveEmail} />
+                  <div className="rounded-xl border border-border bg-card px-3.5 py-3">
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground"><Mail size={13} /> {kind === "company" ? "Email contact associé" : "Email"}</div>
+                    <div className="mt-1.5"><EditableContactEmail contactId={emailContactId || undefined} email={effectiveEmail} associated={kind === "company"} onSaved={load} /></div>
+                  </div>
                   {kind === "company" ? <Info icon={Globe} label="Domaine" value={p.domain || p.website} /> : null}
                   <Info icon={MapPin} label="Localisation" value={[p.zip || p.postal_code, p.city, p.state, p.country].filter(Boolean).join(" · ")} />
                   <Info icon={Clock} label="Dernière activité" value={p.hs_last_sales_activity_timestamp ? formatDate(p.hs_last_sales_activity_timestamp) : undefined} />
