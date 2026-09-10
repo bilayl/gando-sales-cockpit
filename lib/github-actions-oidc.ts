@@ -29,7 +29,7 @@ export async function isAuthorizedGitHubSyncToken(token: string) {
       payload.repository_id === GITHUB_REPOSITORY_ID &&
       payload.ref === GITHUB_MAIN_REF &&
       payload.workflow_ref === GITHUB_SYNC_WORKFLOW_REF &&
-      (eventName === "schedule" || eventName === "workflow_dispatch" || eventName === "push")
+      (eventName === "schedule" || eventName === "workflow_dispatch")
     );
   } catch (error) {
     console.warn(
