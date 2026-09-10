@@ -86,11 +86,10 @@ function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
 export function AppSidebar({ email, role = "member" }: { email?: string; role?: CockpitRole }) {
   const pathname = usePathname();
   const workspaceItems = role === "commercial" ? workspaceNav.filter(item => item.href !== "/segments") : workspaceNav;
-  const cockpitPortalHref = role === "admin" ? "/" : "/today";
 
   return (
     <aside className="flex h-screen w-[56px] flex-col border-r border-[#e7ece8] bg-[#f7f9f7] px-2 py-3 text-[#34433c] transition-colors dark:border-border dark:bg-background dark:text-foreground lg:w-[198px] lg:px-3">
-      <Link href={cockpitPortalHref} className="mb-3 flex h-10 items-center justify-center gap-2 px-1 lg:justify-start lg:px-1.5" title={role === "admin" ? "Retour au portail Cockpit" : "Aujourd’hui"}>
+      <Link href="/" className="mb-3 flex h-10 items-center justify-center gap-2 px-1 lg:justify-start lg:px-1.5" title="Retour au portail Cockpit">
         <GandoMark />
         <div className="hidden min-w-0 lg:block">
           <div className="truncate text-[15px] font-semibold leading-none tracking-[-0.03em]">Gando</div>
