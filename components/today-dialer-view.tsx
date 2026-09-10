@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, ExternalLink, Loader2, Phone, PhoneCall, RefreshCw, UserRound, UsersRound } from "lucide-react";
+import { ProspectionSession } from "@/components/prospection-session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -13,6 +14,11 @@ type Contact = {
   properties: Record<string, string | null | undefined>;
   ownership?: "MINE" | "UNASSIGNED" | "OTHER";
   assignee?: string | null;
+};
+
+type Company = {
+  id: string;
+  properties: Record<string, string | null | undefined>;
 };
 
 type TodayPayload = {
@@ -51,6 +57,9 @@ export function TodayDialerView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [sessionOpen, setSessionOpen] = useState(false);
+  const [sessionStarting, setSessionStarting] = useState(false);
+  const [sessionCompany, setSessionCompany] = useState<Company | null>(null);
 
   async function load() {
     setLoading(true);
@@ -80,11 +89,48 @@ export function TodayDialerView() {
   const selected = useMemo(() => results.find(contact => contact.id === selectedId) || results[0] || null, [results, selectedId]);
   const p = selected?.properties || {};
   const selectedNumber = numberFor(selected);
-  const selectedCompanyId = String(p.db_company_id || "").trim();
-  const sessionHref = selectedCompanyId
-    ? `/prospection/session/${encodeURIComponent(selectedCompanyId)}`
-    : selected ? `/contacts/${selected.id}` : "/prospection";
   const apiHealthy = Boolean(onoff?.configured && onoff?.connected !== false);
+
+  async function resolveCompanyId(contact: Contact) {
+    const directId = String(contact.properties.db_company_id || "").trim();
+    if (directId) return directId;
+
+    const response = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Impossible de retrouver l’entreprise associée à ce lead.");
+    return String(payload.companies?.[0]?.id || "").trim();
+  }
+
+  async function openCallSession() {
+    if (!selected || sessionStarting) return;
+    setSessionStarting(true);
+    setMessage("");
+    try {
+      const companyId = await resolveCompanyId(selected);
+      if (!companyId) throw new Error("Ce lead n’a aucune entreprise associée : impossible d’ouvrir la session d’appel.");
+
+      const assignmentResponse = await fetch("/api/prospection/assignments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ companyIds: [companyId] }),
+      });
+      const assignmentPayload = await assignmentResponse.json().catch(() => ({}));
+      if (!assignmentResponse.ok) throw new Error(assignmentPayload.message || assignmentPayload.error || "Impossible de préparer la session d’appel.");
+      const claimed = new Set((assignmentPayload.claimedCompanyIds || []).map(String));
+      if (!claimed.has(companyId)) throw new Error("Ce lead est déjà pris en charge par un autre commercial.");
+
+      const companyResponse = await fetch(`/api/companies/${encodeURIComponent(companyId)}/centralized`, { cache: "no-store" });
+      const companyPayload = await companyResponse.json().catch(() => ({}));
+      if (!companyResponse.ok || !companyPayload.company) throw new Error(companyPayload.error || "Impossible de charger la session d’appel.");
+
+      setSessionCompany(companyPayload.company as Company);
+      setSessionOpen(true);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Impossible d’ouvrir la session d’appel.");
+    } finally {
+      setSessionStarting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background px-7 py-6 text-foreground transition-colors">
@@ -148,11 +194,13 @@ export function TodayDialerView() {
                   </div>
 
                   <div className="mt-7 flex flex-wrap gap-2">
-                    <Button asChild className="h-11 rounded-xl px-5"><Link href={sessionHref}><Phone className="mr-2 h-4 w-4" />Appeler</Link></Button>
+                    <Button className="h-11 rounded-xl px-5" onClick={() => void openCallSession()} disabled={sessionStarting}>
+                      {sessionStarting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Phone className="mr-2 h-4 w-4" />}Appeler
+                    </Button>
                     <Button variant="outline" className="h-11 rounded-xl border-border bg-card" asChild><Link href="/prospection">Voir la prospection</Link></Button>
                     <Button variant="outline" className="h-11 rounded-xl border-border bg-card" asChild><Link href={`/contacts/${selected.id}`}>Voir la fiche <ExternalLink className="ml-2 h-3.5 w-3.5" /></Link></Button>
                   </div>
-                  <p className="mt-3 max-w-2xl text-[11px] leading-5 text-muted-foreground">Le bouton Appeler ouvre d’abord la fiche de session Gando avec le contexte du lead, les objections, l’historique et les actions de suivi. L’appel Onoff se lance ensuite depuis cette session.</p>
+                  <p className="mt-3 max-w-2xl text-[11px] leading-5 text-muted-foreground">Appeler ouvre directement la session de traitement du lead dans Aujourd’hui. La fiche CRM reste accessible séparément via « Voir la fiche ».</p>
                 </div>
 
                 <div className="border-l border-border bg-muted/35 p-3">
@@ -184,6 +232,15 @@ export function TodayDialerView() {
           </aside>
         </div>
       </div>
+
+      {sessionCompany ? (
+        <ProspectionSession
+          open={sessionOpen}
+          onOpenChange={setSessionOpen}
+          companies={[sessionCompany]}
+          onOpenCompany={companyId => { window.location.href = `/companies/${companyId}`; }}
+        />
+      ) : null}
     </div>
   );
 }
