@@ -6,11 +6,7 @@ import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualificatio
 
 export const dynamic = "force-dynamic";
 
-export default async function ProspectionPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ mode?: string; companyId?: string; startSession?: string; contactId?: string }>;
-}) {
+export default async function ProspectionPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   const params = await searchParams;
   const bypass = isAuthBypassEnabled();
   const identity = bypass ? null : await getHubSpotIdentity().catch(() => null);
@@ -27,5 +23,5 @@ export default async function ProspectionPage({
     console.error("HubSpot qualification schema bootstrap:", error);
   });
 
-  return <><CompanyFirstProspectionView initialCompanyId={params.companyId || null} autoStartSession={params.startSession === "1"} />{followup}</>;
+  return <><CompanyFirstProspectionView />{followup}</>;
 }
