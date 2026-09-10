@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Loader2, Mail, Phone, RefreshCw, Search, Users } from "lucide-react";
+import { Loader2, Mail, Phone, RefreshCw, Search } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -115,15 +115,9 @@ export function ProspectionContactsDirectory() {
             <p className="mt-0.5 text-sm font-semibold text-foreground">Les contacts restent accessibles dans Prospection, mais le prospect commercial reste l’entreprise.</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
-              <Button asChild size="sm" variant="ghost" className="h-8 gap-1.5 rounded-md px-3"><Link href="/prospection"><Building2 size={14} /> Entreprises</Link></Button>
-              <Button size="sm" variant="secondary" className="h-8 gap-1.5 rounded-md px-3"><Users size={14} /> Contacts</Button>
-            </div>
-            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>
-              {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>
+            {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}
+          </Button>
         </div>
       </header>
 
