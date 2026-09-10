@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
-import { ensureCompanyQualificationProperties, ensureContactProspectionOptions } from "@/lib/hubspot/qualification-schema";
+import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 type WorkflowAction =
@@ -17,7 +17,7 @@ type WorkflowAction =
   | "LOST";
 
 const HUBSPOT_LEAD_STATUS: Partial<Record<WorkflowAction, string>> = {
-  NEW: "OPEN",
+  NEW: "NEW",
   OPEN: "OPEN",
   ATTEMPTED_TO_CONTACT: "ATTEMPTED_TO_CONTACT",
   CONNECTED: "CONNECTED",
@@ -30,7 +30,7 @@ const HUBSPOT_LEAD_STATUS: Partial<Record<WorkflowAction, string>> = {
 };
 
 const PROSPECTION_LABEL: Record<WorkflowAction, string> = {
-  NEW: "À contacter",
+  NEW: "À travailler",
   OPEN: "À contacter",
   ATTEMPTED_TO_CONTACT: "Tentative",
   CONNECTED: "Contact établi",
@@ -44,7 +44,7 @@ const PROSPECTION_LABEL: Record<WorkflowAction, string> = {
 };
 
 const QUALIFICATION_SCORE: Record<WorkflowAction, number> = {
-  NEW: 30,
+  NEW: 20,
   OPEN: 30,
   ATTEMPTED_TO_CONTACT: 45,
   CONNECTED: 70,
@@ -57,144 +57,17 @@ const QUALIFICATION_SCORE: Record<WorkflowAction, number> = {
   LOST: 5,
 };
 
-const REFERENCE_CONTACT_PROPERTIES = [
-  "firstname",
-  "lastname",
-  "hubspot_owner_id",
-  "hs_last_sales_activity_timestamp",
-  "statut_prospection",
-  "resultat_prospection",
-  "statut_de_lappel",
-  "date_prochaine_relance",
-  "date_recyclage",
-];
-
 function parseReminder(value: unknown) {
   if (!value) return null;
   const date = new Date(String(value));
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function contactWorkflowProperties(action: WorkflowAction, reminderAt: Date | null) {
-  const clearDates = { date_prochaine_relance: "", date_recyclage: "" };
-  switch (action) {
-    case "NEW":
-    case "OPEN":
-      return {
-        statut_prospection: "À prospecter",
-        resultat_prospection: "",
-        statut_de_lappel: "",
-        ...clearDates,
-      };
-    case "ATTEMPTED_TO_CONTACT":
-      return {
-        statut_prospection: "En prospection",
-        resultat_prospection: "Sans réponse",
-        statut_de_lappel: "NRP",
-        ...clearDates,
-      };
-    case "CONNECTED":
-      return {
-        statut_prospection: "Conversation",
-        resultat_prospection: "Conversation",
-        statut_de_lappel: "Intéressé",
-        ...clearDates,
-      };
-    case "FOLLOW_UP":
-      return {
-        statut_prospection: "En prospection",
-        resultat_prospection: "À rappeler",
-        statut_de_lappel: "A Rappeler",
-        date_prochaine_relance: reminderAt ? reminderAt.toISOString() : "",
-        date_recyclage: "",
-      };
-    case "LATER":
-      return {
-        statut_prospection: "À recycler",
-        resultat_prospection: "",
-        statut_de_lappel: "A une date ultérieure",
-        date_prochaine_relance: "",
-        date_recyclage: reminderAt ? reminderAt.toISOString() : "",
-      };
-    case "DEMO_SCHEDULED":
-      return {
-        statut_prospection: "RDV booké",
-        resultat_prospection: "RDV obtenu",
-        statut_de_lappel: "Intéressé",
-        ...clearDates,
-      };
-    case "OPEN_DEAL":
-      return {
-        statut_prospection: "RDV booké",
-        resultat_prospection: "RDV obtenu",
-        statut_de_lappel: "Intéressé",
-        ...clearDates,
-      };
-    case "NOT_INTERESTED":
-      return {
-        statut_prospection: "Pas intéressé",
-        resultat_prospection: "Pas intéressé",
-        statut_de_lappel: "pas intéressé",
-        ...clearDates,
-      };
-    case "WON":
-      return {
-        statut_prospection: "Gagné",
-        resultat_prospection: "",
-        statut_de_lappel: "Intéressé",
-        ...clearDates,
-      };
-    case "LOST":
-      return {
-        statut_prospection: "Perdu",
-        resultat_prospection: "Pas intéressé",
-        statut_de_lappel: "pas intéressé",
-        ...clearDates,
-      };
-  }
-}
-
-async function findReferenceContact(company: any) {
-  const ids = (company.associations?.contacts?.results || []).map((item: any) => String(item.id)).filter(Boolean);
-  if (!ids.length) return null;
-
-  const result = await hubspotJson("/crm/objects/2026-03/contacts/batch/read", {
-    method: "POST",
-    body: JSON.stringify({
-      properties: REFERENCE_CONTACT_PROPERTIES,
-      inputs: ids.slice(0, 100).map((id: string) => ({ id })),
-    }),
-  });
-
-  const contacts = result.results || [];
-  contacts.sort((a: any, b: any) => {
-    const aOwnerMatch = a.properties?.hubspot_owner_id && a.properties.hubspot_owner_id === company.properties?.hubspot_owner_id ? 1 : 0;
-    const bOwnerMatch = b.properties?.hubspot_owner_id && b.properties.hubspot_owner_id === company.properties?.hubspot_owner_id ? 1 : 0;
-    if (aOwnerMatch !== bOwnerMatch) return bOwnerMatch - aOwnerMatch;
-    const aDate = Date.parse(a.properties?.hs_last_sales_activity_timestamp || "") || 0;
-    const bDate = Date.parse(b.properties?.hs_last_sales_activity_timestamp || "") || 0;
-    return bDate - aDate;
-  });
-  return contacts[0] || null;
-}
-
-async function syncLocalContact(contact: any) {
-  if (!contact?.id) return;
-  const supabase = getSupabaseAdmin();
-  const { data: existing } = await supabase.from("contacts").select("*").eq("hubspot_id", String(contact.id)).maybeSingle();
-  if (!existing) return;
-  const properties = { ...(existing.raw_data?.properties || {}), ...(contact.properties || {}) };
-  const { error } = await supabase.from("contacts").update({
-    raw_data: { ...existing.raw_data, ...contact, properties, updatedAt: new Date().toISOString() },
-    hubspot_updated_at: new Date().toISOString(),
-    owner_hubspot_id: properties.hubspot_owner_id ?? existing.owner_hubspot_id,
-  }).eq("hubspot_id", String(contact.id));
-  if (error) console.error("Supabase workflow contact:", error.message);
-}
-
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    if (!/^\d+$/.test(id)) return NextResponse.json({ error: "Identifiant HubSpot entreprise invalide." }, { status: 400 });
+
     const body = await request.json();
     const action = String(body.action || "").trim() as WorkflowAction;
     const allowed: WorkflowAction[] = ["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "FOLLOW_UP", "LATER", "DEMO_SCHEDULED", "OPEN_DEAL", "WON", "NOT_INTERESTED", "LOST"];
@@ -207,7 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const schema = await ensureCompanyQualificationProperties().catch(() => ({ available: [] as string[], created: [] as string[], unavailable: [] }));
-    const company = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}?properties=name,domain,hubspot_owner_id,hs_lead_status,lifecyclestage,statut_de_lappel,date_de_rappel&associations=contacts`);
+    const company = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}?properties=name,domain,hubspot_owner_id,hs_lead_status,lifecyclestage,statut_de_lappel,date_de_rappel`);
     const properties: Record<string, string> = {};
     const leadStatus = HUBSPOT_LEAD_STATUS[action];
     if (leadStatus) properties.hs_lead_status = leadStatus;
@@ -260,21 +133,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       body: JSON.stringify({ properties }),
     });
 
-    const referenceContact = await findReferenceContact(company).catch(error => {
-      console.error("Find workflow reference contact:", error);
-      return null;
-    });
-    let updatedContact = null;
-    if (referenceContact) {
-      await ensureContactProspectionOptions();
-      const contactProperties = contactWorkflowProperties(action, reminderAt);
-      updatedContact = await hubspotJson(`/crm/objects/2026-03/contacts/${encodeURIComponent(String(referenceContact.id))}`, {
-        method: "PATCH",
-        body: JSON.stringify({ properties: contactProperties }),
-      });
-      await syncLocalContact(updatedContact);
-    }
-
     const supabase = getSupabaseAdmin();
     const { data: existing } = await supabase.from("companies").select("*").eq("hubspot_id", id).maybeSingle();
     if (existing) {
@@ -306,13 +164,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     return NextResponse.json({
       company: companyResponse,
-      contact: updatedContact,
+      contact: null,
       task: null,
       workflow: {
         action,
         reminderAt: reminderAt?.toISOString() || null,
-        contactId: updatedContact ? String(updatedContact.id) : null,
-        automationOwner: "hubspot",
+        contactId: null,
+        automationOwner: "company",
       },
     });
   } catch (error) {
