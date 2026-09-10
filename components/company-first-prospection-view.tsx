@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, ListFilter, Loader2, MapPin, Plus, RefreshCw, Search, SquareKanban, Table2, Users } from "lucide-react";
+import { Building2, ListFilter, Loader2, MapPin, RefreshCw, Search, SquareKanban, Table2 } from "lucide-react";
 import { CompanyMultiFilter } from "@/components/company-multi-filter";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
-import { NewContactDialog } from "@/components/new-contact-dialog";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
 import { ProspectionSession } from "@/components/prospection-session";
 import { SdrWorkQueue, type SdrWorkFilter } from "@/components/sdr-work-queue";
@@ -16,14 +15,8 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  companyMatchesFilters,
-  type CompanyFilters,
-} from "@/lib/company-multi-filters";
-import {
-  compareCompanyProspectionPriority,
-  getCompanyProspectionDecision,
-} from "@/lib/company-prospection-priority";
+import { companyMatchesFilters, type CompanyFilters } from "@/lib/company-multi-filters";
+import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
 import { fetchAllPagedResults } from "@/lib/fetch-all-paged-results";
 import {
   PROSPECTION_SEGMENT_PREFS_EVENT,
@@ -63,10 +56,7 @@ function companyLocation(properties: Record<string, string | null | undefined>) 
   return [properties.zip || properties.postal_code, properties.city, properties.state, properties.country].filter(Boolean).join(" · ") || "—";
 }
 
-function companySuggestion(
-  stage: CompanyStage,
-  decision: ReturnType<typeof getCompanyProspectionDecision>,
-) {
+function companySuggestion(stage: CompanyStage, decision: ReturnType<typeof getCompanyProspectionDecision>) {
   if (decision.bucket === "SNOOZED") return "Attendre la prochaine relance";
   if (decision.bucket === "OPPORTUNITY") return "Préparer le RDV / deal";
   if (decision.bucket === "EXCLUDED") return "Ne pas appeler";
@@ -98,7 +88,6 @@ export function CompanyFirstProspectionView() {
   const [sessionCompanies, setSessionCompanies] = useState<Company[]>([]);
   const [sessionCreating, setSessionCreating] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
-  const [newContactOpen, setNewContactOpen] = useState(false);
   const [evaluationTime, setEvaluationTime] = useState(Date.now);
 
   useEffect(() => {
@@ -121,8 +110,6 @@ export function CompanyFirstProspectionView() {
         setOwners(ownerData.results || []);
         setCurrentUserEmail(String(currentUser.email || "").trim().toLowerCase());
         setAssignments(assignmentData.results || []);
-        // Toutes les entreprises est la vue par défaut afin que le Cockpit affiche
-        // toujours les données Supabase enregistrées, même sans HubSpot.
         setSegmentId("");
       })
       .catch(cause => setError(cause instanceof Error ? cause.message : "Impossible de charger le Cockpit"));
@@ -136,10 +123,7 @@ export function CompanyFirstProspectionView() {
     };
   }, []);
 
-  const visibleLists = useMemo(
-    () => orderVisibleCompanySegments(lists, segmentPreferences),
-    [lists, segmentPreferences],
-  );
+  const visibleLists = useMemo(() => orderVisibleCompanySegments(lists, segmentPreferences), [lists, segmentPreferences]);
 
   useEffect(() => {
     if (!segmentId) return;
@@ -199,26 +183,18 @@ export function CompanyFirstProspectionView() {
   }, [baseFiltered, evaluationTime]);
 
   const filtered = useMemo(
-    () => classified
-      .filter(item => workFilter === "ALL" || item.decision.bucket === workFilter)
-      .map(item => item.company),
+    () => classified.filter(item => workFilter === "ALL" || item.decision.bucket === workFilter).map(item => item.company),
     [classified, workFilter],
   );
 
-  const actionableCompanies = useMemo(() => classified
-    .filter(item => item.decision.bucket === "ACTIONABLE")
-    .map(item => item.company), [classified]);
+  const actionableCompanies = useMemo(() => classified.filter(item => item.decision.bucket === "ACTIONABLE").map(item => item.company), [classified]);
   const sessionCandidates = useMemo(() => actionableCompanies.filter(company => {
     const assignee = assignmentByCompanyId.get(company.id);
     return (!assignee || assignee === currentUserEmail)
       && getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow;
   }), [actionableCompanies, assignmentByCompanyId, currentUserEmail, evaluationTime]);
-  const myAssignedCompanies = useMemo(() => actionableCompanies.filter(company =>
-    assignmentByCompanyId.get(company.id) === currentUserEmail
-  ), [actionableCompanies, assignmentByCompanyId, currentUserEmail]);
-  const blockedByTimingCount = myAssignedCompanies.filter(company =>
-    !getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow
-  ).length;
+  const myAssignedCompanies = useMemo(() => actionableCompanies.filter(company => assignmentByCompanyId.get(company.id) === currentUserEmail), [actionableCompanies, assignmentByCompanyId, currentUserEmail]);
+  const blockedByTimingCount = myAssignedCompanies.filter(company => !getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow).length;
   const unassignedCount = actionableCompanies.filter(company => !assignmentByCompanyId.has(company.id)).length;
 
   const currentList = visibleLists.find(item => item.listId === segmentId);
@@ -287,18 +263,13 @@ export function CompanyFirstProspectionView() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">Prospection</span>
-              <span className="text-[10px] text-muted-foreground">{total} entreprises enregistrées dans le Cockpit</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">Prospection · Entreprises</span>
+              <span className="text-[10px] text-muted-foreground">{total} prospects enregistrés</span>
             </div>
-            <p className="mt-0.5 text-sm font-semibold text-foreground">Travaillez le prochain compte utile, sans chercher quoi faire ensuite.</p>
+            <p className="mt-0.5 text-sm font-semibold text-foreground">1 entreprise = 1 prospect commercial. Les contacts sont les personnes rattachées au compte.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
-              <Button size="sm" variant="secondary" className="h-8 gap-1.5 rounded-md px-3"><Building2 size={14} /> Entreprises</Button>
-              <Button asChild size="sm" variant="ghost" className="h-8 gap-1.5 rounded-md px-3"><a href="/prospection?mode=contacts"><Users size={14} /> Contacts</a></Button>
-            </div>
-
             <Select value={segmentId || "__all__"} onValueChange={value => setSegmentId(value === "__all__" ? "" : value)}>
               <SelectTrigger className="h-9 w-[220px]"><SelectValue placeholder="Segment" /></SelectTrigger>
               <SelectContent>
@@ -310,8 +281,7 @@ export function CompanyFirstProspectionView() {
             </Select>
 
             <Button asChild variant="outline" size="sm" className="h-9 gap-1.5"><a href="/segments"><ListFilter size={14} /> Segments</a></Button>
-            <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewContactOpen(true)}><Plus size={14} /> Contact</Button>
-            <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewCompanyOpen(true)}><Building2 size={14} /> Entreprise</Button>
+            <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={() => setNewCompanyOpen(true)}><Building2 size={14} /> Ajouter une entreprise</Button>
           </div>
         </div>
       </header>
@@ -336,14 +306,14 @@ export function CompanyFirstProspectionView() {
 
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-4 py-2.5">
             <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
-              <Button variant={view === "table" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("table")}><Table2 size={14} /> File d'appels</Button>
+              <Button variant={view === "table" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("table")}><Table2 size={14} /> Base prospects</Button>
               <Button variant={view === "board" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("board")}><SquareKanban size={14} /> Pipeline</Button>
             </div>
 
             <CompanyMultiFilter companies={companies} owners={owners} value={filters} onChange={setFilters} />
             <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, domaine, ville…" className="h-9 w-56 pl-9" /></div>
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>{syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}</Button>
-            <span className="ml-auto hidden text-[11px] text-muted-foreground 2xl:inline">Les filtres Entreprises s'appliquent aussi à la prochaine session d'appels.</span>
+            <span className="ml-auto hidden text-[11px] text-muted-foreground 2xl:inline">Une seule base entreprise pilote qualification, attribution, appels et pipeline.</span>
           </div>
 
           {error ? <div className="mx-4 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
@@ -371,7 +341,7 @@ export function CompanyFirstProspectionView() {
                     <TableHead>Localisation</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead>Rappel prévu</TableHead>
-                    <TableHead>Contacts</TableHead>
+                    <TableHead>Contacts liés</TableHead>
                     <TableHead>Deals</TableHead>
                     <TableHead>Commercial</TableHead>
                     <TableHead>Dernière activité</TableHead>
@@ -418,7 +388,6 @@ export function CompanyFirstProspectionView() {
 
       <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={sessionCompanies} onOpenCompany={id => router.push(`/companies/${id}`)} />
       <NewCompanyDialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen} onCreated={() => void load(true)} />
-      <NewContactDialog open={newContactOpen} onOpenChange={setNewContactOpen} onCreated={() => void load(true)} />
     </div>
   );
 }
