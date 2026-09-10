@@ -45,8 +45,6 @@ type Task = {
   };
 };
 
-type Owner = { id: string; email?: string | null };
-
 type TodayPayload = {
   member?: { email?: string; displayName?: string | null };
   results?: Contact[];
@@ -155,6 +153,10 @@ function taskContext(task: Task) {
   return [contactName, company?.name].filter(Boolean).join(" · ") || "HubSpot";
 }
 
+function taskAssignee(task: Task) {
+  return task.cockpitAssignee?.displayName || task.cockpitAssignee?.email || (task.properties?.hubspot_owner_id ? "Assignée dans HubSpot" : "Non assignée");
+}
+
 function taskIcon(type?: string | null) {
   if (type === "CALL") return Phone;
   if (type === "EMAIL") return Mail;
@@ -173,7 +175,6 @@ export function TodayDialerView() {
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
   const [agenda, setAgenda] = useState<AgendaPayload>({});
-  const [owners, setOwners] = useState<Owner[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -187,13 +188,12 @@ export function TodayDialerView() {
     setMessage("");
     try {
       const range = dayRange();
-      const [todayResponse, onoffResponse, todayTasksResponse, overdueResponse, agendaResponse, ownersResponse] = await Promise.all([
+      const [todayResponse, onoffResponse, todayTasksResponse, overdueResponse, agendaResponse] = await Promise.all([
         fetch("/api/today", { cache: "no-store" }),
         fetch("/api/onoff/status", { cache: "no-store" }),
         fetch("/api/tasks?period=today", { cache: "no-store" }),
         fetch("/api/tasks?period=overdue", { cache: "no-store" }),
         fetch(`/api/agenda?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`, { cache: "no-store" }),
-        fetch("/api/owners", { cache: "no-store" }),
       ]);
 
       const todayPayload = await todayResponse.json();
@@ -203,7 +203,6 @@ export function TodayDialerView() {
       setTodayTasks(todayTasksResponse.ok ? (await todayTasksResponse.json()).results || [] : []);
       setOverdueTasks(overdueResponse.ok ? (await overdueResponse.json()).results || [] : []);
       setAgenda(agendaResponse.ok ? await agendaResponse.json() : {});
-      setOwners(ownersResponse.ok ? (await ownersResponse.json()).results || [] : []);
 
       const first = todayPayload.results?.[0];
       setSelectedId(current => current && todayPayload.results?.some((item: Contact) => item.id === current) ? current : first?.id || null);
@@ -216,45 +215,33 @@ export function TodayDialerView() {
 
   useEffect(() => { void load(); }, []);
 
-  const memberEmail = String(today?.member?.email || "").trim().toLowerCase();
-  const ownerId = useMemo(() => owners.find(owner => String(owner.email || "").trim().toLowerCase() === memberEmail)?.id || "", [owners, memberEmail]);
   const results = today?.results || [];
   const selected = useMemo(() => results.find(contact => contact.id === selectedId) || results[0] || null, [results, selectedId]);
   const p = selected?.properties || {};
   const selectedNumber = numberFor(selected);
   const apiHealthy = Boolean(onoff?.configured && onoff?.connected !== false);
 
-  const belongsToMe = (task: Task) => {
-    const assignedEmail = String(task.cockpitAssignee?.email || "").trim().toLowerCase();
-    if (assignedEmail) return assignedEmail === memberEmail;
-    return Boolean(ownerId && task.properties?.hubspot_owner_id === ownerId);
-  };
-
-  const myTodayTasks = useMemo(
-    () => todayTasks.filter(task => belongsToMe(task) && task.properties?.hs_task_status !== "COMPLETED"),
-    [todayTasks, memberEmail, ownerId],
+  // Important: the dashboard is global. Assignment is display metadata only, never a filter.
+  const openTodayTasks = useMemo(
+    () => todayTasks.filter(task => task.properties?.hs_task_status !== "COMPLETED"),
+    [todayTasks],
   );
-  const myOverdueTasks = useMemo(
-    () => overdueTasks.filter(task => belongsToMe(task) && task.properties?.hs_task_status !== "COMPLETED"),
-    [overdueTasks, memberEmail, ownerId],
+  const openOverdueTasks = useMemo(
+    () => overdueTasks.filter(task => task.properties?.hs_task_status !== "COMPLETED"),
+    [overdueTasks],
   );
-  const myMeetings = useMemo(() => (agenda.results || [])
-    .filter(meeting => {
-      const meetingOwner = meeting?.properties?.hubspot_owner_id;
-      return meetingOwner ? Boolean(ownerId && meetingOwner === ownerId) : true;
-    })
-    .sort((a, b) => dateMs(meetingStart(a)) - dateMs(meetingStart(b))), [agenda, ownerId]);
-  const myReminders = useMemo(
-    () => (agenda.reminders || []).filter(contact => ownerId && contact.properties?.hubspot_owner_id === ownerId),
-    [agenda, ownerId],
+  const allMeetings = useMemo(
+    () => (agenda.results || []).slice().sort((a, b) => dateMs(meetingStart(a)) - dateMs(meetingStart(b))),
+    [agenda],
   );
+  const allReminders = useMemo(() => agenda.reminders || [], [agenda]);
 
   const actionTasks = useMemo(() => {
     const map = new Map<string, { task: Task; overdue: boolean }>();
-    myOverdueTasks.forEach(task => map.set(task.id, { task, overdue: true }));
-    myTodayTasks.forEach(task => { if (!map.has(task.id)) map.set(task.id, { task, overdue: false }); });
+    openOverdueTasks.forEach(task => map.set(task.id, { task, overdue: true }));
+    openTodayTasks.forEach(task => { if (!map.has(task.id)) map.set(task.id, { task, overdue: false }); });
     return Array.from(map.values());
-  }, [myOverdueTasks, myTodayTasks]);
+  }, [openOverdueTasks, openTodayTasks]);
 
   const unifiedActions = useMemo<UnifiedAction[]>(() => {
     const actions: UnifiedAction[] = [];
@@ -273,7 +260,7 @@ export function TodayDialerView() {
       });
     }
 
-    for (const contact of myReminders) {
+    for (const contact of allReminders) {
       if (coveredContacts.has(String(contact.id))) continue;
       coveredContacts.add(String(contact.id));
       const at = contact.properties.date_prochaine_relance || contact.properties.date_recyclage;
@@ -286,7 +273,7 @@ export function TodayDialerView() {
       actions.push({ kind: "CALL", key: `call:${contact.id}`, priority: 3, at: Date.now() + index, contact });
     });
 
-    myMeetings.forEach(meeting => {
+    allMeetings.forEach(meeting => {
       actions.push({
         kind: "MEETING",
         key: `meeting:${meeting.id || meetingStart(meeting)}`,
@@ -297,7 +284,7 @@ export function TodayDialerView() {
     });
 
     return actions.sort((a, b) => a.priority - b.priority || a.at - b.at);
-  }, [actionTasks, myReminders, results, myMeetings]);
+  }, [actionTasks, allReminders, results, allMeetings]);
 
   const prioritySentence = unifiedActions[0]
     ? unifiedActions[0].kind === "TASK"
@@ -383,8 +370,8 @@ export function TodayDialerView() {
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
           <div>
             <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-primary">Aujourd’hui · Tableau de bord SDR</div>
-            <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.035em]">Votre journée commerciale</h1>
-            <p className="mt-1 max-w-3xl text-[13px] text-muted-foreground">{prioritySentence} Les appels sont filtrés entre {today?.callWindow || "08:00–19:00"} dans le fuseau du prospect.</p>
+            <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.035em]">Journée commerciale Gando</h1>
+            <p className="mt-1 max-w-3xl text-[13px] text-muted-foreground">{prioritySentence} Les tâches, relances et RDV sont affichés pour toute l’équipe, sans filtre par SDR.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <AddContactButton />
@@ -395,28 +382,22 @@ export function TodayDialerView() {
           </div>
         </header>
 
-        {!loading && memberEmail && !ownerId ? (
-          <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-800 dark:text-amber-200">
-            Votre compte Cockpit n’est pas relié à un owner HubSpot avec le même email. Les appels disponibles remontent, mais certaines tâches, relances ou réunions personnelles peuvent manquer.
-          </div>
-        ) : null}
-
         <div className="grid grid-cols-2 gap-3 py-5 lg:grid-cols-4">
           <div className="rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3">
             <div className="flex items-center justify-between"><ListTodo className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{unifiedActions.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">Actions à faire</div><div className="text-[11px] text-muted-foreground">Toute la journée SDR</div>
+            <div className="mt-2 text-[12px] font-medium">Actions à faire</div><div className="text-[11px] text-muted-foreground">Toute l’équipe · sans filtre SDR</div>
           </div>
           <div className="rounded-xl border border-border bg-card px-4 py-3">
             <div className="flex items-center justify-between"><PhoneCall className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{results.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">Appels maintenant</div><div className="text-[11px] text-muted-foreground">Joignables et disponibles</div>
+            <div className="mt-2 text-[12px] font-medium">Appels maintenant</div><div className="text-[11px] text-muted-foreground">Joignables dans votre file</div>
           </div>
           <Link href="/tasks" className="rounded-xl border border-border bg-card px-4 py-3 transition hover:border-primary/30 hover:bg-muted/20">
-            <div className="flex items-center justify-between"><AlertTriangle className={`h-4 w-4 ${myOverdueTasks.length ? "text-amber-600" : "text-muted-foreground"}`} /><span className="text-[22px] font-semibold tracking-[-0.03em]">{myOverdueTasks.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">En retard</div><div className="text-[11px] text-muted-foreground">À traiter avant le reste</div>
+            <div className="flex items-center justify-between"><AlertTriangle className={`h-4 w-4 ${openOverdueTasks.length ? "text-amber-600" : "text-muted-foreground"}`} /><span className="text-[22px] font-semibold tracking-[-0.03em]">{openOverdueTasks.length}</span></div>
+            <div className="mt-2 text-[12px] font-medium">En retard</div><div className="text-[11px] text-muted-foreground">Toutes les tâches en retard</div>
           </Link>
           <Link href="/meetings" className="rounded-xl border border-border bg-card px-4 py-3 transition hover:border-primary/30 hover:bg-muted/20">
-            <div className="flex items-center justify-between"><CalendarDays className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{myMeetings.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">RDV aujourd’hui</div><div className="text-[11px] text-muted-foreground">À préparer et convertir</div>
+            <div className="flex items-center justify-between"><CalendarDays className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{allMeetings.length}</span></div>
+            <div className="mt-2 text-[12px] font-medium">RDV aujourd’hui</div><div className="text-[11px] text-muted-foreground">Toute l’équipe commerciale</div>
           </Link>
         </div>
 
@@ -479,22 +460,30 @@ export function TodayDialerView() {
                 </div>
               </div>
             ) : (
-              <div className="grid h-[420px] place-items-center px-6 text-center"><div><CheckCircle2 className="mx-auto h-7 w-7 text-emerald-600 dark:text-emerald-300" /><div className="mt-3 text-[15px] font-semibold">Aucun appel joignable maintenant</div><div className="mt-1 text-[12px] text-muted-foreground">Les autres actions restent disponibles dans la liste à droite.</div></div></div>
+              <div className="grid h-[420px] place-items-center px-6 text-center"><div><CheckCircle2 className="mx-auto h-7 w-7 text-emerald-600 dark:text-emerald-300" /><div className="mt-3 text-[15px] font-semibold">Aucun appel joignable maintenant</div><div className="mt-1 text-[12px] text-muted-foreground">Les tâches, relances et RDV de toute l’équipe restent visibles dans la liste à droite.</div></div></div>
             )}
           </section>
 
           <section className="overflow-hidden rounded-2xl border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <div><div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">À ne pas rater</div><h3 className="mt-1 text-[15px] font-semibold">Actions à faire</h3></div>
-              <Badge variant={myOverdueTasks.length ? "destructive" : "outline"}>{unifiedActions.length}</Badge>
+              <div><div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">À ne pas rater</div><h3 className="mt-1 text-[15px] font-semibold">Actions à faire · équipe</h3></div>
+              <Badge variant={openOverdueTasks.length ? "destructive" : "outline"}>{unifiedActions.length}</Badge>
             </div>
             <div className="max-h-[500px] overflow-y-auto p-3 minari-scrollbar">
-              {unifiedActions.length ? unifiedActions.slice(0, 20).map(action => {
+              {unifiedActions.length ? unifiedActions.slice(0, 30).map(action => {
                 if (action.kind === "TASK") {
                   const Icon = taskIcon(action.task.properties.hs_task_type);
                   return (
                     <div key={action.key} className="mb-2 rounded-xl border border-border p-3 last:mb-0">
-                      <div className="flex items-start gap-3"><span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${action.overdue ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : "bg-muted text-muted-foreground"}`}><Icon size={14} /></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><div className="truncate text-[13px] font-semibold">{taskLabel(action.task)}</div>{action.overdue ? <Badge variant="outline" className="border-amber-500/30 text-[9px] text-amber-700 dark:text-amber-300">En retard</Badge> : null}</div><div className="mt-0.5 truncate text-[11px] text-muted-foreground">{taskContext(action.task)}</div><div className="mt-1 text-[10px] text-muted-foreground">{formatDateTime(action.task.properties.hs_timestamp)}</div></div><button type="button" title="Marquer comme terminée" onClick={() => void completeTask(action.task.id)} disabled={savingTaskId === action.task.id} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-700 disabled:opacity-50">{savingTaskId === action.task.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}</button></div>
+                      <div className="flex items-start gap-3">
+                        <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${action.overdue ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : "bg-muted text-muted-foreground"}`}><Icon size={14} /></span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2"><div className="truncate text-[13px] font-semibold">{taskLabel(action.task)}</div>{action.overdue ? <Badge variant="outline" className="border-amber-500/30 text-[9px] text-amber-700 dark:text-amber-300">En retard</Badge> : null}</div>
+                          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{taskContext(action.task)}</div>
+                          <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] text-muted-foreground"><span>{formatDateTime(action.task.properties.hs_timestamp)}</span><span>·</span><span>{taskAssignee(action.task)}</span></div>
+                        </div>
+                        <button type="button" title="Marquer comme terminée" onClick={() => void completeTask(action.task.id)} disabled={savingTaskId === action.task.id} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-700 disabled:opacity-50">{savingTaskId === action.task.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}</button>
+                      </div>
                     </div>
                   );
                 }
@@ -506,26 +495,26 @@ export function TodayDialerView() {
 
                 if (action.kind === "CALL") {
                   const cp = action.contact.properties;
-                  return <button key={action.key} type="button" onClick={() => { setSelectedId(action.contact.id); }} className="mb-2 flex w-full items-start gap-3 rounded-xl border border-border p-3 text-left transition last:mb-0 hover:border-primary/25 hover:bg-muted/20"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><PhoneCall size={14} /></span><div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold">Appeler {fullName(action.contact)}</div><div className="mt-0.5 truncate text-[11px] text-muted-foreground">{cp.company || "Sans entreprise"}</div><div className="mt-1 text-[10px] font-medium text-primary">Maintenant · {cp.db_call_local_time || "heure locale inconnue"}</div></div></button>;
+                  return <button key={action.key} type="button" onClick={() => setSelectedId(action.contact.id)} className="mb-2 flex w-full items-start gap-3 rounded-xl border border-border p-3 text-left transition last:mb-0 hover:border-primary/25 hover:bg-muted/20"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><PhoneCall size={14} /></span><div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold">Appeler {fullName(action.contact)}</div><div className="mt-0.5 truncate text-[11px] text-muted-foreground">{cp.company || "Sans entreprise"}</div><div className="mt-1 text-[10px] font-medium text-primary">Maintenant · {cp.db_call_local_time || "heure locale inconnue"}</div></div></button>;
                 }
 
                 const mp = action.meeting?.properties || {};
                 return <Link key={action.key} href="/meetings" className="mb-2 flex items-start gap-3 rounded-xl border border-border p-3 transition last:mb-0 hover:border-primary/25 hover:bg-muted/20"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><CalendarDays size={14} /></span><div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold">{mp.hs_meeting_title || action.meeting?.summary || "Rendez-vous"}</div><div className="mt-0.5 truncate text-[11px] text-muted-foreground">Préparer le rendez-vous</div><div className="mt-1 text-[10px] text-muted-foreground">{formatDateTime(meetingStart(action.meeting))}</div></div></Link>;
-              }) : <div className="py-12 text-center"><CheckCircle2 className="mx-auto h-6 w-6 text-emerald-600" /><div className="mt-2 text-[13px] font-semibold">Aucune action détectée</div><div className="mt-1 text-[11px] text-muted-foreground">Aucun appel joignable, tâche, relance ou RDV ne remonte pour ce compte.</div></div>}
+              }) : <div className="py-12 text-center"><CheckCircle2 className="mx-auto h-6 w-6 text-emerald-600" /><div className="mt-2 text-[13px] font-semibold">Aucune action détectée</div><div className="mt-1 text-[11px] text-muted-foreground">Aucune tâche, relance, réunion ou appel exploitable ne remonte aujourd’hui.</div></div>}
             </div>
-            <div className="border-t border-border p-3"><Button asChild variant="outline" size="sm" className="w-full"><Link href="/tasks">Gérer les tâches</Link></Button></div>
+            <div className="border-t border-border p-3"><Button asChild variant="outline" size="sm" className="w-full"><Link href="/tasks">Gérer toutes les tâches</Link></Button></div>
           </section>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_320px]">
           <section className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays size={15} className="text-primary" /><h3 className="text-[14px] font-semibold">Rendez-vous du jour</h3></div><Badge variant="outline">{myMeetings.length}</Badge></div>
-            <div className="mt-3 space-y-2">{myMeetings.slice(0, 5).map(meeting => { const mp = meeting.properties || {}; const start = meetingStart(meeting); return <div key={meeting.id || `${mp.hs_meeting_title}-${start}`} className="rounded-xl border border-border px-3 py-2.5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-[12px] font-semibold">{mp.hs_meeting_title || meeting.summary || "Rendez-vous"}</div><div className="mt-0.5 truncate text-[10px] text-muted-foreground">{mp.hs_meeting_location || meeting.location || "À distance / lieu non renseigné"}</div></div><Badge variant="secondary" className="text-[10px]">{formatTime(start)}</Badge></div></div>; })}{!myMeetings.length ? <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[11px] text-muted-foreground">Aucun rendez-vous aujourd’hui.</div> : null}</div>
+            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><CalendarDays size={15} className="text-primary" /><h3 className="text-[14px] font-semibold">Rendez-vous du jour · équipe</h3></div><Badge variant="outline">{allMeetings.length}</Badge></div>
+            <div className="mt-3 space-y-2">{allMeetings.slice(0, 5).map(meeting => { const mp = meeting.properties || {}; const start = meetingStart(meeting); return <div key={meeting.id || `${mp.hs_meeting_title}-${start}`} className="rounded-xl border border-border px-3 py-2.5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-[12px] font-semibold">{mp.hs_meeting_title || meeting.summary || "Rendez-vous"}</div><div className="mt-0.5 truncate text-[10px] text-muted-foreground">{mp.hs_meeting_location || meeting.location || "À distance / lieu non renseigné"}</div></div><Badge variant="secondary" className="text-[10px]">{formatTime(start)}</Badge></div></div>; })}{!allMeetings.length ? <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[11px] text-muted-foreground">Aucun rendez-vous aujourd’hui.</div> : null}</div>
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Target size={15} className="text-primary" /><h3 className="text-[14px] font-semibold">Relances du jour</h3></div><Badge variant="outline">{myReminders.length}</Badge></div>
-            <div className="mt-3 space-y-2">{myReminders.slice(0, 5).map(contact => { const rp = contact.properties || {}; return <Link key={contact.id} href={`/contacts/${contact.id}`} className="block rounded-xl border border-border px-3 py-2.5 transition hover:border-primary/25 hover:bg-muted/20"><div className="truncate text-[12px] font-semibold">{fullName(contact)}</div><div className="mt-0.5 flex items-center justify-between gap-3 text-[10px] text-muted-foreground"><span className="truncate">{rp.company || rp.jobtitle || "Contact"}</span><span className="shrink-0">{formatTime(rp.date_prochaine_relance || rp.date_recyclage)}</span></div></Link>; })}{!myReminders.length ? <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[11px] text-muted-foreground">Aucune relance planifiée aujourd’hui.</div> : null}</div>
+            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Target size={15} className="text-primary" /><h3 className="text-[14px] font-semibold">Relances du jour · équipe</h3></div><Badge variant="outline">{allReminders.length}</Badge></div>
+            <div className="mt-3 space-y-2">{allReminders.slice(0, 5).map(contact => { const rp = contact.properties || {}; return <Link key={contact.id} href={`/contacts/${contact.id}`} className="block rounded-xl border border-border px-3 py-2.5 transition hover:border-primary/25 hover:bg-muted/20"><div className="truncate text-[12px] font-semibold">{fullName(contact)}</div><div className="mt-0.5 flex items-center justify-between gap-3 text-[10px] text-muted-foreground"><span className="truncate">{rp.company || rp.jobtitle || "Contact"}</span><span className="shrink-0">{formatTime(rp.date_prochaine_relance || rp.date_recyclage)}</span></div></Link>; })}{!allReminders.length ? <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[11px] text-muted-foreground">Aucune relance planifiée aujourd’hui.</div> : null}</div>
           </section>
 
           <aside className="rounded-2xl border border-border bg-card p-4">
