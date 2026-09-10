@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { hubspotJson } from "@/lib/hubspot";
-import {
-  appendWithAlloDialingQueue,
-  isWithAlloConfigured,
-  safeWithAlloError,
-  type WithAlloQueueNumber,
-} from "@/lib/withallo";
+import { getOnoffDirectApiStatus } from "@/lib/onoff";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -91,16 +86,22 @@ function dueAt(task: any) {
 
 export async function POST(request: NextRequest) {
   try {
-    const access = await requireCockpitAccess();
+    await requireCockpitAccess();
     const body = await request.json().catch(() => ({}));
     const requestedCompanyIds = unique((Array.isArray(body.companyIds) ? body.companyIds : []).map(String)).slice(0, 100);
-    if (!requestedCompanyIds.length) return NextResponse.json({ summaries: {}, allo: { configured: isWithAlloConfigured(), requested: 0, added: 0 } });
+    const onoff = await getOnoffDirectApiStatus().catch(error => ({
+      configured: false,
+      connected: false,
+      source: "onoff_api" as const,
+      error: error instanceof Error ? error.message : "Impossible de vérifier Onoff.",
+    }));
+
+    if (!requestedCompanyIds.length) return NextResponse.json({ summaries: {}, onoff });
 
     const companyRecords = await batchRead("companies", requestedCompanyIds, COMPANY_PROPERTIES);
-    const companyById = new Map(companyRecords.map(company => [String(company.id), company]));
     const wonCompanyIds = new Set(companyRecords.filter(isWonRecord).map(company => String(company.id)));
     const companyIds = requestedCompanyIds.filter(id => !wonCompanyIds.has(id));
-    if (!companyIds.length) return NextResponse.json({ summaries: {}, allo: { configured: isWithAlloConfigured(), requested: 0, added: 0 } });
+    if (!companyIds.length) return NextResponse.json({ summaries: {}, onoff });
 
     const [companyContacts, companyTasks] = await Promise.all([
       batchAssociations("companies", "contacts", companyIds),
@@ -125,9 +126,7 @@ export async function POST(request: NextRequest) {
     const endToday = new Date();
     endToday.setHours(23, 59, 59, 999);
     const endTodayMs = endToday.getTime();
-
     const summaries: Record<string, any> = {};
-    const alloNumbers: WithAlloQueueNumber[] = [];
 
     for (const companyId of companyIds) {
       const directTaskIds = companyTasks.get(companyId) || [];
@@ -185,49 +184,9 @@ export async function POST(request: NextRequest) {
         todayTaskCount,
         nextTask: openTasks[0] || null,
       };
-
-      const callableContact = associatedContactIds
-        .map(contactId => contactById.get(contactId))
-        .find(contact => !isWonRecord(contact) && Boolean(contact?.properties?.mobilephone || contact?.properties?.phone));
-      if (callableContact) {
-        const p = callableContact.properties || {};
-        const company = companyById.get(companyId)?.properties || {};
-        alloNumbers.push({
-          number: String(p.mobilephone || p.phone).trim(),
-          ...(p.firstname ? { name: String(p.firstname) } : {}),
-          ...(p.lastname ? { last_name: String(p.lastname) } : {}),
-          ...(company.name ? { company: String(company.name) } : {}),
-          ...(p.jobtitle ? { job_title: String(p.jobtitle) } : {}),
-          ...(p.email ? { emails: [String(p.email)] } : {}),
-          ...(company.domain ? { website: String(company.domain) } : {}),
-        });
-      }
     }
 
-    let allo: Record<string, unknown> = {
-      configured: isWithAlloConfigured(),
-      requested: alloNumbers.length,
-      added: 0,
-      targetEmail: access.email || null,
-    };
-
-    if (isWithAlloConfigured() && alloNumbers.length) {
-      try {
-        const queued = await appendWithAlloDialingQueue({ numbers: alloNumbers, email: access.email || null });
-        allo = { configured: true, targetEmail: access.email || null, ...queued };
-      } catch (error) {
-        console.error("Allo queue sync failed", error);
-        allo = {
-          configured: true,
-          requested: alloNumbers.length,
-          added: 0,
-          targetEmail: access.email || null,
-          error: safeWithAlloError(error),
-        };
-      }
-    }
-
-    return NextResponse.json({ summaries, allo }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ summaries, onoff }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const e = error as Error & { status?: number };
     return NextResponse.json({ error: e.message || "Impossible de préparer la session de prospection" }, { status: e.status || 500 });

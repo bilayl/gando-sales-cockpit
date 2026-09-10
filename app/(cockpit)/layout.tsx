@@ -14,7 +14,7 @@ export default async function CockpitLayout({ children }: { children: ReactNode 
   const accountLabel = access.email || access.displayName || "Compte Gando";
 
   return (
-    <main className="allo-shell min-h-screen bg-background text-foreground transition-colors pl-[68px] lg:pl-[232px]">
+    <main className="cockpit-shell min-h-screen bg-background text-foreground transition-colors pl-[62px] lg:pl-[224px]">
       <div className="animate-fade-in fixed inset-y-0 left-0 z-20">
         <AppSidebar email={accountLabel} role={access.role} />
       </div>

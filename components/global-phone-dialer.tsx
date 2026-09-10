@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Delete, ExternalLink, Loader2, Phone, X } from "lucide-react";
+import { ChevronDown, Delete, ExternalLink, Phone, X } from "lucide-react";
 
-const ALLO_CHROME_EXTENSION_URL = "https://chromewebstore.google.com/detail/allo-click-to-call/bjjbpnjndjmamflhendfjfefdbpleclk";
+const ONOFF_CHROME_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
 
 type Country = {
   code: string;
@@ -42,7 +42,6 @@ export function GlobalPhoneDialer() {
   const [open, setOpen] = useState(false);
   const [number, setNumber] = useState("");
   const [countryCode, setCountryCode] = useState("FR");
-  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
 
   const country = useMemo(() => COUNTRIES.find(item => item.code === countryCode) || COUNTRIES[0], [countryCode]);
@@ -71,33 +70,11 @@ export function GlobalPhoneDialer() {
     setError("");
   }
 
-  async function syncNumberWithAllo(phone: string) {
-    setSyncing(true);
-    setError("");
-    try {
-      const response = await fetch("/api/allo/dialing-queue", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ numbers: [{ number: phone, name: "Appel manuel Cockpit" }] }),
-        keepalive: true,
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        setError(payload?.error?.message || payload?.message || "Le numéro n’a pas pu être ajouté au Power Dialer Allo.");
-      }
-    } catch {
-      setError("Le Power Dialer n’a pas pu être synchronisé, mais le click-to-call peut tout de même être utilisé.");
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   function launchFromKeyboard() {
     if (!callable) {
       setError("Entrez un numéro de téléphone valide.");
       return;
     }
-    void syncNumberWithAllo(normalized);
     setOpen(false);
     window.location.href = `tel:${normalized}`;
   }
@@ -123,7 +100,7 @@ export function GlobalPhoneDialer() {
 
             <div className="mb-7 pr-10">
               <div className="text-[18px] font-semibold tracking-[-0.02em] text-foreground">Téléphone</div>
-              <div className="mt-1 text-[12px] text-muted-foreground">Composez ici, puis laissez Allo prendre en charge le click-to-call.</div>
+              <div className="mt-1 text-[12px] text-muted-foreground">Composez ici, puis laissez Onoff Click2Call prendre en charge l’appel.</div>
             </div>
 
             <div className="flex h-[58px] overflow-hidden rounded-[14px] border border-border bg-background">
@@ -159,14 +136,11 @@ export function GlobalPhoneDialer() {
             {callable ? (
               <a
                 href={`tel:${normalized}`}
-                onClick={() => {
-                  void syncNumberWithAllo(normalized);
-                  window.setTimeout(() => setOpen(false), 0);
-                }}
+                onClick={() => window.setTimeout(() => setOpen(false), 0)}
                 className="mx-auto mt-8 flex h-[58px] w-full max-w-[250px] items-center justify-center rounded-[18px] bg-[#79ca72] text-white transition hover:bg-[#6fc268]"
-                aria-label={`Appeler ${normalized} avec Allo`}
+                aria-label={`Appeler ${normalized} avec Onoff`}
               >
-                {syncing ? <Loader2 className="h-6 w-6 animate-spin" /> : <Phone className="h-6 w-6 fill-current" />}
+                <Phone className="h-6 w-6 fill-current" />
               </a>
             ) : (
               <button type="button" disabled className="mx-auto mt-8 flex h-[58px] w-full max-w-[250px] cursor-not-allowed items-center justify-center rounded-[18px] bg-[#79ca72] text-white opacity-45">
@@ -175,10 +149,13 @@ export function GlobalPhoneDialer() {
             )}
 
             <div className="mx-auto mt-4 max-w-[390px] text-center text-[11px] leading-5 text-muted-foreground">
-              Pour un appel en un clic depuis cette page, utilisez <strong className="font-semibold text-foreground">Allo - Click to Call</strong> ou définissez Allo comme application d’appel par défaut.
-              <div className="mt-2">
-                <a href={ALLO_CHROME_EXTENSION_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4">
-                  Installer Allo pour Chrome <ExternalLink className="h-3 w-3" />
+              Le click-to-call s’appuie sur <strong className="font-semibold text-foreground">Onoff Business Click2Call</strong>. Pour le softphone complet, ouvre la rubrique Appels du Cockpit.
+              <div className="mt-2 flex flex-wrap justify-center gap-3">
+                <a href={ONOFF_CHROME_EXTENSION_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4">
+                  Installer Onoff Click2Call <ExternalLink className="h-3 w-3" />
+                </a>
+                <a href="/phone" className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4">
+                  Ouvrir le webphone Gando
                 </a>
               </div>
             </div>

@@ -1,9 +1,11 @@
 # Gando Sales Cockpit
 
-Application Next.js 16 / TypeScript destinée au setter Gando. HubSpot reste la source de vérité pour les contacts, entreprises, statuts, rappels, tâches, appels et rendez-vous.
+Application Next.js 16 / TypeScript destinée au setter Gando. HubSpot reste la source de vérité pour les contacts, entreprises, statuts, rappels, tâches, appels et rendez-vous. Onoff Business est le moteur téléphonique du Cockpit.
 
 ## Parcours disponibles
 
+- **Aujourd’hui** : file personnelle priorisée selon l’attribution et le fuseau horaire du prospect.
+- **Appels** : webphone Onoff embarqué dans le Cockpit, avec Click2Call / `tel:` en fallback.
 - **Prospection** : point d’entrée principal du Cockpit, organisé par entreprise avec segments, recherche, filtres, pipeline et fiches centralisées.
 - **Démarrer la session** : construit une session à partir des filtres actuellement visibles dans Prospection. Les comptes sont classés par statut de prospection, puis par tâches HubSpot ouvertes (retard, aujourd’hui, prochaine échéance) et enfin par date de rappel.
 - **Résultat d’appel** : mise à jour du contact et de l’entreprise associée afin d’alimenter les workflows HubSpot WF01–WF04.
@@ -14,9 +16,13 @@ Application Next.js 16 / TypeScript destinée au setter Gando. HubSpot reste la 
 - **Sourcing** : recherche de nouvelles entreprises, contrôle anti-doublon HubSpot puis import Company-first.
 - **Stats** : appels, contacts travaillés, rendez-vous et conversion par période.
 
-Le Cockpit ne possède plus de page ni de file séparée « Aujourd’hui ». L’ordre de travail opérationnel est dérivé directement de Prospection et de HubSpot.
+Toutes les requêtes HubSpot et Onoff passent par le serveur. Le navigateur ne reçoit jamais les tokens CRM ni la clé API Onoff.
 
-Toutes les requêtes HubSpot passent par les Route Handlers côté serveur. Le navigateur ne reçoit jamais de token HubSpot.
+## Téléphonie Onoff
+
+La clé API Onoff est conservée dans Supabase Vault et lue uniquement côté serveur. `lib/onoff.ts` centralise les appels directs à l’API Onoff pour vérifier et récupérer les métadonnées des appels. Les événements CDR / RECORDING sont reçus par `/v1/onoff/cdr`, puis le `call_id` est vérifié auprès d’Onoff avant toute mise à jour commerciale.
+
+Le média téléphonique reste exécuté par le webphone Onoff ou Click2Call. L’intégration ne suppose pas l’existence d’un endpoint public Onoff permettant de démarrer un appel audio depuis une application tierce. Voir `docs/ONOFF_CALL_INTEGRATION.md`.
 
 ## Configuration
 
@@ -98,11 +104,12 @@ npm run build
 
 ```text
 Navigateur
-  → Prospection / session filtrée
+  → Aujourd’hui / Prospection / Webphone Onoff
   → Next.js App Router / Route Handlers
-  → session OAuth chiffrée ou Private App côté serveur
-  → HubSpot CRM API 2026-03
-  → Companies → Contacts → Deals → activités / tâches / meetings
+  → HubSpot CRM API + Onoff API côté serveur
+  → webhook Onoff CDR / RECORDING
+  → Supabase
+  → réconciliation des sessions + activités HubSpot
 ```
 
 La session de prospection récupère les tâches directement associées à l’entreprise ainsi que celles rattachées à tous ses contacts associés. Les états `Gagné` et `Perdu` sont exclus de la session active.
