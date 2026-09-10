@@ -29,6 +29,26 @@ async function getOnoffApiKey() {
   return typeof data === "string" ? data.trim() : "";
 }
 
+function extractMediaUrl(payload: unknown): string | null {
+  if (typeof payload === "string") {
+    const value = payload.trim();
+    return /^https?:\/\//i.test(value) ? value : null;
+  }
+  if (!payload || typeof payload !== "object") return null;
+
+  const record = payload as Record<string, unknown>;
+  for (const key of ["url", "recordingUrl", "callRecordingUrl", "voicemailUrl", "downloadUrl", "presignedUrl", "preSignedUrl"]) {
+    const value = record[key];
+    if (typeof value === "string" && /^https?:\/\//i.test(value.trim())) return value.trim();
+  }
+
+  for (const value of Object.values(record)) {
+    const nested = extractMediaUrl(value);
+    if (nested) return nested;
+  }
+  return null;
+}
+
 export async function onoffRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const apiKey = await getOnoffApiKey();
   if (!apiKey) throw new Error("Clé API Onoff non configurée.");
@@ -63,6 +83,22 @@ export async function onoffRequest<T>(path: string, init: RequestInit = {}): Pro
 export async function getOnoffCallMetadata(callId: string) {
   if (!callId.trim()) throw new Error("Call ID Onoff manquant.");
   return onoffRequest<Record<string, unknown>>(`/calls/${encodeURIComponent(callId.trim())}/logs`);
+}
+
+export async function getOnoffRecordingUrl(callId: string) {
+  if (!callId.trim()) throw new Error("Call ID Onoff manquant.");
+  const payload = await onoffRequest<unknown>(`/calls/${encodeURIComponent(callId.trim())}/recording`);
+  const url = extractMediaUrl(payload);
+  if (!url) throw new Error("Onoff n’a retourné aucune URL d’enregistrement.");
+  return url;
+}
+
+export async function getOnoffVoicemailUrl(voicemailId: string) {
+  if (!voicemailId.trim()) throw new Error("Voicemail ID Onoff manquant.");
+  const payload = await onoffRequest<unknown>(`/calls/${encodeURIComponent(voicemailId.trim())}/voicemail`);
+  const url = extractMediaUrl(payload);
+  if (!url) throw new Error("Onoff n’a retourné aucune URL de message vocal.");
+  return url;
 }
 
 export async function getOnoffDirectApiStatus(): Promise<OnoffDirectApiStatus> {
