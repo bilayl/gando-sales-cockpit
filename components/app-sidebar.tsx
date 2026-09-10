@@ -15,7 +15,6 @@ import {
   Mail,
   Search,
   Settings,
-  Zap,
   Phone,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -30,7 +29,6 @@ const callNav: NavItem[] = [
   { href: "/today", label: "Aujourd’hui", icon: Inbox },
   { href: "/phone", label: "Appels", icon: Phone },
   { href: "/historique", label: "Résumés", icon: FileText },
-  { href: "/prospection", label: "Power Dialer", icon: Zap },
 ];
 
 const workspaceNav: NavItem[] = [
