@@ -26,8 +26,7 @@ function normalize(value?: string | null) {
 function dateMs(value?: string | null) {
   if (!value) return NaN;
   const numeric = Number(value);
-  if (Number.isFinite(numeric) && String(value).length >= 12) return numeric;
-  return Date.parse(value);
+  return Number.isFinite(numeric) && String(value).length >= 12 ? numeric : Date.parse(value);
 }
 
 function containsAny(value: string, terms: string[]) {
@@ -131,8 +130,12 @@ export function getCompanyProspectionDecision(
     return { bucket: "ACTIONABLE", priority: 4, priorityLabel: "P4 · Contacté", reason: "Contact établi, prochaine action à qualifier" };
   }
 
-  if (stage === "OPEN" || stage === "NEW") {
-    return { bucket: "ACTIONABLE", priority: 5, priorityLabel: "P5 · À contacter", reason: "Compte à contacter" };
+  if (stage === "NEW") {
+    return { bucket: "ACTIONABLE", priority: 5, priorityLabel: "P5 · Nouveau", reason: "Nouveau compte à qualifier" };
+  }
+
+  if (stage === "OPEN") {
+    return { bucket: "ACTIONABLE", priority: 5, priorityLabel: "P5 · À contacter", reason: "Compte qualifié à contacter" };
   }
 
   return { bucket: "ACTIONABLE", priority: 5, priorityLabel: "P5 · À contacter", reason: "Compte à contacter" };
