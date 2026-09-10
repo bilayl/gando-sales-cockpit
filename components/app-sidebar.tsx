@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   CalendarCheck2,
-  ContactRound,
   FileText,
   Inbox,
   LifeBuoy,
@@ -32,7 +31,6 @@ const callNav: NavItem[] = [
 ];
 
 const workspaceNav: NavItem[] = [
-  { href: "/prospects", label: "Contacts", icon: ContactRound },
   { href: "/sourcing", label: "Sourcing", icon: Search },
   { href: "/segments", label: "Segments", icon: ListFilter },
   { href: "/tasks", label: "Tâches", icon: ListTodo },
