@@ -1,5 +1,6 @@
 import { AnalyticsOnoffLive } from "@/components/analytics-onoff-live";
 import { AnalyticsView } from "@/components/analytics-view";
+import { OnoffHistoryView } from "@/components/onoff-history-view";
 
 export default function Page() {
   return (
@@ -13,6 +14,10 @@ export default function Page() {
               <p className="mt-1 text-sm text-muted-foreground">Statuts, volume d’appels et performance quotidienne des commerciaux.</p>
             </div>
             <AnalyticsOnoffLive />
+          </section>
+
+          <section className="mt-7 border-t border-border pt-6">
+            <OnoffHistoryView compact limit={80} />
           </section>
         </div>
       </div>
