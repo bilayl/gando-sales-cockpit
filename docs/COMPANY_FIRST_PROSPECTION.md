@@ -1,53 +1,64 @@
-# Company-first Prospection — Source of truth
+# Prospection Gando — modèle CRM canonique
 
 ## Principe
 
-Le Sales Cockpit prospecte des **entreprises**. Les contacts sont les personnes à appeler au sein de ces entreprises. Les deals représentent les opportunités commerciales. Les activités représentent l'historique et les prochaines actions.
+Le Sales Cockpit prospecte des **entreprises**. Une entreprise est le prospect / compte commercial. Un contact est uniquement une personne rattachée à cette entreprise. Un deal est une opportunité. Une activité est un appel, une note, une tâche ou un rendez-vous.
 
-> Entreprise → Contacts → Deals → Activités / tâches / rendez-vous
+> Entreprise (prospect) → Contacts (personnes) → Deals (opportunités) → Activités
+
+Il n'existe plus de pipeline de prospection Contact parallèle au pipeline Entreprise.
+
+## Source de vérité
+
+- **Company HubSpot** : objet commercial principal et source métier du statut de prospection.
+- **Contact HubSpot** : identité et coordonnées d'une personne. Il ne porte pas le stade du compte.
+- **Supabase `companies.id`** : UUID technique interne, réservé aux jointures locales.
+- **Supabase `companies.hubspot_id`** : identifiant externe HubSpot de l'entreprise. C'est cet identifiant qui doit être utilisé dans les routes et appels API HubSpot.
+- **Onoff** : source téléphonie. Un événement est rapproché du contact par le numéro puis du compte associé.
+
+Ne jamais envoyer un UUID Supabase à une route HubSpot qui attend un `objectId` numérique.
 
 ## Règles métier
 
-1. L'entreprise est l'objet principal de la page `/prospection`.
-2. Un même compte ne doit pas apparaître plusieurs fois parce qu'il possède plusieurs contacts.
-3. Un résultat d'appel est enregistré sur le contact appelé **et** remonte au niveau entreprise afin que le statut du compte reste exploitable dans le board.
-4. Les relances sont pilotées par les propriétés HubSpot et les workflows HubSpot WF01–WF04 ; le Cockpit ne doit pas créer une automatisation parallèle générant des doublons.
-5. Les deals restent des opportunités indépendantes du statut de prospection du compte.
-6. La fiche entreprise doit donner accès aux contacts, rendez-vous, notes, deals et tâches associés.
-7. La vue Contacts reste disponible comme vue secondaire, mais ne pilote plus la prospection par défaut.
-8. Le sourcing crée d'abord des **Companies**. Il ne doit pas inventer ou créer automatiquement un Contact ou un Deal tant qu'une personne ou une opportunité réelle n'a pas été identifiée.
+1. `/prospection` affiche une seule base de prospects : les entreprises.
+2. Un compte n'apparaît qu'une fois, quel que soit le nombre de personnes qui lui sont rattachées.
+3. La création d'un contact se fait depuis le contexte d'une entreprise ou d'un flux d'enrichissement identifié, pas comme un nouveau lead autonome.
+4. Lire une fiche ne doit jamais modifier son stade commercial.
+5. Un changement de stade dans le pipeline modifie uniquement l'entreprise. Il ne réécrit plus artificiellement le statut du contact de référence.
+6. Les contacts servent aux appels, emails et identification des décideurs ; le compte porte qualification, attribution, priorité, rappel et pipeline.
+7. Les deals restent des opportunités distinctes du stade de prospection.
+8. Le sourcing crée d'abord une Company. Un Contact n'est créé que lorsqu'une personne réelle est identifiée.
+9. Les contacts sans entreprise associée ne doivent pas alimenter la file de prospection tant qu'ils ne sont pas rapprochés d'un compte.
 
-## Mapping HubSpot entreprise
+## Pipeline entreprise
 
-- `hs_lead_status` : progression commerciale du compte.
-- `statut_prospection` : libellé métier du pipeline Company du Cockpit.
-- `statut_de_lappel` : dernier résultat d'appel significatif remonté au compte.
-- `date_de_rappel` : prochain rappel du compte.
-- `notes_last_updated` / `hs_last_sales_activity_timestamp` : dernière activité.
-- `notes_next_activity_date` : prochaine activité calculée par HubSpot.
+| Étape Cockpit | `hs_lead_status` | Rôle |
+| --- | --- | --- |
+| Nouveau | `NEW` | compte importé, encore à qualifier |
+| À contacter | `OPEN` | compte qualifié prêt au premier contact |
+| Tentative | `ATTEMPTED_TO_CONTACT` | tentative sans conversion |
+| Contact établi | `CONNECTED` | conversation établie |
+| Démo prévue | `CONNECTED` + statut métier | rendez-vous planifié |
+| À relancer | `BAD_TIMING` | rappel arrivé ou à programmer |
+| Ultérieur | `BAD_TIMING` + date future | compte temporairement mis en sommeil |
+| Opportunité | `OPEN_DEAL` | besoin qualifié / deal en cours |
+| Gagné | `lifecyclestage=customer` | client |
+| Pas intéressé / Perdu | `UNQUALIFIED` | sortie de la file active |
 
-### Colonnes du board
+`À travailler` est conservé comme libellé métier historique de `NEW`. Le Cockpit l'affiche désormais comme **Nouveau** au lieu de le transformer automatiquement en `OPEN` lors d'une simple lecture.
 
-| Colonne Cockpit | `hs_lead_status` |
-| --- | --- |
-| À travailler | `NEW` |
-| À contacter | `OPEN` |
-| Tentative | `ATTEMPTED_TO_CONTACT` |
-| Contact établi | `CONNECTED` |
-| À relancer | `BAD_TIMING` |
-| Ultérieur | `BAD_TIMING` + date future + statut appel long terme |
-| Opportunité | `OPEN_DEAL` |
-| Perdu | `UNQUALIFIED` |
-| Gagné | `lifecyclestage=customer` |
+## Localisation
 
-## Résultats d'appel
+La localisation appartient à la Company :
 
-- `NRP` → entreprise `ATTEMPTED_TO_CONTACT`, contact `En prospection + Sans réponse` pour WF02.
-- `Occupé`, `À rappeler`, `Intéressé mais` → entreprise `BAD_TIMING / À relancer`, contact alimenté pour WF03.
-- `À une date ultérieure` → entreprise `BAD_TIMING / Ultérieur`, contact `À recycler` + `date_recyclage` pour WF04.
-- `Intéressé` → entreprise `CONNECTED`, contact `Conversation`.
-- `RDV pris` → entreprise `OPEN_DEAL / Opportunité`, contact `RDV booké + RDV obtenu`.
-- `Pas intéressé`, `Hors cible`, `Numéro invalide` → sortie de la file active selon le niveau de qualification correspondant.
+- `address`
+- `address2`
+- `zip`
+- `city`
+- `state`
+- `country`
+
+La modification depuis la fiche entreprise met à jour HubSpot puis le cache Supabase. Les colonnes locales dédiées `city`, `postal_code` et `country` sont synchronisées ; `address`, `address2` et `state` restent également conservés dans `raw_data.properties`.
 
 ## Sourcing
 
@@ -55,24 +66,21 @@ La page `/sourcing` utilise `bilayl/gando-enrichment-backend` comme moteur de d�
 
 Flux obligatoire :
 
-1. Le navigateur appelle uniquement `/api/enrichment/search` dans le Sales Cockpit.
-2. La Route Handler Next.js appelle le backend via `X-Gando-Api-Key` ; la clé n'est jamais exposée au navigateur.
-3. Le backend effectue la recherche web et compare les candidats à l'ensemble des entreprises HubSpot.
-4. Seules les entreprises absentes de HubSpot sont proposées dans l'interface.
-5. L'utilisateur sélectionne explicitement les entreprises à importer.
-6. `/api/enrichment/import` appelle le backend, qui refait un contrôle anti-doublon juste avant création.
-7. Une nouvelle entreprise est créée dans HubSpot avec `hs_lead_status=NEW` et `statut_prospection=À travailler`, puis synchronisée dans Supabase.
-8. Le nouveau compte devient visible dans `/prospection` et suit ensuite le workflow Company-first normal.
+1. Le navigateur appelle `/api/enrichment/search` dans le Sales Cockpit.
+2. La Route Handler Next.js appelle le backend avec la clé serveur ; aucune clé sensible n'est exposée au navigateur.
+3. Le backend déduplique les candidats avec les entreprises déjà présentes.
+4. L'utilisateur sélectionne explicitement les entreprises à importer.
+5. Le backend refait le contrôle anti-doublon juste avant création.
+6. Une entreprise créée démarre avec `hs_lead_status=NEW` / `statut_prospection=À travailler`.
+7. Elle apparaît dans **Nouveau**, puis passe à **À contacter** uniquement par une action commerciale explicite.
 
-Ne jamais exposer `INTERNAL_API_KEY`, `OPENROUTER_API_KEY` ou `HUBSPOT_ACCESS_TOKEN` au navigateur.
+## Règle d'évolution
 
-## Évolution
+Toute nouvelle donnée doit avoir un seul propriétaire métier :
 
-Toute nouvelle fonctionnalité de prospection doit répondre à la question : **est-ce une information de compte, de personne, d'opportunité ou d'activité ?**
+- compte → Company ;
+- personne → Contact ;
+- opportunité → Deal ;
+- action / historique → Activity, Task ou Meeting.
 
-- Compte → Company
-- Personne → Contact
-- Opportunité → Deal
-- Action / historique → Activity / Task / Meeting
-
-Ne jamais dupliquer une donnée de manière divergente entre ces objets. Lorsque le Cockpit dénormalise une information pour accélérer l'interface, HubSpot reste la source métier et Supabase reste la couche de lecture/synchronisation.
+Une dénormalisation Supabase peut accélérer l'interface, mais elle ne doit jamais créer une seconde logique métier concurrente de HubSpot.

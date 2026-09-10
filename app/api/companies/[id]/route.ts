@@ -4,7 +4,7 @@ import { COMPANY_QUALIFICATION_SCHEMAS, ensureCompanyQualificationProperties } f
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const BASE_COMPANY_DETAIL_PROPERTIES = [
-  "name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id","num_associated_contacts",
+  "name","domain","phone","website","address","address2","city","state","country","industry","description","hubspot_owner_id","num_associated_contacts",
   "num_associated_deals","hs_last_sales_activity_timestamp","hs_object_source_label","createdate","hs_lead_status","lifecyclestage",
   "statut_de_lappel","date_de_rappel","zip","hs_country_code","taille_flotte","solution_paiement_reservation",
 ];
@@ -18,52 +18,13 @@ const CONTACT_PROFILE_PROPERTIES = [
 const CUSTOM_QUALIFICATION_PROPERTIES = new Set(COMPANY_QUALIFICATION_SCHEMAS.map(property => property.name));
 
 const EDITABLE_PROPERTIES = new Set([
-  "name","domain","phone","website","city","state","country","industry","description","hubspot_owner_id",
+  "name","domain","phone","website","address","address2","city","state","country","industry","description","hubspot_owner_id",
   "hs_lead_status","lifecyclestage","statut_de_lappel","date_de_rappel","zip","hs_country_code","taille_flotte",
   "solution_paiement_reservation","ce_quil_apprecie_chez_gando","objections__retours","campagne_dacquisition","suite","statut_prospection",
 ]);
 
-const CONTACT_TO_COMPANY_CALL: Record<string, string> = {
-  "Intéressé": "interesse",
-  "AssisterIntéressé mais": "assister",
-  "Intéressé mais": "interesse_mais",
-  "A une date ultérieure": "a_une_date_ulterieure",
-  "A Rappeler": "a_rappeler",
-  "pas intéressé": "pas_interesse",
-  "Occupé": "occupe",
-  "NRP": "nrp",
-  "HORS CIBLE": "hors_cible",
-  "En attente décision": "en_attente_decision",
-  "Autres": "autres",
-  "Numéro invalide": "numero_invalide",
-};
-
 function hubspotRecord(row: any) {
   return { id: String(row.hubspot_id), properties: row.raw_data?.properties ?? {} };
-}
-
-function valueExists(value: unknown) {
-  return value !== undefined && value !== null && String(value).trim() !== "";
-}
-
-function splitMulti(value?: string | null) {
-  return (value || "").split(";").map(item => item.trim()).filter(Boolean);
-}
-
-function mergeMulti(contacts: any[], property: string) {
-  const values = new Set<string>();
-  for (const contact of contacts) {
-    for (const value of splitMulti(contact.properties?.[property])) values.add(value);
-  }
-  return Array.from(values).join(";");
-}
-
-function latestValue(contacts: any[], property: string) {
-  for (const contact of contacts) {
-    const value = contact.properties?.[property];
-    if (valueExists(value)) return String(value);
-  }
-  return "";
 }
 
 function companyProspectionLabel(properties: Record<string, any>) {
@@ -76,12 +37,13 @@ function companyProspectionLabel(properties: Record<string, any>) {
   if (properties.hs_lead_status === "CONNECTED") return "Contact établi";
   if (properties.hs_lead_status === "ATTEMPTED_TO_CONTACT") return "Tentative";
   if (properties.hs_lead_status === "OPEN") return "À contacter";
-  return "À contacter";
+  if (properties.hs_lead_status === "NEW") return "À travailler";
+  return "À travailler";
 }
 
 function companyStatusProperties(value: string) {
   const map: Record<string, Record<string, string>> = {
-    "À travailler": { statut_prospection: "À contacter", hs_lead_status: "OPEN", lifecyclestage: "" },
+    "À travailler": { statut_prospection: "À travailler", hs_lead_status: "NEW", lifecyclestage: "" },
     "À contacter": { hs_lead_status: "OPEN", lifecyclestage: "" },
     "Tentative": { hs_lead_status: "ATTEMPTED_TO_CONTACT", lifecyclestage: "" },
     "Contact établi": { hs_lead_status: "CONNECTED", lifecyclestage: "" },
@@ -92,14 +54,6 @@ function companyStatusProperties(value: string) {
     "Perdu": { hs_lead_status: "UNQUALIFIED", lifecyclestage: "" },
   };
   return map[value] || {};
-}
-
-function sortContactsByActivity(contacts: any[]) {
-  return [...contacts].sort((a, b) => {
-    const aDate = Date.parse(a.properties?.hs_last_sales_activity_timestamp || "") || 0;
-    const bDate = Date.parse(b.properties?.hs_last_sales_activity_timestamp || "") || 0;
-    return bDate - aDate;
-  });
 }
 
 async function updateLocalCompany(id: string, updated: any, fallbackProperties?: Record<string, string>) {
@@ -125,6 +79,8 @@ async function updateLocalCompany(id: string, updated: any, fallbackProperties?:
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    if (!/^\d+$/.test(id)) return NextResponse.json({ error: "Identifiant HubSpot entreprise invalide." }, { status: 400 });
+
     const supabase = getSupabaseAdmin();
     const { data: company, error } = await supabase.from("companies").select("*").eq("hubspot_id", id).maybeSingle();
     if (error) throw error;
@@ -150,7 +106,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (tasksResult.error) throw tasksResult.error;
 
     const cachedCompany = hubspotRecord(company);
-    let companyRecord = {
+    const companyRecord = {
       ...cachedCompany,
       properties: { ...cachedCompany.properties, ...(freshCompany.properties ?? {}), __hubspot_id: String(id) },
     };
@@ -171,48 +127,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ...contact,
         properties: { ...contact.properties, ...(freshById.get(contact.id) ?? {}), __hubspot_id: contact.id },
       }));
-    }
-
-    const orderedContacts = sortContactsByActivity(contacts);
-    const current = companyRecord.properties as Record<string, string>;
-    const backfill: Record<string, string> = {};
-    if (current.statut_prospection === "À travailler") {
-      backfill.statut_prospection = "À contacter";
-      if (current.hs_lead_status === "NEW") backfill.hs_lead_status = "OPEN";
-    }
-    const setIfMissing = (property: string, value: string, requireCustomSchema = false) => {
-      if (!valueExists(current[property]) && valueExists(value) && (!requireCustomSchema || qualificationSchema.available.includes(property))) {
-        backfill[property] = value;
-      }
-    };
-
-    setIfMissing("ce_quil_apprecie_chez_gando", mergeMulti(orderedContacts, "ce_quil_apprecie_chez_gando"), true);
-    setIfMissing("objections__retours", mergeMulti(orderedContacts, "objections__retours"), true);
-    setIfMissing("campagne_dacquisition", latestValue(orderedContacts, "campagne_dacquisition"), true);
-    setIfMissing("suite", latestValue(orderedContacts, "suite"), true);
-    setIfMissing("zip", latestValue(orderedContacts, "zip"));
-    setIfMissing("taille_flotte", latestValue(orderedContacts, "taille_de_flo"));
-    setIfMissing("hs_country_code", latestValue(orderedContacts, "hs_country_region_code"));
-    setIfMissing("solution_paiement_reservation", latestValue(orderedContacts, "solution_paiement_reservation"));
-
-    const contactCall = splitMulti(latestValue(orderedContacts, "statut_de_lappel")).at(-1) || "";
-    setIfMissing("statut_de_lappel", CONTACT_TO_COMPANY_CALL[contactCall] || "");
-    setIfMissing("statut_prospection", companyProspectionLabel({ ...current, ...backfill }), true);
-
-    if (Object.keys(backfill).length) {
-      try {
-        const migrated = await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ properties: backfill }),
-        });
-        companyRecord = {
-          ...companyRecord,
-          properties: { ...companyRecord.properties, ...backfill, ...(migrated.properties ?? {}), __hubspot_id: String(id) },
-        };
-        await updateLocalCompany(id, migrated, backfill);
-      } catch (migrationError) {
-        console.error("HubSpot qualification backfill company:", migrationError);
-      }
     }
 
     const activities = activitiesResult.data ?? [];
@@ -270,6 +184,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    if (!/^\d+$/.test(id)) return NextResponse.json({ error: "Identifiant HubSpot entreprise invalide." }, { status: 400 });
+
     const body = await request.json();
     let properties = Object.fromEntries(
       Object.entries(body.properties ?? {}).filter(([key, value]) => EDITABLE_PROPERTIES.has(key) && value !== undefined && value !== null),
@@ -297,10 +213,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const supabase = getSupabaseAdmin();
     const { data: existing } = await supabase.from("companies").select("*").eq("hubspot_id", id).maybeSingle();
     const existingProperties = existing?.raw_data?.properties ?? {};
-
-    if (properties.statut_prospection === "À travailler") {
-      properties.statut_prospection = "À contacter";
-    }
 
     if (properties.statut_prospection) {
       properties = { ...properties, ...companyStatusProperties(properties.statut_prospection) };
