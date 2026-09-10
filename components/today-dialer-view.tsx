@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, ExternalLink, Loader2, Phone, PhoneCall, RefreshCw, UserRound, UsersRound } from "lucide-react";
+import { ProspectionSession } from "@/components/prospection-session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -45,16 +46,14 @@ function numberFor(contact?: Contact | null) {
   return String(contact?.properties.mobilephone || contact?.properties.phone || "").trim();
 }
 
-function telHref(number: string) {
-  return `tel:${number.replace(/[^+\d*#]/g, "")}`;
-}
-
 export function TodayDialerView() {
   const [today, setToday] = useState<TodayPayload | null>(null);
   const [onoff, setOnoff] = useState<OnoffStatus | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [sessionOpen, setSessionOpen] = useState(false);
+  const [sessionStarting, setSessionStarting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -84,7 +83,41 @@ export function TodayDialerView() {
   const selected = useMemo(() => results.find(contact => contact.id === selectedId) || results[0] || null, [results, selectedId]);
   const p = selected?.properties || {};
   const selectedNumber = numberFor(selected);
+  const selectedCompanyId = String(p.db_company_id || "").trim();
+  const selectedCompany = selected && selectedCompanyId ? {
+    id: selectedCompanyId,
+    properties: {
+      ...p,
+      name: p.company || p.db_company_name || p.name || "Entreprise",
+      phone: selectedNumber || p.phone,
+    },
+  } : null;
   const apiHealthy = Boolean(onoff?.configured && onoff?.connected !== false);
+
+  async function openCallSession() {
+    if (!selected || !selectedCompanyId || !selectedCompany) {
+      setMessage("Ce lead n’est pas encore rattaché à une entreprise. Ouvre sa fiche pour compléter le rattachement avant l’appel.");
+      return;
+    }
+    setSessionStarting(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/prospection/assignments", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ companyIds: [selectedCompanyId] }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.message || payload.error || "Impossible de préparer la session d’appel");
+      const claimed = new Set((payload.claimedCompanyIds || []).map(String));
+      if (!claimed.has(selectedCompanyId)) throw new Error("Ce lead est déjà pris en charge par un autre commercial.");
+      setSessionOpen(true);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Impossible d’ouvrir la session d’appel");
+    } finally {
+      setSessionStarting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background px-7 py-6 text-foreground transition-colors">
@@ -122,7 +155,7 @@ export function TodayDialerView() {
         <div className="grid min-h-[520px] gap-4 xl:grid-cols-[1fr_330px]">
           <section className="overflow-hidden rounded-2xl border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <div className="flex items-center gap-2.5"><PhoneCall className="h-4 w-4" strokeWidth={1.7} /><span className="text-[15px] font-semibold">Dialer Onoff</span></div>
+              <div className="flex items-center gap-2.5"><PhoneCall className="h-4 w-4" strokeWidth={1.7} /><span className="text-[15px] font-semibold">Session de prospection</span></div>
               <Badge variant="outline" className="rounded-md border-border bg-muted text-foreground">{results.length} dans la file</Badge>
             </div>
 
@@ -148,15 +181,12 @@ export function TodayDialerView() {
                   </div>
 
                   <div className="mt-7 flex flex-wrap gap-2">
-                    {selectedNumber ? (
-                      <Button asChild className="h-11 rounded-xl px-5"><a href={telHref(selectedNumber)}><Phone className="mr-2 h-4 w-4" />Appeler avec Onoff</a></Button>
-                    ) : (
-                      <Button className="h-11 rounded-xl px-5" disabled><Phone className="mr-2 h-4 w-4" />Appeler avec Onoff</Button>
-                    )}
-                    <Button variant="outline" className="h-11 rounded-xl border-border bg-card" asChild><Link href="/phone">Ouvrir le webphone</Link></Button>
+                    <Button className="h-11 rounded-xl px-5" onClick={() => void openCallSession()} disabled={sessionStarting || !selectedCompanyId}>
+                      {sessionStarting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Phone className="mr-2 h-4 w-4" />}Appeler
+                    </Button>
                     <Button variant="outline" className="h-11 rounded-xl border-border bg-card" asChild><Link href={`/contacts/${selected.id}`}>Voir la fiche <ExternalLink className="ml-2 h-3.5 w-3.5" /></Link></Button>
                   </div>
-                  <p className="mt-3 max-w-2xl text-[11px] leading-5 text-muted-foreground">Onoff gère l’appel. L’API directe et les webhooks Gando récupèrent ensuite le call ID, le statut, la durée, les métadonnées, l’enregistrement et le résultat commercial.</p>
+                  <p className="mt-3 max-w-2xl text-[11px] leading-5 text-muted-foreground">Le bouton Appeler ouvre d’abord la fiche de session : contexte CRM, script, objections et résultat commercial restent visibles pendant le traitement du lead.</p>
                 </div>
 
                 <div className="border-l border-border bg-muted/35 p-3">
@@ -181,13 +211,22 @@ export function TodayDialerView() {
               <div><div className="text-muted-foreground">API directe Onoff</div><div className="mt-1 font-medium">{!onoff?.configured ? "Clé non configurée" : onoff?.connected === true ? "Connectée et vérifiée" : onoff?.connected === false ? "Connexion à vérifier" : "Configurée · en attente d’un call ID"}</div></div>
               <div><div className="text-muted-foreground">Synchronisation post-appel</div><div className="mt-1 font-medium">Webhook CDR / RECORDING → Gando</div></div>
               <div><div className="text-muted-foreground">Traitement du dernier appel</div><div className="mt-1 font-medium">{onoff?.latestProcessingStatus || "—"}</div></div>
-              <div><div className="text-muted-foreground">Appel dans le Cockpit</div><div className="mt-1 font-medium">Webphone Onoff embarqué + Click2Call en fallback</div><a href={ONOFF_EXTENSION_URL} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-4">Extension Onoff <ExternalLink className="h-3 w-3" /></a></div>
+              <div><div className="text-muted-foreground">Traitement du lead</div><div className="mt-1 font-medium">Fiche de session Gando → appel Onoff → résultat → CRM</div><a href={ONOFF_EXTENSION_URL} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-4">Extension Onoff <ExternalLink className="h-3 w-3" /></a></div>
             </div>
             {onoff?.error ? <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-[11px] leading-5 text-amber-700 dark:text-amber-300">{onoff.error}</div> : null}
-            <Button className="mt-5 w-full" asChild><Link href="/phone"><Phone className="mr-2 h-4 w-4" />Ouvrir Onoff dans Gando</Link></Button>
+            <Button className="mt-5 w-full" asChild><Link href="/prospection"><Phone className="mr-2 h-4 w-4" />Ouvrir la prospection</Link></Button>
           </aside>
         </div>
       </div>
+
+      {selectedCompany ? (
+        <ProspectionSession
+          open={sessionOpen}
+          onOpenChange={setSessionOpen}
+          companies={[selectedCompany]}
+          onOpenCompany={companyId => { window.location.href = `/companies/${companyId}`; }}
+        />
+      ) : null}
     </div>
   );
 }
