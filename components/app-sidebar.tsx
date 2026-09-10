@@ -4,10 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  CalendarCheck2,
   ContactRound,
   FileText,
   Inbox,
+  LifeBuoy,
+  ListFilter,
+  ListTodo,
   LogOut,
+  Mail,
+  Search,
   Settings,
   Zap,
   Phone,
@@ -29,8 +35,17 @@ const callNav: NavItem[] = [
 
 const workspaceNav: NavItem[] = [
   { href: "/prospects", label: "Contacts", icon: ContactRound },
+  { href: "/sourcing", label: "Sourcing", icon: Search },
+  { href: "/segments", label: "Segments", icon: ListFilter },
+  { href: "/tasks", label: "Tâches", icon: ListTodo },
   { href: "/analytics", label: "Analyse", icon: BarChart3 },
   { href: "/settings", label: "Paramètres", icon: Settings },
+];
+
+const followUpNav: NavItem[] = [
+  { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
+  { href: "/emails", label: "Emails", icon: Mail },
+  { href: "/support", label: "Support", icon: LifeBuoy },
 ];
 
 function roleLabel(role: CockpitRole) {
@@ -72,6 +87,7 @@ function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
 
 export function AppSidebar({ email, role = "member" }: { email?: string; role?: CockpitRole }) {
   const pathname = usePathname();
+  const workspaceItems = role === "commercial" ? workspaceNav.filter(item => item.href !== "/segments") : workspaceNav;
 
   return (
     <aside className="flex h-screen w-[56px] flex-col border-r border-[#e7ece8] bg-[#f7f9f7] px-2 py-3 text-[#34433c] transition-colors dark:border-border dark:bg-background dark:text-foreground lg:w-[198px] lg:px-3">
@@ -94,7 +110,16 @@ export function AppSidebar({ email, role = "member" }: { email?: string; role?: 
             Workspace <span className="text-[10px]">⌄</span>
           </div>
           <div className="space-y-[2px]">
-            {workspaceNav.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
+            {workspaceItems.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
+          </div>
+        </div>
+
+        <div className="my-4 border-t border-[#e6ebe7] dark:border-border/80" />
+
+        <div>
+          <div className="mb-1.5 hidden px-2.5 text-[11px] font-medium text-[#6c7973] dark:text-muted-foreground lg:block">Suivi</div>
+          <div className="space-y-[2px]">
+            {followUpNav.map(item => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
           </div>
         </div>
       </nav>
