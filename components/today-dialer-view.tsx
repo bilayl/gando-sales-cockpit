@@ -82,7 +82,7 @@ export function TodayDialerView() {
   const selectedNumber = numberFor(selected);
   const selectedCompanyId = String(p.db_company_id || "").trim();
   const sessionHref = selectedCompanyId
-    ? `/prospection?companyId=${encodeURIComponent(selectedCompanyId)}&startSession=1&contactId=${encodeURIComponent(selected?.id || "")}`
+    ? `/prospection/session/${encodeURIComponent(selectedCompanyId)}`
     : selected ? `/contacts/${selected.id}` : "/prospection";
   const apiHealthy = Boolean(onoff?.configured && onoff?.connected !== false);
 
