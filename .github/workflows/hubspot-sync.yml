@@ -4,6 +4,16 @@ on:
   schedule:
     - cron: "*/30 * * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hubspot-sync.yml'
+      - 'app/api/sync/route.ts'
+      - 'lib/github-actions-oidc.ts'
+
+permissions:
+  contents: read
+  id-token: write
 
 concurrency:
   group: hubspot-sync
@@ -11,6 +21,7 @@ concurrency:
 
 env:
   SYNC_URL: https://gando-sales-cockpit-web.vercel.app/api/sync
+  OIDC_AUDIENCE: gando-sales-cockpit-hubspot-sync
 
 jobs:
   sync-primary:
@@ -23,9 +34,19 @@ jobs:
     steps:
       - name: Sync ${{ matrix.resource }}
         run: |
+          oidc_token=$(curl -sS \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}" \
+            | jq -r '.value // empty')
+          if [ -z "$oidc_token" ]; then
+            echo "Unable to obtain GitHub Actions OIDC token"
+            exit 1
+          fi
+          echo "::add-mask::$oidc_token"
+
           body=$(mktemp)
           code=$(curl -sS --max-time 300 -o "$body" -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Authorization: Bearer $oidc_token" \
             "$SYNC_URL?resource=${{ matrix.resource }}")
           echo "HTTP $code"
           cat "$body"
@@ -41,9 +62,19 @@ jobs:
     steps:
       - name: Refresh derived sales data once
         run: |
+          oidc_token=$(curl -sS \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}" \
+            | jq -r '.value // empty')
+          if [ -z "$oidc_token" ]; then
+            echo "Unable to obtain GitHub Actions OIDC token"
+            exit 1
+          fi
+          echo "::add-mask::$oidc_token"
+
           body=$(mktemp)
           code=$(curl -sS --max-time 300 -o "$body" -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Authorization: Bearer $oidc_token" \
             "$SYNC_URL?resource=qualification")
           echo "HTTP $code"
           cat "$body"
