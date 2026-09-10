@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncActivities, syncCompanies, syncContacts, syncDeals, syncTasks } from "@/lib/sync";
 import { refreshCompanyQualifications, syncCompanyContactLinks } from "@/lib/company-qualification-sync";
 import { refreshCallRecommendations } from "@/lib/call-recommendations";
-import { apiError, isHubSpotAuthenticated } from "@/lib/hubspot";
+import { apiError, getHubSpotIdentity } from "@/lib/hubspot";
+import { isAuthorizedGitHubSyncToken } from "@/lib/github-actions-oidc";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const maxDuration = 300;
@@ -60,16 +61,32 @@ async function refreshDerivedData() {
   });
 }
 
+async function isSyncRequestAuthorized(request: NextRequest) {
+  const authorization = request.headers.get("authorization")?.trim() || "";
+  const expectedCronSecret = process.env.CRON_SECRET?.trim();
+
+  if (expectedCronSecret && authorization === `Bearer ${expectedCronSecret}`) {
+    return true;
+  }
+
+  if (authorization.startsWith("Bearer ")) {
+    const token = authorization.slice("Bearer ".length).trim();
+    if (await isAuthorizedGitHubSyncToken(token)) {
+      return true;
+    }
+  }
+
+  const identity = await getHubSpotIdentity().catch(() => null);
+  return identity?.mode === "oauth" || identity?.mode === "test_bypass";
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const expectedCronSecret = process.env.CRON_SECRET?.trim();
-    if (expectedCronSecret) {
-      const authorization = request.headers.get("authorization") ?? "";
-      if (authorization !== `Bearer ${expectedCronSecret}`) {
-        return NextResponse.json({ error: "UNAUTHORIZED", message: "Secret cron invalide." }, { status: 401 });
-      }
-    } else if (!(await isHubSpotAuthenticated())) {
-      return NextResponse.json({ error: "UNAUTHORIZED", message: "Reconnectez HubSpot pour continuer." }, { status: 401 });
+    if (!(await isSyncRequestAuthorized(request))) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Authentification de synchronisation invalide." },
+        { status: 401 },
+      );
     }
 
     const url = new URL(request.url);
