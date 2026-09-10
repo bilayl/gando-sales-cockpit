@@ -23,6 +23,7 @@ type Props = {
 };
 
 export const COMPANY_PIPELINE: Array<{ value: CompanyStage; label: string; tone?: "later" | "won" | "lost" }> = [
+  { value: "NEW", label: "Nouveau" },
   { value: "OPEN", label: "À contacter" },
   { value: "ATTEMPTED_TO_CONTACT", label: "Tentative" },
   { value: "CONNECTED", label: "Contact établi" },
@@ -36,7 +37,7 @@ export const COMPANY_PIPELINE: Array<{ value: CompanyStage; label: string; tone?
 ];
 
 const QUALIFICATION_STAGE: Record<string, CompanyStage> = {
-  "À travailler": "OPEN",
+  "À travailler": "NEW",
   "À contacter": "OPEN",
   "Tentative": "ATTEMPTED_TO_CONTACT",
   "Contact établi": "CONNECTED",
@@ -72,6 +73,7 @@ export function deriveCompanyStage(company: Company, now = Date.now()): CompanyS
   if (p.hs_lead_status === "OPEN_DEAL") return "OPEN_DEAL";
   if (p.hs_lead_status === "CONNECTED") return "CONNECTED";
   if (p.hs_lead_status === "ATTEMPTED_TO_CONTACT") return "ATTEMPTED_TO_CONTACT";
+  if (p.hs_lead_status === "NEW") return "NEW";
   return "OPEN";
 }
 
@@ -178,6 +180,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                   <h3 className="text-sm font-semibold">{column.label}</h3>
                   <Badge variant="secondary" className="ml-auto text-[10px]">{cards.length}</Badge>
                 </header>
+                {column.value === "NEW" ? <div className="mx-3 mb-2 rounded-lg bg-muted px-2.5 py-2 text-[10px] leading-4 text-muted-foreground">Nouveaux comptes à qualifier avant le premier traitement.</div> : null}
                 {column.value === "LATER" ? <div className="mx-3 mb-2 rounded-lg bg-amber-500/10 px-2.5 py-2 text-[10px] leading-4 text-amber-700 dark:text-amber-300">Comptes mis en sommeil. Ils remontent en À relancer à la date prévue.</div> : null}
                 {column.value === "DEMO_SCHEDULED" ? <div className="mx-3 mb-2 rounded-lg bg-primary/[0.06] px-2.5 py-2 text-[10px] leading-4 text-primary">Démo bookée : le compte est retiré de la session de prospection jusqu’au rendez-vous.</div> : null}
                 <div className="min-h-[120px] flex-1 space-y-2 overflow-y-auto px-3 pb-3 minari-scrollbar">
