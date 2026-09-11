@@ -194,10 +194,12 @@ export async function GET() {
         if (!configured) return [];
 
         if (isFleetee) {
-          if (!SUCCESSFUL_STATUSES.has(deposit.status)) return [];
+          // Fleetee rémunère une caution dès lors qu'elle a été activée, même si elle est
+          // ensuite clôturée ou annulée. `start_at` est la trace historique de l'activation.
+          if (deposit.startAt == null) return [];
           if (deposit.amountCents <= 80000) return [];
           if (guaranteed.has(deposit.id)) return [];
-          const eventAt = deposit.startAt || deposit.updatedAt || deposit.createdAt;
+          const eventAt = deposit.startAt;
           if (!isEffective(eventAt, rule.effective_from, rule.effective_to)) return [];
           const dueCents = rewardForDeposit(deposit.amountCents, tiers) || 200;
           return [{
