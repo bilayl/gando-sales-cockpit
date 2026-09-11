@@ -14,10 +14,19 @@ type Deposit = {
   amountCents: number;
   createdAt: number | null;
   updatedAt: number | null;
+  startAt: number | null;
+  returnUrl: string;
   archived: boolean;
 };
 type FeeOperation = { id: string; clientId: string; amountCents: number; createdAt: number | null };
 type Tier = { min_cents?: number; max_cents?: number; reward_cents?: number };
+
+type EligibleItem = {
+  deposit: Deposit;
+  fee: FeeOperation | null;
+  dueCents: number;
+  month: string;
+};
 
 const SUCCESSFUL_STATUSES = new Set(["active", "close", "captured"]);
 const FEE_MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
@@ -52,12 +61,12 @@ function rewardForDeposit(amountCents: number, tiers: Tier[]) {
 function rateReward(amountCents: number, rateBps: number) {
   return Math.round(amountCents * rateBps / 10000);
 }
-function isEffective(feeAt: number | null, effectiveFrom: unknown, effectiveTo: unknown) {
-  if (feeAt == null) return false;
+function isEffective(at: number | null, effectiveFrom: unknown, effectiveTo: unknown) {
   const from = timestamp(effectiveFrom);
   const to = timestamp(effectiveTo);
-  if (from != null && feeAt < from) return false;
-  if (to != null && feeAt > to + 86400000 - 1) return false;
+  if (at == null) return from == null && to == null;
+  if (from != null && at < from) return false;
+  if (to != null && at > to + 86400000 - 1) return false;
   return true;
 }
 
@@ -80,6 +89,8 @@ function buildDeposits(rows: MirrorRow[]): Deposit[] {
     amountCents: num(row.payload.amount_cents),
     createdAt: timestamp(row.payload.created_at),
     updatedAt: timestamp(row.payload.updated_at),
+    startAt: timestamp(row.payload.start_at),
+    returnUrl: str(row.payload.return_url),
     archived: bool(row.payload.is_archived),
   }));
 }
@@ -113,14 +124,39 @@ function matchFees(deposits: Deposit[], fees: FeeOperation[]) {
   return matched;
 }
 
+function guaranteedDepositIds(captureRows: MirrorRow[], guaranteeRows: MirrorRow[]) {
+  const result = new Set<string>();
+  const captureById = new Map(captureRows.map(row => [row.source_id, row.payload]));
+
+  for (const capture of captureRows) {
+    if (capture.payload.guarantee_activated_at) {
+      const depositId = str(capture.payload.deposit_id);
+      if (depositId) result.add(depositId);
+    }
+  }
+
+  for (const guarantee of guaranteeRows) {
+    if (str(guarantee.payload.status) !== "accepted") continue;
+    const directDepositId = str(guarantee.payload.deposit_id);
+    if (directDepositId) result.add(directDepositId);
+    const capture = captureById.get(str(guarantee.payload.capture_id));
+    const depositId = capture ? str(capture.deposit_id) : "";
+    if (depositId) result.add(depositId);
+  }
+
+  return result;
+}
+
 export async function GET() {
   try {
     await requireCockpitAccess();
     const admin = getSupabaseAdmin();
-    const [accountsRows, depositRows, operationRows, rulesResult, syncResult] = await Promise.all([
+    const [accountsRows, depositRows, operationRows, captureRows, guaranteeRows, rulesResult, syncResult] = await Promise.all([
       readSourceTable("accounts"),
       readSourceTable("deposits"),
       readSourceTable("client_operations"),
+      readSourceTable("captures"),
+      readSourceTable("guarantee_activations"),
       admin.from("kpi_partner_remuneration_rules").select("*").order("actor_label", { ascending: true }),
       admin.from("gando_source_sync_state").select("last_completed_at,status").order("last_completed_at", { ascending: false }).limit(1),
     ]);
@@ -129,6 +165,7 @@ export async function GET() {
 
     const accounts = new Map(accountsRows.map(row => [row.source_id, row.payload]));
     const deposits = buildDeposits(depositRows);
+    const guaranteed = guaranteedDepositIds(captureRows, guaranteeRows);
     const fees: FeeOperation[] = operationRows
       .filter(row => str(row.payload.type) === "fee")
       .map(row => ({
@@ -146,12 +183,31 @@ export async function GET() {
       const calculationMode = str(rule.calculation_mode) || "fixed_tier";
       const rateBps = num(rule.rate_bps);
       const tiers = Array.isArray(rule.tiers) ? rule.tiers as Tier[] : [];
-      const configured = bool(rule.enabled) && Boolean(accountId);
+      const isFleetee = actorKey === "fleetee" && calculationMode === "fleetee_active_deposit";
+      const configured = bool(rule.enabled) && (isFleetee || Boolean(accountId));
       const account = accountId ? accounts.get(accountId) : null;
-      const actorDeposits = deposits.filter(deposit => deposit.accountId === accountId && !deposit.archived);
+      const actorDeposits = isFleetee
+        ? deposits.filter(deposit => !deposit.archived && deposit.returnUrl.toLowerCase().includes("link.fleetee.io"))
+        : deposits.filter(deposit => deposit.accountId === accountId && !deposit.archived);
 
-      const eligible = actorDeposits.flatMap(deposit => {
+      const eligible = actorDeposits.flatMap<EligibleItem>(deposit => {
         if (!configured) return [];
+
+        if (isFleetee) {
+          if (!SUCCESSFUL_STATUSES.has(deposit.status)) return [];
+          if (deposit.amountCents <= 80000) return [];
+          if (guaranteed.has(deposit.id)) return [];
+          const eventAt = deposit.startAt || deposit.updatedAt || deposit.createdAt;
+          if (!isEffective(eventAt, rule.effective_from, rule.effective_to)) return [];
+          const dueCents = rewardForDeposit(deposit.amountCents, tiers) || 200;
+          return [{
+            deposit,
+            fee: feeByDeposit.get(deposit.id) || null,
+            dueCents,
+            month: monthKey(eventAt) || "unknown",
+          }];
+        }
+
         const fee = feeByDeposit.get(deposit.id);
         if (!fee || !isEffective(fee.createdAt, rule.effective_from, rule.effective_to)) return [];
 
@@ -173,11 +229,26 @@ export async function GET() {
         const current = monthlyMap.get(item.month) || { month: item.month, deposits: 0, tdvCents: 0, securingFeesCents: 0, dueCents: 0 };
         current.deposits += 1;
         current.tdvCents += item.deposit.amountCents;
-        current.securingFeesCents += item.fee.amountCents;
+        current.securingFeesCents += item.fee?.amountCents || 0;
         current.dueCents += item.dueCents;
         monthlyMap.set(item.month, current);
       }
       const monthly = [...monthlyMap.values()].sort((a, b) => b.month.localeCompare(a.month));
+
+      const breakdownMap = new Map<string, { accountId: string; accountName: string; deposits: number; tdvCents: number; dueCents: number }>();
+      for (const item of eligible) {
+        const itemAccount = accounts.get(item.deposit.accountId);
+        const accountName = itemAccount
+          ? str(itemAccount.display_name) || str(itemAccount.company_name) || item.deposit.accountId
+          : item.deposit.accountId || "Compte inconnu";
+        const key = item.deposit.accountId || accountName;
+        const current = breakdownMap.get(key) || { accountId: item.deposit.accountId, accountName, deposits: 0, tdvCents: 0, dueCents: 0 };
+        current.deposits += 1;
+        current.tdvCents += item.deposit.amountCents;
+        current.dueCents += item.dueCents;
+        breakdownMap.set(key, current);
+      }
+      const breakdown = [...breakdownMap.values()].sort((a, b) => b.dueCents - a.dueCents || a.accountName.localeCompare(b.accountName));
 
       return {
         actorKey,
@@ -190,9 +261,10 @@ export async function GET() {
         configured,
         eligibleDeposits: eligible.length,
         eligibleTdvCents: eligible.reduce((sum, item) => sum + item.deposit.amountCents, 0),
-        eligibleSecuringFeesCents: eligible.reduce((sum, item) => sum + item.fee.amountCents, 0),
+        eligibleSecuringFeesCents: eligible.reduce((sum, item) => sum + (item.fee?.amountCents || 0), 0),
         dueCents: eligible.reduce((sum, item) => sum + item.dueCents, 0),
         monthly,
+        breakdown,
         notes: str(rule.notes) || null,
         consistencyWarning: actorKey === "lr" && rateBps === 114
           ? "Les exemples 6,65 € sur 950 € et 10,50 € sur 1 500 € correspondent à 0,70 %, alors que la règle septembre configurée est 1,14 %."
