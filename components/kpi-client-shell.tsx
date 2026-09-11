@@ -6,9 +6,7 @@ import { KpiSiteHeader } from "@/components/kpi-site-header"
 import { KpiWorkspace } from "@/components/kpi-workspace"
 import type { KpiView } from "@/lib/kpi-views"
 
-const HOURLY_REFRESH_INTERVAL_MS = 60 * 60 * 1000
-const AUTO_SYNC_INTERVAL_MS = HOURLY_REFRESH_INTERVAL_MS
-const AUTO_REFRESH_INTERVAL_MS = HOURLY_REFRESH_INTERVAL_MS
+const AUTO_REFRESH_INTERVAL_MS = 60 * 60 * 1000
 
 const CONTINUOUS_TABLES = [
   "public.accounts",
@@ -37,6 +35,7 @@ export function KpiClientShell({
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle")
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const syncInFlight = useRef(false)
+  const lastRefreshAt = useRef(0)
 
   const refreshDashboard = useCallback(() => {
     setRefreshKey(value => value + 1)
@@ -73,28 +72,38 @@ export function KpiClientShell({
     }
   }, [refreshDashboard, role])
 
-  useEffect(() => {
+  const runRefresh = useCallback(() => {
+    lastRefreshAt.current = Date.now()
     void syncNow()
+  }, [syncNow])
 
-    const syncTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void syncNow()
-    }, AUTO_SYNC_INTERVAL_MS)
+  useEffect(() => {
+    runRefresh()
 
     const refreshTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible") refreshDashboard()
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - lastRefreshAt.current >= AUTO_REFRESH_INTERVAL_MS
+      ) {
+        runRefresh()
+      }
     }, AUTO_REFRESH_INTERVAL_MS)
 
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") void syncNow()
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - lastRefreshAt.current >= AUTO_REFRESH_INTERVAL_MS
+      ) {
+        runRefresh()
+      }
     }
     document.addEventListener("visibilitychange", handleVisibility)
 
     return () => {
-      window.clearInterval(syncTimer)
       window.clearInterval(refreshTimer)
       document.removeEventListener("visibilitychange", handleVisibility)
     }
-  }, [refreshDashboard, syncNow])
+  }, [runRefresh])
 
   return (
     <main className="app-bg min-h-screen pl-[72px] lg:pl-[224px]">
@@ -106,7 +115,7 @@ export function KpiClientShell({
           view={view}
           syncStatus={syncStatus}
           lastSyncedAt={lastSyncedAt}
-          onRefresh={() => void syncNow()}
+          onRefresh={runRefresh}
         />
         <div className="min-w-0">
           <KpiWorkspace key={refreshKey} view={view} canEdit={role !== "commercial"} />
