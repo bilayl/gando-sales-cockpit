@@ -16,21 +16,38 @@ export async function GET(request: NextRequest) {
     const p = request.nextUrl.searchParams;
     const period = p.get("period") || "today";
     const allowedPeriods = new Set(["all", "today", "overdue", "upcoming", "completed"]);
-    const [tasks, assignees] = await Promise.all([
-      searchTasks({
-        period: (allowedPeriods.has(period) ? period : "today") as "all" | "today" | "overdue" | "upcoming" | "completed",
-        type: p.get("type")?.trim() || undefined,
-        owner: p.get("owner")?.trim() || undefined,
-        after: p.get("after")?.trim() || undefined,
-        query: p.get("q")?.trim() || undefined,
-      }),
-      listActiveCockpitTaskAssignees(),
-    ]);
+
+    // HubSpot is the source of truth for task visibility. Assignment enrichment is
+    // strictly optional and must never be able to turn a valid HubSpot task list
+    // into a 500 response (which the Today dashboard would otherwise render as []).
+    const tasks = await searchTasks({
+      period: (allowedPeriods.has(period) ? period : "today") as "all" | "today" | "overdue" | "upcoming" | "completed",
+      type: p.get("type")?.trim() || undefined,
+      owner: p.get("owner")?.trim() || undefined,
+      after: p.get("after")?.trim() || undefined,
+      query: p.get("q")?.trim() || undefined,
+    });
+
+    let assignees: Awaited<ReturnType<typeof listActiveCockpitTaskAssignees>> = [];
+    let results = tasks.results || [];
+
+    try {
+      assignees = await listActiveCockpitTaskAssignees();
+      try {
+        results = await enrichTasksWithCockpitAssignees(results, assignees);
+      } catch (error) {
+        console.warn("Task assignment enrichment unavailable; serving HubSpot tasks directly:", error);
+      }
+    } catch (error) {
+      console.warn("Cockpit task assignees unavailable; serving HubSpot tasks directly:", error);
+    }
+
     return NextResponse.json({
       ...tasks,
-      results: await enrichTasksWithCockpitAssignees(tasks.results || [], assignees),
+      results,
       assignees,
-    });
+      source: "hubspot",
+    }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return apiError(error);
   }
