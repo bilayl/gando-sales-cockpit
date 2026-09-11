@@ -16,6 +16,7 @@ type Deposit = {
   updatedAt: number | null;
   startAt: number | null;
   returnUrl: string;
+  createdVia: string;
   archived: boolean;
 };
 type FeeOperation = { id: string; clientId: string; amountCents: number; createdAt: number | null };
@@ -30,6 +31,7 @@ type EligibleItem = {
 
 const SUCCESSFUL_STATUSES = new Set(["active", "close", "captured"]);
 const FEE_MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const PARTNER_API_SOURCE = "partner_api";
 
 function str(value: unknown) {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -91,6 +93,7 @@ function buildDeposits(rows: MirrorRow[]): Deposit[] {
     updatedAt: timestamp(row.payload.updated_at),
     startAt: timestamp(row.payload.start_at),
     returnUrl: str(row.payload.return_url),
+    createdVia: str(row.payload.created_via).toLowerCase(),
     archived: bool(row.payload.is_archived),
   }));
 }
@@ -191,16 +194,17 @@ export async function GET() {
       const isFleetee = actorKey === "fleetee" && calculationMode === "fleetee_active_deposit";
       const configured = bool(rule.enabled) && (isFleetee || Boolean(accountId));
       const account = accountId ? accounts.get(accountId) : null;
-      const actorDeposits = isFleetee
+      const actorDeposits = (isFleetee
         ? deposits.filter(deposit => !deposit.archived && fleeteeAccountIds.has(deposit.accountId))
-        : deposits.filter(deposit => deposit.accountId === accountId && !deposit.archived);
+        : deposits.filter(deposit => deposit.accountId === accountId && !deposit.archived))
+        .filter(deposit => deposit.createdVia === PARTNER_API_SOURCE);
 
       const eligible = actorDeposits.flatMap<EligibleItem>(deposit => {
         if (!configured) return [];
 
         if (isFleetee) {
-          // Fleetee rémunère toutes les cautions des loueurs associés dès lors qu'elles ont
-          // été activées. `start_at` garde cette preuve même après clôture ou annulation.
+          // Une redevance partenaire ne peut être déclenchée que par une caution créée
+          // via l'API partenaire. Les cautions webapp, operator_api ou sans origine sont exclues.
           if (deposit.startAt == null) return [];
           if (deposit.amountCents <= 80000) return [];
           if (guaranteed.has(deposit.id)) return [];
