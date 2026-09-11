@@ -83,10 +83,10 @@ export function KpiPartnerRemuneration() {
       try {
         const response = await fetch("/api/kpi/partner-remuneration", { cache: "no-store" })
         const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Impossible de charger les rémunérations.")
+        if (!response.ok) throw new Error(body.error || "Impossible de charger les redevances.")
         setData(body)
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de charger les rémunérations.")
+        setError(reason instanceof Error ? reason.message : "Impossible de charger les redevances.")
       } finally {
         setLoading(false)
       }
@@ -95,7 +95,14 @@ export function KpiPartnerRemuneration() {
 
   const monthlyRows = useMemo(() => {
     if (!data) return []
-    return data.rows.flatMap(partner => partner.monthly.map(month => ({ ...month, actorKey: partner.actorKey, actorLabel: partner.actorLabel, mechanism: partner.mechanism, rateBps: partner.rateBps })))
+    return data.rows
+      .flatMap(partner => partner.monthly.map(month => ({
+        ...month,
+        actorKey: partner.actorKey,
+        actorLabel: partner.actorLabel,
+        mechanism: partner.mechanism,
+        rateBps: partner.rateBps,
+      })))
       .sort((a, b) => b.month.localeCompare(a.month) || a.actorLabel.localeCompare(b.actorLabel))
   }, [data])
 
@@ -105,6 +112,7 @@ export function KpiPartnerRemuneration() {
 
   const fleetee = data.rows.find(row => row.actorKey === "fleetee")
   const lr = data.rows.find(row => row.actorKey === "lr")
+  const fleeteeCurrentMonth = fleetee?.monthly.find(row => row.month === data.currentMonth)
   const lastSync = data.source.lastSyncedAt
     ? new Date(data.source.lastSyncedAt).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
     : "—"
@@ -114,9 +122,9 @@ export function KpiPartnerRemuneration() {
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/20 px-4 py-3">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Revenue share & cashback</div>
-            <div className="mt-0.5 text-sm font-semibold">Rémunération loueurs / partenaires</div>
-            <div className="mt-1 text-[10px] text-muted-foreground">Calculé depuis les cautions et frais de sécurisation synchronisés · dernière sync {lastSync}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Redevances & revenue share</div>
+            <div className="mt-0.5 text-sm font-semibold">Redevances loueurs / partenaires</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">Calculées automatiquement depuis les cautions synchronisées · dernière sync {lastSync}</div>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="h-6 text-[10px]">{integer(data.configuredPartners)} partenaire(s) configuré(s)</Badge>
@@ -129,11 +137,11 @@ export function KpiPartnerRemuneration() {
             <thead className="bg-muted/20 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
               <tr>
                 <th className="px-4 py-2.5 font-semibold">Acteur</th>
-                <th className="px-4 py-2.5 font-semibold">Mécanisme</th>
+                <th className="px-4 py-2.5 font-semibold">Règle</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Cautions éligibles</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Volume éligible</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Frais sécurisation</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Rémunération HT</th>
+                <th className="px-4 py-2.5 text-right font-semibold">Redevance HT</th>
                 <th className="px-4 py-2.5 font-semibold">Statut</th>
               </tr>
             </thead>
@@ -165,12 +173,15 @@ export function KpiPartnerRemuneration() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Fleetee</div>
-              <div className="mt-0.5 text-sm font-semibold">Rémunération des cautions Fleetee</div>
-              <div className="mt-1 text-[10px] text-muted-foreground">2 € HT par caution activée strictement supérieure à 800 €, hors cautions garanties.</div>
+              <div className="mt-0.5 text-sm font-semibold">Redevance Fleetee</div>
+              <div className="mt-1 max-w-3xl text-[10px] text-muted-foreground">
+                2 € HT par caution activée strictement supérieure à 800 € pour tous les loueurs associés à Fleetee. Une caution reste comptée après clôture ou annulation si elle a bien été activée. Les cautions garanties sont exclues.
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="h-6 text-[10px]">{integer(fleetee.eligibleDeposits)} cautions éligibles</Badge>
-              <Badge variant="outline" className="h-6 text-[10px]">{euroCents(fleetee.dueCents)} HT dû</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="h-6 text-[10px]">{integer(fleetee.eligibleDeposits)} cautions · total</Badge>
+              <Badge variant="outline" className="h-6 text-[10px]">{euroCents(fleetee.dueCents)} HT · total dû</Badge>
+              {fleeteeCurrentMonth ? <Badge variant="outline" className="h-6 text-[10px]">{monthLabel(data.currentMonth)} : {integer(fleeteeCurrentMonth.deposits)} cautions · {euroCents(fleeteeCurrentMonth.dueCents)} HT</Badge> : null}
             </div>
           </div>
 
@@ -181,7 +192,7 @@ export function KpiPartnerRemuneration() {
                   <th className="px-4 py-2.5 font-semibold">Loueur Fleetee</th>
                   <th className="px-4 py-2.5 text-right font-semibold">Cautions éligibles</th>
                   <th className="px-4 py-2.5 text-right font-semibold">Volume caution</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Rémunération HT</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Redevance HT</th>
                 </tr>
               </thead>
               <tbody>
@@ -205,7 +216,7 @@ export function KpiPartnerRemuneration() {
         <Card className="overflow-hidden">
           <div className="border-b border-border px-4 py-3">
             <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">LR Location</div>
-            <div className="mt-0.5 text-sm font-semibold">Suivi mensuel du revenue share</div>
+            <div className="mt-0.5 text-sm font-semibold">Suivi mensuel de la redevance</div>
             <div className="mt-1 text-[10px] text-muted-foreground">Règle active : {percentBps(lr.rateBps)} du volume des cautions au statut active, datées par l’encaissement du frais de sécurisation.</div>
           </div>
 
@@ -224,7 +235,7 @@ export function KpiPartnerRemuneration() {
                   <th className="px-4 py-2.5 text-right font-semibold">Volume actif</th>
                   <th className="px-4 py-2.5 text-right font-semibold">Frais sécurisation</th>
                   <th className="px-4 py-2.5 text-right font-semibold">Taux</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Dû HT</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Redevance HT</th>
                 </tr>
               </thead>
               <tbody>
@@ -249,7 +260,7 @@ export function KpiPartnerRemuneration() {
       <Card className="overflow-hidden">
         <div className="border-b border-border px-4 py-3">
           <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Historique mensuel</div>
-          <div className="mt-0.5 text-sm font-semibold">Tous les partenaires configurés</div>
+          <div className="mt-0.5 text-sm font-semibold">Historique des redevances partenaires</div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-left text-xs">
@@ -260,7 +271,7 @@ export function KpiPartnerRemuneration() {
                 <th className="px-4 py-2.5 text-right font-semibold">Cautions</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Volume</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Frais sécurisation</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Dû HT</th>
+                <th className="px-4 py-2.5 text-right font-semibold">Redevance HT</th>
               </tr>
             </thead>
             <tbody>
