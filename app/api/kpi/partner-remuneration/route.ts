@@ -165,6 +165,11 @@ export async function GET() {
 
     const accounts = new Map(accountsRows.map(row => [row.source_id, row.payload]));
     const deposits = buildDeposits(depositRows);
+    const fleeteeAccountIds = new Set(
+      deposits
+        .filter(deposit => deposit.accountId && deposit.returnUrl.toLowerCase().includes("link.fleetee.io"))
+        .map(deposit => deposit.accountId),
+    );
     const guaranteed = guaranteedDepositIds(captureRows, guaranteeRows);
     const fees: FeeOperation[] = operationRows
       .filter(row => str(row.payload.type) === "fee")
@@ -187,15 +192,15 @@ export async function GET() {
       const configured = bool(rule.enabled) && (isFleetee || Boolean(accountId));
       const account = accountId ? accounts.get(accountId) : null;
       const actorDeposits = isFleetee
-        ? deposits.filter(deposit => !deposit.archived && deposit.returnUrl.toLowerCase().includes("link.fleetee.io"))
+        ? deposits.filter(deposit => !deposit.archived && fleeteeAccountIds.has(deposit.accountId))
         : deposits.filter(deposit => deposit.accountId === accountId && !deposit.archived);
 
       const eligible = actorDeposits.flatMap<EligibleItem>(deposit => {
         if (!configured) return [];
 
         if (isFleetee) {
-          // Fleetee rémunère une caution dès lors qu'elle a été activée, même si elle est
-          // ensuite clôturée ou annulée. `start_at` est la trace historique de l'activation.
+          // Fleetee rémunère toutes les cautions des loueurs associés dès lors qu'elles ont
+          // été activées. `start_at` garde cette preuve même après clôture ou annulation.
           if (deposit.startAt == null) return [];
           if (deposit.amountCents <= 80000) return [];
           if (guaranteed.has(deposit.id)) return [];
