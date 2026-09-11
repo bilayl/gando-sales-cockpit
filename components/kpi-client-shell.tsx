@@ -6,8 +6,9 @@ import { KpiSiteHeader } from "@/components/kpi-site-header"
 import { KpiWorkspace } from "@/components/kpi-workspace"
 import type { KpiView } from "@/lib/kpi-views"
 
-const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000
-const AUTO_REFRESH_INTERVAL_MS = 60 * 1000
+const HOURLY_REFRESH_INTERVAL_MS = 60 * 60 * 1000
+const AUTO_SYNC_INTERVAL_MS = HOURLY_REFRESH_INTERVAL_MS
+const AUTO_REFRESH_INTERVAL_MS = HOURLY_REFRESH_INTERVAL_MS
 
 const CONTINUOUS_TABLES = [
   "public.accounts",
