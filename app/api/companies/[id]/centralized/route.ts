@@ -15,7 +15,10 @@ const CONTACT_PROPERTIES = [
   "objections__retours","campagne_dacquisition","suite","zip","taille_de_flo","hs_country_region_code","solution_paiement_reservation",
 ];
 const NOTE_PROPERTIES = ["hs_note_body","hs_timestamp","hs_createdate","hs_object_source_label","hubspot_owner_id"];
-const CALL_PROPERTIES = ["hs_call_title","hs_call_body","hs_call_status","hs_call_disposition","hs_call_duration","hs_timestamp","hubspot_owner_id","hs_call_summary"];
+const CALL_PROPERTIES = [
+  "hs_call_title","hs_call_body","hs_call_status","hs_call_disposition","hs_call_duration","hs_timestamp","hubspot_owner_id",
+  "hs_call_summary","hs_ai_summary","hs_call_has_transcript","hs_call_recording_url","hs_call_transcript_tracked_terms",
+];
 const MEETING_PROPERTIES = ["hs_meeting_title","hs_meeting_start_time","hs_meeting_end_time","hs_meeting_location","hs_meeting_outcome","hs_internal_meeting_notes","hs_timestamp","hubspot_owner_id"];
 const TASK_PROPERTIES = ["hs_task_subject","hs_task_body","hs_task_status","hs_task_priority","hs_task_type","hs_timestamp","hubspot_owner_id"];
 const DEAL_PROPERTIES = ["dealname","amount","pipeline","dealstage","closedate","createdate","hubspot_owner_id"];
@@ -41,6 +44,44 @@ async function batchRead(path: string, recordIds: string[], properties: string[]
     all.push(...(result.results || []));
   }
   return all;
+}
+
+async function attachOnoffCallDetails(calls: any[]) {
+  const hubspotCallIds = calls.map(call => String(call.id || "")).filter(Boolean);
+  if (!hubspotCallIds.length) return calls;
+
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from("onoff_call_processing")
+      .select("hubspot_call_id,call_id,transcript_text,ai_analysis,tags,processing_status,created_at")
+      .in("hubspot_call_id", hubspotCallIds)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+
+    const detailsByCall = new Map<string, any>();
+    for (const row of data || []) {
+      const key = String(row.hubspot_call_id || "");
+      if (!key) continue;
+      const current = detailsByCall.get(key);
+      if (!current || (!current.transcript_text && row.transcript_text)) detailsByCall.set(key, row);
+    }
+
+    return calls.map(call => {
+      const detail = detailsByCall.get(String(call.id));
+      if (!detail) return call;
+      return {
+        ...call,
+        transcript: String(detail.transcript_text || "").trim() || null,
+        onoffCallId: detail.call_id ? String(detail.call_id) : null,
+        onoffAiAnalysis: detail.ai_analysis || null,
+        onoffTags: detail.tags || null,
+        onoffProcessingStatus: detail.processing_status || null,
+      };
+    });
+  } catch (error) {
+    console.warn("Onoff transcript enrichment unavailable:", error);
+    return calls;
+  }
 }
 
 function contactName(contact: any): string {
@@ -189,6 +230,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       batchRead("deals", dealIds, DEAL_PROPERTIES),
     ]);
 
+    const callsEnriched = await attachOnoffCallDetails(callsRaw);
     const decorate = (type: string, record: any) => {
       const contactId = sourceMaps[type]?.get(String(record.id)) || null;
       return {
@@ -200,7 +242,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     };
 
     const notes = notesRaw.map(record => decorate("notes", record));
-    const calls = callsRaw.map(record => decorate("calls", record));
+    const calls = callsEnriched.map(record => decorate("calls", record));
     const meetings = meetingsRaw.map(record => {
       const decorated = decorate("meetings", record);
       const startAt = record.properties?.hs_meeting_start_time || record.properties?.hs_timestamp || null;
