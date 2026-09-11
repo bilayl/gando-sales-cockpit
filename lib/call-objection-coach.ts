@@ -3,6 +3,8 @@ export type CRMActivityRecord = {
   properties?: Record<string, string | null | undefined>
   sourceContactName?: string | null
   createdAt?: string | null
+  transcript?: string | null
+  onoffAiAnalysis?: Record<string, unknown> | null
 }
 
 export type ObjectionInsight = {
@@ -19,6 +21,8 @@ export type CallObjectionCoach = {
   insights: ObjectionInsight[]
   transcript: string
   signalsAnalyzed: number
+  transcriptCalls: number
+  notesAnalyzed: number
   latestCall?: CRMActivityRecord | null
 }
 
@@ -136,13 +140,41 @@ function recordDate(record: CRMActivityRecord) {
   return p.hs_timestamp || p.hs_createdate || record.createdAt || ""
 }
 
+function limited(value: string, max = 12000) {
+  const clean = value.trim()
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean
+}
+
+function aiText(call: CRMActivityRecord) {
+  const analysis = call.onoffAiAnalysis
+  if (!analysis) return ""
+  const parts: string[] = []
+  const summary = analysis.summary
+  if (typeof summary === "string" && summary.trim()) parts.push(`Synthèse Onoff: ${summary.trim()}`)
+  for (const [label, key] of [["Points clés", "key_points"], ["Objections", "objections"], ["Prochaines étapes", "next_steps"]] as const) {
+    const raw = analysis[key]
+    if (Array.isArray(raw) && raw.length) parts.push(`${label}: ${raw.map(String).join("; ")}`)
+  }
+  return parts.join(" — ")
+}
+
 function callText(call: CRMActivityRecord) {
   const p = call.properties || {}
-  return [p.hs_call_title, p.hs_call_summary, p.hs_call_body].map(activityPlainText).filter(Boolean).join(" — ")
+  const transcript = activityPlainText(call.transcript)
+  const hubspotSummary = activityPlainText(p.hs_call_summary || p.hs_ai_summary)
+  const notes = activityPlainText(p.hs_call_body)
+  const ai = activityPlainText(aiText(call))
+  return [
+    p.hs_call_title ? `Appel: ${p.hs_call_title}` : "",
+    transcript ? `TRANSCRIPTION: ${limited(transcript)}` : "",
+    hubspotSummary ? `SYNTHÈSE: ${hubspotSummary}` : "",
+    notes ? `NOTES APPEL: ${notes}` : "",
+    ai,
+  ].filter(Boolean).join(" — ")
 }
 
 function noteText(note: CRMActivityRecord) {
-  return activityPlainText(note.properties?.hs_note_body)
+  return limited(activityPlainText(note.properties?.hs_note_body), 8000)
 }
 
 function excerpt(text: string, keyword: string) {
@@ -171,7 +203,7 @@ function sourceEntries(input: CoachInput) {
   }
   return entries
     .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())
-    .slice(0, input.maxActivities || 12)
+    .slice(0, input.maxActivities || 16)
 }
 
 export function buildCallObjectionCoach(input: CoachInput): CallObjectionCoach {
@@ -203,15 +235,19 @@ export function buildCallObjectionCoach(input: CoachInput): CallObjectionCoach {
 
   const transcript = entries
     .map(entry => {
-      const prefix = entry.source === "calls" ? "APPEL" : entry.source === "notes" ? "NOTE" : "OBJECTION CRM"
+      const prefix = entry.source === "calls" ? "APPEL / TRANSCRIPTION" : entry.source === "notes" ? "NOTE CRM" : "OBJECTION CRM"
       return `[${prefix}${entry.date ? ` · ${entry.date}` : ""}] ${entry.text}`
     })
     .join("\n\n")
 
+  const calls = input.calls || []
+  const notes = input.notes || []
   return {
     insights,
     transcript,
     signalsAnalyzed: entries.length,
-    latestCall: (input.calls || [])[0] || null,
+    transcriptCalls: calls.filter(call => Boolean(String(call.transcript || "").trim())).length,
+    notesAnalyzed: notes.filter(note => Boolean(noteText(note))).length,
+    latestCall: calls[0] || null,
   }
 }
