@@ -194,17 +194,20 @@ export async function GET() {
       const isFleetee = actorKey === "fleetee" && calculationMode === "fleetee_active_deposit";
       const configured = bool(rule.enabled) && (isFleetee || Boolean(accountId));
       const account = accountId ? accounts.get(accountId) : null;
-      const actorDeposits = (isFleetee
-        ? deposits.filter(deposit => !deposit.archived && fleeteeAccountIds.has(deposit.accountId))
-        : deposits.filter(deposit => deposit.accountId === accountId && !deposit.archived))
-        .filter(deposit => deposit.createdVia === PARTNER_API_SOURCE);
+      const actorDeposits = isFleetee
+        ? deposits.filter(deposit =>
+            !deposit.archived
+            && fleeteeAccountIds.has(deposit.accountId)
+            && deposit.createdVia === PARTNER_API_SOURCE,
+          )
+        : deposits.filter(deposit => deposit.accountId === accountId && !deposit.archived);
 
       const eligible = actorDeposits.flatMap<EligibleItem>(deposit => {
         if (!configured) return [];
 
         if (isFleetee) {
-          // Une redevance partenaire ne peut être déclenchée que par une caution créée
-          // via l'API partenaire. Les cautions webapp, operator_api ou sans origine sont exclues.
+          // La redevance Fleetee ne peut être déclenchée que par une caution créée via
+          // l'API partenaire. Les cautions webapp, operator_api ou sans origine sont exclues.
           if (deposit.startAt == null) return [];
           if (deposit.amountCents <= 80000) return [];
           if (guaranteed.has(deposit.id)) return [];
