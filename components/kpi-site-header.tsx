@@ -12,7 +12,7 @@ const VIEW_LABEL: Record<KpiView, string> = {
   economics: "Économie & risque",
   acquisition: "Acquisition & CAC",
   cash: "Cash & coûts",
-  remuneration: "Rémunération partenaires",
+  remuneration: "Redevances partenaires",
   history: "Historique réel",
   data: "Qualité des données",
 }
