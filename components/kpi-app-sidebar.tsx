@@ -35,7 +35,7 @@ const groups: Group[] = [
     label: "Finance",
     items: [
       { id: "cash", label: "Cash & coûts", icon: WalletCards },
-      { id: "remuneration", label: "Rémunération partenaires", icon: HandCoins },
+      { id: "remuneration", label: "Redevances partenaires", icon: HandCoins },
     ],
   },
   {
