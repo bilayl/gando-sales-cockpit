@@ -13,6 +13,14 @@ type MonthlyRow = {
   dueCents: number
 }
 
+type BreakdownRow = {
+  accountId: string
+  accountName: string
+  deposits: number
+  tdvCents: number
+  dueCents: number
+}
+
 type PartnerRow = {
   actorKey: string
   actorLabel: string
@@ -26,6 +34,7 @@ type PartnerRow = {
   eligibleSecuringFeesCents: number
   dueCents: number
   monthly: MonthlyRow[]
+  breakdown: BreakdownRow[]
   notes: string | null
   consistencyWarning: string | null
 }
@@ -94,6 +103,7 @@ export function KpiPartnerRemuneration() {
   if (error) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error}</div>
   if (!data) return null
 
+  const fleetee = data.rows.find(row => row.actorKey === "fleetee")
   const lr = data.rows.find(row => row.actorKey === "lr")
   const lastSync = data.source.lastSyncedAt
     ? new Date(data.source.lastSyncedAt).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
@@ -140,7 +150,7 @@ export function KpiPartnerRemuneration() {
                   </td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">{row.configured ? integer(row.eligibleDeposits) : "—"}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{row.configured ? euroCents(row.eligibleTdvCents, 0) : "—"}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{row.configured ? euroCents(row.eligibleSecuringFeesCents) : "—"}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{row.configured ? (row.actorKey === "fleetee" ? "—" : euroCents(row.eligibleSecuringFeesCents)) : "—"}</td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">{row.configured ? euroCents(row.dueCents) : "—"}</td>
                   <td className="px-4 py-3"><Badge variant={row.configured ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">{row.configured ? "Calcul automatique" : "À configurer"}</Badge></td>
                 </tr>
@@ -149,6 +159,47 @@ export function KpiPartnerRemuneration() {
           </table>
         </div>
       </Card>
+
+      {fleetee?.configured ? (
+        <Card className="overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Fleetee</div>
+              <div className="mt-0.5 text-sm font-semibold">Rémunération des cautions Fleetee</div>
+              <div className="mt-1 text-[10px] text-muted-foreground">2 € HT par caution activée strictement supérieure à 800 €, hors cautions garanties.</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="h-6 text-[10px]">{integer(fleetee.eligibleDeposits)} cautions éligibles</Badge>
+              <Badge variant="outline" className="h-6 text-[10px]">{euroCents(fleetee.dueCents)} HT dû</Badge>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-left text-xs">
+              <thead className="bg-muted/20 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2.5 font-semibold">Loueur Fleetee</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Cautions éligibles</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Volume caution</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Rémunération HT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fleetee.breakdown.length ? fleetee.breakdown.map(row => (
+                  <tr key={row.accountId || row.accountName} className="border-t border-border">
+                    <td className="px-4 py-3 font-semibold">{row.accountName}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{integer(row.deposits)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{euroCents(row.tdvCents, 0)}</td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums">{euroCents(row.dueCents)}</td>
+                  </tr>
+                )) : (
+                  <tr className="border-t border-border"><td colSpan={4} className="px-4 py-6 text-center text-muted-foreground">Aucune caution Fleetee éligible.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
 
       {lr ? (
         <Card className="overflow-hidden">
@@ -219,7 +270,7 @@ export function KpiPartnerRemuneration() {
                   <td className="px-4 py-3 font-semibold">{row.actorLabel}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{integer(row.deposits)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{euroCents(row.tdvCents, 0)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{euroCents(row.securingFeesCents)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{row.actorKey === "fleetee" ? "—" : euroCents(row.securingFeesCents)}</td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">{euroCents(row.dueCents)}</td>
                 </tr>
               ))}
