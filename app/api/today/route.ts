@@ -8,6 +8,15 @@ export const dynamic = "force-dynamic";
 
 type ContactProperties = Record<string, string | null | undefined>;
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = String((error as { message?: unknown }).message || "").trim();
+    if (message) return message;
+  }
+  return "Impossible de charger les appels du jour.";
+}
+
 export async function GET() {
   try {
     const access = await requireCockpitAccess();
@@ -31,7 +40,12 @@ export async function GET() {
     const companyIds = [...new Set(timed
       .map(contact => String(contact.properties.db_company_id || ""))
       .filter(Boolean))];
-    const assignments = await listCockpitCompanyAssignments(companyIds);
+
+    // Assignment metadata must never prevent the call queue from loading.
+    const assignments = await listCockpitCompanyAssignments(companyIds).catch(error => {
+      console.error("Unable to load cockpit company assignments for /api/today", error);
+      return [];
+    });
     const assignmentByCompany = new Map(assignments.map(row => [
       String(row.company_id),
       String(row.assignee_cockpit_email || "").trim().toLowerCase(),
@@ -64,7 +78,8 @@ export async function GET() {
       generatedAt: now.toISOString(),
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
+    console.error("Unable to load /api/today", error);
     const status = Number((error as { status?: number })?.status) || 500;
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Impossible de charger les appels du jour." }, { status });
+    return NextResponse.json({ error: errorMessage(error) }, { status });
   }
 }
