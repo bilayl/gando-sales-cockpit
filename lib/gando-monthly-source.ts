@@ -11,6 +11,7 @@ type Deposit = {
   accountId: string;
   status: string;
   amountCents: number;
+  startAt: number | null;
   createdAt: number | null;
   updatedAt: number | null;
   archived: boolean;
@@ -52,6 +53,14 @@ type MutableMonth = {
 };
 
 const SUCCESSFUL = new Set(["active", "close", "captured"]);
+const EVER_ACTIVE = new Set([
+  "active",
+  "processing",
+  "captured",
+  "close",
+  "cancelled",
+  "capture_issue",
+]);
 const MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 1000;
 
@@ -139,6 +148,7 @@ function buildDeposits(rows: MirrorRow[]): Deposit[] {
     accountId: str(row.payload.account_id),
     status: str(row.payload.status),
     amountCents: num(row.payload.amount_cents),
+    startAt: ts(row.payload.start_at),
     createdAt: ts(row.payload.created_at),
     updatedAt: ts(row.payload.updated_at),
     archived: bool(row.payload.is_archived),
@@ -162,7 +172,9 @@ function matchFees(deposits: Deposit[], fees: Fee[]) {
     const best = (byClient.get(fee.clientId) || [])
       .filter(deposit => !usedDeposits.has(deposit.id))
       .map(deposit => {
-        const dates = [deposit.createdAt, deposit.updatedAt].filter((value): value is number => value != null);
+        const dates = [deposit.createdAt, deposit.updatedAt].filter(
+          (value): value is number => value != null,
+        );
         const gap = dates.length
           ? Math.min(...dates.map(value => Math.abs(fee.createdAt! - value)))
           : Number.POSITIVE_INFINITY;
@@ -180,14 +192,15 @@ function matchFees(deposits: Deposit[], fees: Fee[]) {
 }
 
 export async function getGandoMonthlySourceMetrics() {
-  const [depositRows, operationRows, captureRows, guaranteeRows, userRows, clientRows] = await Promise.all([
-    readSourceTable("deposits"),
-    readSourceTable("client_operations"),
-    readSourceTable("captures"),
-    readSourceTable("guarantee_activations"),
-    readSourceTable("users"),
-    readSourceTable("clients"),
-  ]);
+  const [depositRows, operationRows, captureRows, guaranteeRows, userRows, clientRows] =
+    await Promise.all([
+      readSourceTable("deposits"),
+      readSourceTable("client_operations"),
+      readSourceTable("captures"),
+      readSourceTable("guarantee_activations"),
+      readSourceTable("users"),
+      readSourceTable("clients"),
+    ]);
 
   const deposits = buildDeposits(depositRows);
   const fees: Fee[] = operationRows
@@ -201,19 +214,27 @@ export async function getGandoMonthlySourceMetrics() {
     .filter(row => row.clientId && row.amountCents > 0 && row.createdAt != null);
 
   const feeByDeposit = matchFees(deposits, fees);
-  const wonDeposits = deposits.filter(deposit =>
-    SUCCESSFUL.has(deposit.status) && !deposit.archived && feeByDeposit.has(deposit.id),
+  const wonDeposits = deposits.filter(
+    deposit => SUCCESSFUL.has(deposit.status) && !deposit.archived && feeByDeposit.has(deposit.id),
   );
 
   const months = new Map<string, MutableMonth>();
 
+  // KPI "cautions actives" : une caution reste comptée dans son mois d'activation
+  // même si son statut évolue ensuite vers processing, captured, close, cancelled
+  // ou capture_issue. Le mois de référence est la date réelle d'activation start_at.
+  for (const deposit of deposits) {
+    if (deposit.archived || !EVER_ACTIVE.has(deposit.status) || deposit.startAt == null) continue;
+    getMonth(months, monthKey(deposit.startAt)).deposits += 1;
+  }
+
+  // Revenus / TDV restent basés sur les cautions gagnées et leur frais de sécurisation.
   for (const deposit of wonDeposits) {
     const fee = feeByDeposit.get(deposit.id);
     if (!fee?.createdAt) continue;
     const bucket = getMonth(months, monthKey(fee.createdAt));
     bucket.revenueCents += fee.amountCents;
     bucket.tdvCents += deposit.amountCents;
-    bucket.deposits += 1;
     if (deposit.accountId) bucket.activeAccounts.add(deposit.accountId);
   }
 
@@ -270,7 +291,9 @@ export async function getGandoMonthlySourceMetrics() {
       const prevIndex = prevYear * 12 + prevMonth - 1;
       const currentIndex = year * 12 + monthNumber - 1;
       if (currentIndex - prevIndex === 1) {
-        churnedRenters = [...previousActive].filter(accountId => !bucket.activeAccounts.has(accountId)).length;
+        churnedRenters = [...previousActive].filter(
+          accountId => !bucket.activeAccounts.has(accountId),
+        ).length;
       }
     }
 
