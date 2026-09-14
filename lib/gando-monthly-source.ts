@@ -220,12 +220,13 @@ export async function getGandoMonthlySourceMetrics() {
 
   const months = new Map<string, MutableMonth>();
 
-  // KPI "cautions actives" : une caution reste comptée dans son mois d'activation
-  // même si son statut évolue ensuite vers processing, captured, close, cancelled
-  // ou capture_issue. Le mois de référence est la date réelle d'activation start_at.
+  // KPI "cautions actives" et MAU : une caution / un loueur reste compté dans son mois
+  // d'activation même si le statut évolue ensuite. Le mois de référence est start_at.
   for (const deposit of deposits) {
     if (deposit.archived || !EVER_ACTIVE.has(deposit.status) || deposit.startAt == null) continue;
-    getMonth(months, monthKey(deposit.startAt)).deposits += 1;
+    const bucket = getMonth(months, monthKey(deposit.startAt));
+    bucket.deposits += 1;
+    if (deposit.accountId) bucket.activeAccounts.add(deposit.accountId);
   }
 
   // Revenus / TDV restent basés sur les cautions gagnées et leur frais de sécurisation.
@@ -235,7 +236,6 @@ export async function getGandoMonthlySourceMetrics() {
     const bucket = getMonth(months, monthKey(fee.createdAt));
     bucket.revenueCents += fee.amountCents;
     bucket.tdvCents += deposit.amountCents;
-    if (deposit.accountId) bucket.activeAccounts.add(deposit.accountId);
   }
 
   const userCreatedAt = userRows
