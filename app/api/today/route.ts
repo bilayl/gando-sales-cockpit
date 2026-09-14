@@ -29,6 +29,10 @@ export async function GET() {
       const timing = getBestCallTimeForProperties(original, now);
       const properties: ContactProperties = {
         ...original,
+        // The Today card historically prefers `mobilephone`. The authoritative
+        // contact number is normalized into `phone` by getCallRecommendations,
+        // so expose it first here and keep mobilephone only as a fallback.
+        mobilephone: original.phone || original.mobilephone,
         db_call_local_time: timing.localTime,
         db_call_timezone: timing.timezone,
         db_call_timing_reason: timing.reason,
