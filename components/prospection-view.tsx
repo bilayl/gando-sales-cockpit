@@ -1,11 +1,12 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, ChevronLeft, ChevronRight, Filter, ListFilter, Loader2, MoreVertical, Phone, RefreshCw, Search, SlidersHorizontal, SquareKanban, Star, Table2, UserPlus, Users } from "lucide-react";
 import { ContactDrawer } from "@/components/contact-drawer";
 import { CompanyDrawer } from "@/components/company-drawer";
 import { NewContactDialog } from "@/components/new-contact-dialog";
 import { ProspectionBoard } from "@/components/prospection-board";
 import { formatDate, initials } from "@/lib/utils";
+import { fetchJsonCached } from "@/lib/client-query-cache";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +91,8 @@ export function ProspectionView() {
   const [preset, setPreset] = useState<PeriodPreset>("all");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const [metadataReady, setMetadataReady] = useState(false);
+  const loadRequestRef = useRef(0);
 
   const periodRange = useMemo(() => {
     const now = new Date();
@@ -111,8 +114,13 @@ export function ProspectionView() {
   }, [preset, customStart, customEnd]);
 
   useEffect(() => {
-    Promise.all([fetch("/api/segments").then(r => r.json()), fetch("/api/owners").then(r => r.json())])
+    let active = true;
+    Promise.all([
+      fetchJsonCached<any>("/api/segments", { ttlMs: 60_000 }),
+      fetchJsonCached<any>("/api/owners", { ttlMs: 60_000 }),
+    ])
       .then(([l, o]) => {
+        if (!active) return;
         const allLists = (l.lists || []) as List[];
         setLists(allLists);
         setOwners(o.results || []);
@@ -126,7 +134,12 @@ export function ProspectionView() {
           const teori = contactLists.find(x => x.name.toLowerCase().includes("teori"));
           setSegmentId(teori ? teori.listId : contactLists[0]?.listId ?? "");
         }
-      });
+      })
+      .catch(reason => {
+        if (active) setError(reason instanceof Error ? reason.message : "Impossible de charger les filtres de prospection");
+      })
+      .finally(() => { if (active) setMetadataReady(true); });
+    return () => { active = false; };
   }, []);
 
   function switchType(type: ObjectType) {
@@ -139,6 +152,7 @@ export function ProspectionView() {
   }
 
   async function loadContacts(reset = false, cursor?: string, silent = false) {
+    const requestId = ++loadRequestRef.current;
     if (!silent) setLoading(true);
     setError("");
     try {
@@ -169,17 +183,19 @@ export function ProspectionView() {
           return (!q || txt.includes(low)) && (!owner || props.hubspot_owner_id === owner) && (!callStatus || props.statut_de_lappel === callStatus) && (!prospection || props.statut_prospection === prospection);
         });
       }
+      if (requestId !== loadRequestRef.current) return;
       setContacts(rows);
       setTotal(d.total || rows.length);
       setNextAfter(d.paging?.next?.after);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
+      if (requestId === loadRequestRef.current) setError(e instanceof Error ? e.message : "Erreur");
     } finally {
-      if (!silent) setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   }
 
   async function loadCompanies(reset = false, cursor?: string, silent = false) {
+    const requestId = ++loadRequestRef.current;
     if (!silent) setLoading(true);
     setError("");
     try {
@@ -208,13 +224,14 @@ export function ProspectionView() {
           return (!q || txt.includes(low)) && (!owner || props.hubspot_owner_id === owner);
         });
       }
+      if (requestId !== loadRequestRef.current) return;
       setCompanies(rows);
       setTotal(d.total || rows.length);
       setNextAfter(d.paging?.next?.after);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur");
+      if (requestId === loadRequestRef.current) setError(e instanceof Error ? e.message : "Erreur");
     } finally {
-      if (!silent) setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   }
 
@@ -243,8 +260,11 @@ export function ProspectionView() {
     load(true, undefined, true);
   }
 
-  useEffect(() => { load(true); }, [objectType, segmentId, owner, callStatus, prospection, periodRange, view]);
-  useEffect(() => { const t = setTimeout(() => load(true), 300); return () => clearTimeout(t); }, [q]);
+  useEffect(() => {
+    if (!metadataReady) return;
+    const timeout = window.setTimeout(() => { void load(true); }, q ? 300 : 0);
+    return () => window.clearTimeout(timeout);
+  }, [metadataReady, objectType, segmentId, owner, callStatus, prospection, periodRange, q]);
 
   const isCompany = objectType === "0-2";
   const activeLists = lists.filter(l => l.objectTypeId === objectType);

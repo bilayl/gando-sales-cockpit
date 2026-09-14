@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -23,6 +23,7 @@ import { AddContactButton } from "@/components/add-contact-button";
 import { ProspectionSession } from "@/components/prospection-session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { fetchJsonCached, invalidateJsonCache } from "@/lib/client-query-cache";
 
 const ONOFF_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
 
@@ -78,7 +79,7 @@ function fullName(contact?: Contact | null) {
 }
 
 function numberFor(contact?: Contact | null) {
-  return String(contact?.properties.mobilephone || contact?.properties.phone || "").trim();
+  return String(contact?.properties.phone || contact?.properties.mobilephone || "").trim();
 }
 
 function callResult(value?: string | null) {
@@ -177,43 +178,64 @@ export function TodayDialerView() {
   const [agenda, setAgenda] = useState<AgendaPayload>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [sessionStarting, setSessionStarting] = useState(false);
   const [sessionCompany, setSessionCompany] = useState<Company | null>(null);
+  const loadSequenceRef = useRef(0);
+  const loadedOnceRef = useRef(false);
 
-  async function load() {
-    setLoading(true);
+  async function load(force = false) {
+    const sequence = ++loadSequenceRef.current;
+    if (loadedOnceRef.current) setRefreshing(true);
+    else setLoading(true);
     setMessage("");
+
+    const range = dayRange();
+    const agendaUrl = `/api/agenda?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`;
+    const auxiliaryPromise = Promise.allSettled([
+      fetchJsonCached<OnoffStatus>("/api/onoff/status", { ttlMs: 30_000, force }),
+      fetchJsonCached<{ results?: Task[] }>("/api/tasks?period=today", { ttlMs: 10_000, force }),
+      fetchJsonCached<{ results?: Task[] }>("/api/tasks?period=overdue", { ttlMs: 10_000, force }),
+      fetchJsonCached<AgendaPayload>(agendaUrl, { ttlMs: 10_000, force }),
+    ]);
+
     try {
-      const range = dayRange();
-      const [todayResponse, onoffResponse, todayTasksResponse, overdueResponse, agendaResponse] = await Promise.all([
-        fetch("/api/today", { cache: "no-store" }),
-        fetch("/api/onoff/status", { cache: "no-store" }),
-        fetch("/api/tasks?period=today", { cache: "no-store" }),
-        fetch("/api/tasks?period=overdue", { cache: "no-store" }),
-        fetch(`/api/agenda?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`, { cache: "no-store" }),
-      ]);
+      // The call queue is the critical payload: show it as soon as it is ready instead
+      // of blocking the whole screen on tasks, agenda and telephony status.
+      const todayPayload = await fetchJsonCached<TodayPayload>("/api/today", { ttlMs: 10_000, force });
+      if (sequence !== loadSequenceRef.current) return;
 
-      const todayPayload = await todayResponse.json();
-      if (!todayResponse.ok) throw new Error(todayPayload.error || "Impossible de charger la journée SDR");
       setToday(todayPayload);
-      setOnoff(onoffResponse.ok ? await onoffResponse.json() : null);
-      setTodayTasks(todayTasksResponse.ok ? (await todayTasksResponse.json()).results || [] : []);
-      setOverdueTasks(overdueResponse.ok ? (await overdueResponse.json()).results || [] : []);
-      setAgenda(agendaResponse.ok ? await agendaResponse.json() : {});
-
       const first = todayPayload.results?.[0];
       setSelectedId(current => current && todayPayload.results?.some((item: Contact) => item.id === current) ? current : first?.id || null);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Erreur de chargement");
-    } finally {
+      loadedOnceRef.current = true;
       setLoading(false);
+
+      const [onoffResult, todayTasksResult, overdueTasksResult, agendaResult] = await auxiliaryPromise;
+      if (sequence !== loadSequenceRef.current) return;
+      if (onoffResult.status === "fulfilled") setOnoff(onoffResult.value);
+      if (todayTasksResult.status === "fulfilled") setTodayTasks(todayTasksResult.value.results || []);
+      if (overdueTasksResult.status === "fulfilled") setOverdueTasks(overdueTasksResult.value.results || []);
+      if (agendaResult.status === "fulfilled") setAgenda(agendaResult.value);
+    } catch (error) {
+      if (sequence === loadSequenceRef.current) {
+        setMessage(error instanceof Error ? error.message : "Erreur de chargement");
+      }
+    } finally {
+      if (sequence === loadSequenceRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load(false);
+    return () => { loadSequenceRef.current += 1; };
+  }, []);
 
   const results = today?.results || [];
   const selected = useMemo(() => results.find(contact => contact.id === selectedId) || results[0] || null, [results, selectedId]);
@@ -309,6 +331,8 @@ export function TodayDialerView() {
       if (!response.ok) throw new Error(payload.error || "Impossible de terminer la tâche");
       setTodayTasks(current => current.filter(task => task.id !== taskId));
       setOverdueTasks(current => current.filter(task => task.id !== taskId));
+      invalidateJsonCache("/api/tasks");
+      invalidateJsonCache("/api/agenda");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Impossible de terminer la tâche");
     } finally {
@@ -319,16 +343,12 @@ export function TodayDialerView() {
   async function resolveCompanyIds(contact: Contact) {
     let candidate = String(contact.properties.db_company_id || "").trim();
     if (!candidate) {
-      const response = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { cache: "no-store" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Impossible de retrouver l’entreprise associée à ce lead.");
+      const payload = await fetchJsonCached<any>(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { ttlMs: 5 * 60_000 });
       candidate = String(payload.companies?.[0]?.id || "").trim();
     }
     if (!candidate) throw new Error("Ce lead n’a aucune entreprise associée : impossible d’ouvrir la session d’appel.");
 
-    const response = await fetch(`/api/prospection/company-id/${encodeURIComponent(candidate)}`, { cache: "no-store" });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || "Impossible de résoudre l’identifiant HubSpot de cette entreprise.");
+    const payload = await fetchJsonCached<any>(`/api/prospection/company-id/${encodeURIComponent(candidate)}`, { ttlMs: 5 * 60_000 });
     const hubspotId = String(payload.hubspotId || "").trim();
     const assignmentId = String(payload.localId || candidate).trim();
     if (!hubspotId) throw new Error("Cette entreprise n’a pas encore d’identifiant HubSpot exploitable.");
@@ -375,8 +395,8 @@ export function TodayDialerView() {
           </div>
           <div className="flex flex-wrap gap-2">
             <AddContactButton />
-            <Button variant="outline" className="h-9 rounded-lg border-border bg-card" onClick={() => void load()} disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Actualiser
+            <Button variant="outline" className="h-9 rounded-lg border-border bg-card" onClick={() => void load(true)} disabled={loading || refreshing}>
+              {loading || refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Actualiser
             </Button>
             <Button asChild className="h-9 rounded-lg"><Link href="/prospection"><UsersRound className="mr-2 h-4 w-4" />Prospection</Link></Button>
           </div>

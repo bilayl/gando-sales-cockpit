@@ -58,10 +58,19 @@ const EMPTY_SUMMARY: CallRecommendationSummary = {
   EXCLUDED: 0,
 };
 
+let refreshInFlight: Promise<number> | null = null;
+
 export async function refreshCallRecommendations() {
   const { data, error } = await getSupabaseAdmin().rpc("refresh_call_recommendations");
   if (error) throw error;
   return Number(data || 0);
+}
+
+function sharedRecommendationRefresh() {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshCallRecommendations().finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
 }
 
 async function ensureFresh(force = false) {
@@ -76,7 +85,7 @@ async function ensureFresh(force = false) {
     const evaluatedAt = data?.evaluated_at ? new Date(String(data.evaluated_at)).getTime() : 0;
     if (evaluatedAt && Date.now() - evaluatedAt < 2 * 60 * 1000) return;
   }
-  await refreshCallRecommendations();
+  await sharedRecommendationRefresh();
 }
 
 function activeOverride(row?: OverrideRow) {
@@ -95,46 +104,59 @@ export async function getCallRecommendations(options?: {
 }) {
   await ensureFresh(Boolean(options?.forceRefresh));
   const supabase = getSupabaseAdmin();
-
-  const [
-    { data: recommendationData, error: recommendationError },
-    { data: contactData, error: contactError },
-    { data: overrideData, error: overrideError },
-  ] = await Promise.all([
-    supabase.from("call_recommendations").select("*").order("score", { ascending: false }),
-    supabase.from("contacts").select("id,hubspot_id,company_id,first_name,last_name,email,phone,job_title,owner_hubspot_id,raw_data"),
-    supabase.from("call_recommendation_overrides").select("contact_id,decision,snoozed_until,reason,updated_at"),
-  ]);
-  if (recommendationError) throw recommendationError;
-  if (contactError) throw contactError;
-  if (overrideError) throw overrideError;
-
-  const recommendations = (recommendationData || []) as RecommendationRow[];
-  const contacts = (contactData || []) as ContactRow[];
-  const overrides = (overrideData || []) as OverrideRow[];
-  const companyIds = [...new Set(contacts.map(contact => contact.company_id).filter((id): id is string => Boolean(id)))];
-  let companies: CompanyRow[] = [];
-  if (companyIds.length) {
-    const { data, error } = await supabase.from("companies").select("id,name").in("id", companyIds);
-    if (error) throw error;
-    companies = (data || []) as CompanyRow[];
-  }
-
-  const contactsById = new Map(contacts.map(contact => [contact.id, contact]));
-  const companiesById = new Map(companies.map(company => [company.id, company]));
-  const overridesByContactId = new Map(overrides.map(row => [row.contact_id, row]));
-  const summary = recommendations.reduce<CallRecommendationSummary>((acc, row) => {
-    acc[row.bucket] = (acc[row.bucket] || 0) + 1;
-    return acc;
-  }, { ...EMPTY_SUMMARY });
-
   const bucket = options?.bucket || "ACTIONABLE";
   const owner = options?.owner?.trim();
   const needle = options?.query?.trim().toLowerCase();
   const limit = Math.min(Math.max(options?.limit || 1000, 1), 2000);
 
+  let recommendationQuery = supabase
+    .from("call_recommendations")
+    .select("contact_id,hubspot_contact_id,score,priority_label,bucket,reason,recommended_action,call_status,prospecting_status,prospecting_result,next_follow_up_at,last_contacted_at,last_call_at,overdue_tasks,evaluated_at")
+    .order("score", { ascending: false });
+  if (bucket !== "ALL") recommendationQuery = recommendationQuery.eq("bucket", bucket);
+
+  const [recommendationResult, summaryResult, overrideResult] = await Promise.all([
+    recommendationQuery,
+    supabase.from("call_recommendations").select("bucket"),
+    supabase.from("call_recommendation_overrides").select("contact_id,decision,snoozed_until,reason,updated_at"),
+  ]);
+  if (recommendationResult.error) throw recommendationResult.error;
+  if (summaryResult.error) throw summaryResult.error;
+  if (overrideResult.error) throw overrideResult.error;
+
+  const recommendations = (recommendationResult.data || []) as RecommendationRow[];
+  const overrides = (overrideResult.data || []) as OverrideRow[];
+  const summary = (summaryResult.data || []).reduce<CallRecommendationSummary>((acc, row) => {
+    const key = row.bucket as keyof CallRecommendationSummary;
+    if (key in acc) acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, { ...EMPTY_SUMMARY });
+
+  const recommendationIds = [...new Set(recommendations.map(row => row.contact_id).filter(Boolean))];
+  const chunks = <T,>(values: T[], size = 150) => Array.from(
+    { length: Math.ceil(values.length / size) },
+    (_, index) => values.slice(index * size, (index + 1) * size),
+  );
+  const contactResponses = await Promise.all(chunks(recommendationIds).map(ids => supabase
+    .from("contacts")
+    .select("id,hubspot_id,company_id,first_name,last_name,email,phone,job_title,owner_hubspot_id,raw_data")
+    .in("id", ids)));
+  for (const response of contactResponses) if (response.error) throw response.error;
+  const contacts = contactResponses.flatMap(response => (response.data || [])) as ContactRow[];
+
+  const companyIds = [...new Set(contacts.map(contact => contact.company_id).filter((id): id is string => Boolean(id)))];
+  const companyResponses = await Promise.all(chunks(companyIds).map(ids => supabase
+    .from("companies")
+    .select("id,name")
+    .in("id", ids)));
+  for (const response of companyResponses) if (response.error) throw response.error;
+  const companies = companyResponses.flatMap(response => (response.data || [])) as CompanyRow[];
+
+  const contactsById = new Map(contacts.map(contact => [contact.id, contact]));
+  const companiesById = new Map(companies.map(company => [company.id, company]));
+  const overridesByContactId = new Map(overrides.map(row => [row.contact_id, row]));
+
   const filtered = recommendations
-    .filter(row => bucket === "ALL" || row.bucket === bucket)
     .map(row => {
       const contact = contactsById.get(row.contact_id);
       if (!contact) return null;
@@ -187,7 +209,9 @@ export async function getCallRecommendations(options?: {
     })
     .slice(0, limit);
 
-  const total = recommendations.filter(row => bucket === "ALL" || row.bucket === bucket).length;
+  const total = bucket === "ALL"
+    ? Object.values(summary).reduce((sum, value) => sum + value, 0)
+    : summary[bucket];
   return {
     results: filtered,
     total,
