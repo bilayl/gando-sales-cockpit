@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   CalendarCheck2,
+  Code2,
   FileText,
   Inbox,
   LifeBuoy,
@@ -35,6 +36,7 @@ const workspaceNav: NavItem[] = [
   { href: "/segments", label: "Segments", icon: ListFilter },
   { href: "/tasks", label: "Tâches", icon: ListTodo },
   { href: "/analytics", label: "Analyse", icon: BarChart3 },
+  { href: "/developer", label: "Développeur", icon: Code2 },
   { href: "/settings", label: "Paramètres", icon: Settings },
 ];
 
