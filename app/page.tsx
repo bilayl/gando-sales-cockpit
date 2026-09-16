@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import {
   BarChart3,
   BriefcaseBusiness,
+  Code2,
   LockKeyhole,
   LogOut,
   Palette,
@@ -65,6 +66,14 @@ export default async function Page() {
       icon: Palette,
       iconClassName: "bg-[#fff0e7] text-[#d96c2f]",
     },
+    {
+      key: "developer",
+      name: "Développeur",
+      domain: "developers.gando.app",
+      href: "/developer",
+      icon: Code2,
+      iconClassName: "bg-[#efeaff] text-[#6d5ce7]",
+    },
   ];
   const visibleApps = access.canAccessKpi ? apps : apps.filter(app => app.key !== "kpi");
 
@@ -108,13 +117,13 @@ export default async function Page() {
       </header>
 
       <section className="relative z-10 flex min-h-[calc(100vh-80px)] items-center justify-center px-6 pb-24">
-        <div className="w-full max-w-5xl">
+        <div className="w-full max-w-6xl">
           <div className="mb-12 text-center">
             <h1 className="text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">Cockpit</h1>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Choisissez l’outil Gando que vous souhaitez ouvrir.</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-4 sm:gap-x-10 lg:gap-x-14">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 sm:gap-x-10 lg:grid-cols-5 lg:gap-x-14">
             {visibleApps.map(app => {
               const Icon = app.icon;
               const content = (
