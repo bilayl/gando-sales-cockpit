@@ -15,6 +15,17 @@ import {
   Phone,
   Search,
   Settings,
+  CreditCard,
+  Hash,
+  KeyRound,
+  PieChart,
+  Plug,
+  ShieldCheck,
+  Tags,
+  UserRound,
+  UsersRound,
+  WandSparkles,
+  Webhook,
 } from "lucide-react";
 import {
   Sidebar,
@@ -58,6 +69,31 @@ const followUpNav: NavItem[] = [
   { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
   { href: "/emails", label: "Emails", icon: Mail },
   { href: "/support", label: "Support", icon: LifeBuoy },
+];
+
+
+const settingsWorkspaceNav: NavItem[] = [
+  { href: "/settings/numbers", label: "Numéros", icon: Hash },
+  { href: "/settings/members", label: "Membres", icon: UsersRound },
+  { href: "/settings/billing", label: "Facturation", icon: CreditCard },
+  { href: "/settings/usage", label: "Utilisation", icon: PieChart },
+];
+
+const settingsCallNav: NavItem[] = [
+  { href: "/settings/tags", label: "Tags", icon: Tags },
+  { href: "/settings/models", label: "Modèles", icon: WandSparkles },
+];
+
+const settingsPersonalNav: NavItem[] = [
+  { href: "/settings/profile", label: "Profil", icon: UserRound },
+  { href: "/settings/email-notifications", label: "Notifications par e-mail", icon: Mail },
+];
+
+const settingsOtherNav: NavItem[] = [
+  { href: "/settings/integrations", label: "Intégrations", icon: Plug },
+  { href: "/settings/api-keys", label: "Clés API", icon: KeyRound },
+  { href: "/settings/webhooks", label: "Webhooks", icon: Webhook },
+  { href: "/settings/compliance", label: "Conformité", icon: ShieldCheck },
 ];
 
 function NavigationGroup({
@@ -105,6 +141,7 @@ export function AppSidebar({
   canAccessKpi?: boolean;
 }) {
   const pathname = usePathname();
+  const inSettings = pathname === "/settings" || pathname.startsWith("/settings/");
   const workspaceItems = role === "commercial"
     ? workspaceNav.filter((item) => item.href !== "/segments")
     : workspaceNav;
@@ -112,15 +149,29 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" className="border-sidebar-border">
       <SidebarHeader>
-        <CockpitSidebarHeader section="Cockpit CRM" canAccessKpi={canAccessKpi} />
+        <CockpitSidebarHeader
+          section={inSettings ? "Paramètres" : "Cockpit CRM"}
+          canAccessKpi={canAccessKpi}
+        />
       </SidebarHeader>
 
       <SidebarSeparator />
 
       <SidebarContent>
-        <NavigationGroup label="Appels" items={callNav} pathname={pathname} />
-        <NavigationGroup label="Espace de travail" items={workspaceItems} pathname={pathname} />
-        <NavigationGroup label="Suivi" items={followUpNav} pathname={pathname} />
+        {inSettings ? (
+          <>
+            <NavigationGroup label="Espace de travail" items={settingsWorkspaceNav} pathname={pathname} />
+            <NavigationGroup label="Appel" items={settingsCallNav} pathname={pathname} />
+            <NavigationGroup label="Personnel" items={settingsPersonalNav} pathname={pathname} />
+            <NavigationGroup label="Autres" items={settingsOtherNav} pathname={pathname} />
+          </>
+        ) : (
+          <>
+            <NavigationGroup label="Appels" items={callNav} pathname={pathname} />
+            <NavigationGroup label="Espace de travail" items={workspaceItems} pathname={pathname} />
+            <NavigationGroup label="Suivi" items={followUpNav} pathname={pathname} />
+          </>
+        )}
       </SidebarContent>
 
       <SidebarFooter>
