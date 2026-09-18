@@ -68,6 +68,7 @@ type SimulationRow = {
   year: number
   monthNumber: number
   month: string
+  growthRate: number
   revenue: number
   tdv: number
   deposits: number
@@ -225,6 +226,7 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
   const [saving, setSaving] = useState(false)
   const [horizon, setHorizon] = useState("12")
   const [assumptions, setAssumptions] = useState<Assumptions | null>(null)
+  const [monthlyGrowthOverrides, setMonthlyGrowthOverrides] = useState<Record<string, number>>({})
 
   async function load() {
     setLoading(true)
@@ -327,8 +329,10 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
     let totalClients = n(last.totalClients)
     const months = Number(horizon)
     for (let offset = 1; offset <= months; offset += 1) {
-      deposits = Math.max(0, deposits * (1 + assumptions.depositGrowth))
       const point = fromMonthIndex(monthIndex(last) + offset)
+      const key = rowKey(point.year, point.monthNumber)
+      const growthRate = monthlyGrowthOverrides[key] ?? assumptions.depositGrowth
+      deposits = Math.max(0, deposits * (1 + growthRate))
       const activeRenters = assumptions.depositsPerRenter > 0 ? deposits / assumptions.depositsPerRenter : 0
       const tdv = Math.max(0, deposits * assumptions.tdvPerDeposit)
       const revenue = Math.max(0, tdv * assumptions.takeRate)
@@ -338,6 +342,7 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
       const cashoutAmount = Math.max(0, depositCashouts * assumptions.cashoutAmount)
       result.push({
         ...point,
+        growthRate,
         revenue,
         tdv,
         deposits,
@@ -351,7 +356,7 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
       })
     }
     return result
-  }, [actualRows, assumptions, horizon])
+  }, [actualRows, assumptions, horizon, monthlyGrowthOverrides])
 
   async function save() {
     if (!draft || !canEdit) return
@@ -500,7 +505,7 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
                     <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Hypothèses</div>
                     <div className="mt-0.5 text-sm font-semibold">Scénario basé sur les moyennes historiques</div>
                   </div>
-                  <Select value={horizon} onValueChange={setHorizon}><SelectTrigger className="h-9 w-[130px] text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="6">+6 mois</SelectItem><SelectItem value="12">+12 mois</SelectItem><SelectItem value="24">+24 mois</SelectItem></SelectContent></Select>
+                  <Select value={horizon} onValueChange={setHorizon}><SelectTrigger className="h-9 w-[130px] text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="6">+6 mois</SelectItem><SelectItem value="12">+12 mois</SelectItem><SelectItem value="24">+24 mois</SelectItem><SelectItem value="36">+36 mois</SelectItem></SelectContent></Select>
                 </div>
                 <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                   <AssumptionField label="Croissance cautions" value={assumptions.depositGrowth} suffix="%" percentValue onChange={value => setAssumptions(current => current && ({ ...current, depositGrowth: value }))} />
@@ -538,8 +543,48 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
                 <div className="border-b border-border px-4 py-3">
                   <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Projection</div>
                   <div className="mt-0.5 text-sm font-semibold">Scénario mensuel</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">Vous pouvez renseigner une croissance différente sur chaque mois. Si le champ est vide, la croissance globale est utilisée.</div>
                 </div>
-                <Table className="min-w-[900px] text-[11px]"><TableHeader className="bg-muted/35"><TableRow><TableHead className="pl-4">Mois</TableHead><TableHead>CA</TableHead><TableHead>TDV</TableHead><TableHead>Cautions</TableHead><TableHead>MAU</TableHead><TableHead>Users inscrits</TableHead><TableHead>Clients</TableHead><TableHead>Encaissements</TableHead><TableHead>Garantie avancée</TableHead></TableRow></TableHeader><TableBody>{simulation.map(row => <TableRow key={rowKey(row.year, row.monthNumber)}><TableCell className="pl-4 font-semibold">{row.month} {row.year}</TableCell><TableCell>{euro(row.revenue, 2)}</TableCell><TableCell>{euro(row.tdv)}</TableCell><TableCell>{integer(row.deposits)}</TableCell><TableCell>{integer(row.activeRenters)}</TableCell><TableCell>{integer(row.registeredUsers)}</TableCell><TableCell>{integer(row.totalClients)}</TableCell><TableCell>{integer(row.depositCashouts)}</TableCell><TableCell>{euro(row.advancedGuarantee)}</TableCell></TableRow>)}</TableBody></Table>
+                <Table className="min-w-[1020px] text-[11px]"><TableHeader className="bg-muted/35"><TableRow><TableHead className="pl-4">Mois</TableHead><TableHead>Croissance</TableHead><TableHead>CA</TableHead><TableHead>TDV</TableHead><TableHead>Cautions</TableHead><TableHead>MAU</TableHead><TableHead>Users inscrits</TableHead><TableHead>Clients</TableHead><TableHead>Encaissements</TableHead><TableHead>Garantie avancée</TableHead></TableRow></TableHeader><TableBody>{simulation.map(row => {
+                  const key = rowKey(row.year, row.monthNumber)
+                  const override = monthlyGrowthOverrides[key]
+                  return <TableRow key={key}>
+                    <TableCell className="pl-4 font-semibold">{row.month} {row.year}</TableCell>
+                    <TableCell>
+                      <div className="relative w-[105px]">
+                        <Input
+                          className="h-8 pr-7 text-[11px]"
+                          type="number"
+                          step="0.1"
+                          value={override == null ? "" : Number((override * 100).toFixed(2))}
+                          placeholder={Number((assumptions.depositGrowth * 100).toFixed(2)).toString()}
+                          onChange={event => {
+                            const raw = event.target.value
+                            setMonthlyGrowthOverrides(current => {
+                              const next = { ...current }
+                              if (raw.trim() === "") {
+                                delete next[key]
+                                return next
+                              }
+                              const parsed = Number(raw)
+                              if (Number.isFinite(parsed)) next[key] = parsed / 100
+                              return next
+                            })
+                          }}
+                        />
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{euro(row.revenue, 2)}</TableCell>
+                    <TableCell>{euro(row.tdv)}</TableCell>
+                    <TableCell>{integer(row.deposits)}</TableCell>
+                    <TableCell>{integer(row.activeRenters)}</TableCell>
+                    <TableCell>{integer(row.registeredUsers)}</TableCell>
+                    <TableCell>{integer(row.totalClients)}</TableCell>
+                    <TableCell>{integer(row.depositCashouts)}</TableCell>
+                    <TableCell>{euro(row.advancedGuarantee)}</TableCell>
+                  </TableRow>
+                })}</TableBody></Table>
               </section>
             </>
           )}
