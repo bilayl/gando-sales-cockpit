@@ -34,6 +34,15 @@ type KpiRow = {
   growth: number | null
 }
 
+type ActivatedDeposit = {
+  id: string
+  activationAt: string
+  status: string
+  accountId: string
+  accountName: string
+  amountCents: number
+}
+
 type NumericKey = Exclude<keyof KpiRow, "id" | "year" | "monthNumber" | "month">
 
 type Derived = {
@@ -165,6 +174,28 @@ function integer(value: number | null | undefined) {
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)
 }
 
+function euroCents(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—"
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(value / 100)
+}
+
+function activationDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  return date.toLocaleString("fr-FR", {
+    timeZone: "Europe/Paris",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 function decimal(value: number | null | undefined, digits = 1) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: digits }).format(value)
@@ -227,6 +258,9 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
   const [horizon, setHorizon] = useState("12")
   const [assumptions, setAssumptions] = useState<Assumptions | null>(null)
   const [monthlyGrowthOverrides, setMonthlyGrowthOverrides] = useState<Record<string, number>>({})
+  const [activatedDeposits, setActivatedDeposits] = useState<ActivatedDeposit[]>([])
+  const [activationsLoading, setActivationsLoading] = useState(false)
+  const [activationsError, setActivationsError] = useState("")
 
   async function load() {
     setLoading(true)
@@ -260,6 +294,37 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
     const existing = rows.find(row => row.year === year && row.monthNumber === monthNumber)
     setDraft(existing ? { ...existing } : blankRow(year, monthNumber))
   }, [selectedMonth, rows])
+
+  useEffect(() => {
+    if (!selectedMonth) {
+      setActivatedDeposits([])
+      return
+    }
+
+    const [year, monthNumber] = selectedMonth.split("-").map(Number)
+    let cancelled = false
+
+    async function loadActivatedDeposits() {
+      setActivationsLoading(true)
+      setActivationsError("")
+      try {
+        const response = await fetch(`/api/kpi/activated-deposits?year=${year}&month=${monthNumber}`, { cache: "no-store" })
+        const body = await response.json()
+        if (!response.ok) throw new Error(body.error || "Impossible de charger les cautions activées.")
+        if (!cancelled) setActivatedDeposits(Array.isArray(body.rows) ? body.rows : [])
+      } catch (reason) {
+        if (!cancelled) {
+          setActivatedDeposits([])
+          setActivationsError(reason instanceof Error ? reason.message : "Impossible de charger les cautions activées.")
+        }
+      } finally {
+        if (!cancelled) setActivationsLoading(false)
+      }
+    }
+
+    void loadActivatedDeposits()
+    return () => { cancelled = true }
+  }, [selectedMonth])
 
   const derivedByMonth = useMemo(() => {
     const map = new Map<string, Derived>()
@@ -443,6 +508,53 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
               </div>
             </section>
           ) : null}
+
+          <section className="border-b border-border">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Cautions activées</div>
+                <div className="mt-0.5 text-sm font-semibold">
+                  Détail des activations du mois
+                  {selected ? <span className="ml-2 text-xs font-medium text-muted-foreground">({integer(activatedDeposits.length)} / {integer(selected.deposits)})</span> : null}
+                </div>
+              </div>
+              {selected && activatedDeposits.length !== n(selected.deposits) && !activationsLoading ? (
+                <Badge variant="outline" className="h-6 text-[10px]">
+                  Source : {integer(activatedDeposits.length)}
+                </Badge>
+              ) : null}
+            </div>
+
+            {activationsError ? <div className="px-4 py-3 text-xs text-destructive">{activationsError}</div> : null}
+            {activationsLoading ? (
+              <div className="p-4"><Skeleton className="h-32 rounded-lg" /></div>
+            ) : activatedDeposits.length ? (
+              <div className="max-h-[360px] overflow-auto">
+                <Table className="min-w-[760px] text-[11px]">
+                  <TableHeader className="sticky top-0 z-10 bg-muted/95">
+                    <TableRow>
+                      <TableHead className="pl-4">Date d’activation</TableHead>
+                      <TableHead>Loueur</TableHead>
+                      <TableHead>Montant</TableHead>
+                      <TableHead>Statut</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activatedDeposits.map(deposit => (
+                      <TableRow key={deposit.id}>
+                        <TableCell className="pl-4 font-medium tabular-nums">{activationDate(deposit.activationAt)}</TableCell>
+                        <TableCell>{deposit.accountName}</TableCell>
+                        <TableCell>{euroCents(deposit.amountCents)}</TableCell>
+                        <TableCell><Badge variant="outline" className="h-5 text-[10px]">{deposit.status}</Badge></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="px-4 py-5 text-xs text-muted-foreground">Aucune caution activée sur ce mois.</div>
+            )}
+          </section>
 
           {drivers.length ? (
             <section className="border-b border-border">
