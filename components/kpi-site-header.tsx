@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { ArrowLeft, CheckCircle2, RefreshCw, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import type { KpiView } from "@/lib/kpi-views"
 
 const VIEW_LABEL: Record<KpiView, string> = {
@@ -54,12 +55,15 @@ export function KpiSiteHeader({
   return (
     <header className="shrink-0 border-b border-border bg-card px-5 py-3 lg:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-2">
+          <SidebarTrigger className="mt-0.5 shrink-0" />
+          <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">KPI</span>
             <span className="text-[10px] text-muted-foreground">{VIEW_LABEL[view]}</span>
           </div>
           <p className="mt-0.5 text-sm font-semibold text-foreground">{VIEW_COPY[view]}</p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
