@@ -71,7 +71,7 @@ export function SettingsSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-full shrink-0 flex-col border-b border-sidebar-border bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:h-svh lg:w-[244px] lg:border-b-0 lg:border-r">
+    <aside className="flex w-full shrink-0 flex-col border-b border-sidebar-border bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:h-svh lg:w-[240px] lg:border-b-0 lg:border-r">
       <SidebarHeader className="p-2">
         <SidebarMenu>
           <SidebarMenuItem>
