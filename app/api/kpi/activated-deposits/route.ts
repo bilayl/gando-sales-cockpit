@@ -104,7 +104,14 @@ export async function GET(request: NextRequest) {
         Date.parse(row.activationAt) < end
       )
       .sort((a, b) => Date.parse(b.activationAt!) - Date.parse(a.activationAt!))
-      .map(({ archived: _archived, ...row }) => row);
+      .map(row => ({
+        id: row.id,
+        activationAt: row.activationAt!,
+        status: row.status,
+        accountId: row.accountId,
+        accountName: row.accountName,
+        amountCents: row.amountCents,
+      }));
 
     return NextResponse.json({ year, monthNumber, count: rows.length, rows });
   } catch (error) {
