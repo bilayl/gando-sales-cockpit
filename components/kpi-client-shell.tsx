@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { KpiAppSidebar } from "@/components/kpi-app-sidebar"
 import { KpiSiteHeader } from "@/components/kpi-site-header"
 import { KpiWorkspace } from "@/components/kpi-workspace"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import type { KpiView } from "@/lib/kpi-views"
 
 const AUTO_REFRESH_INTERVAL_MS = 60 * 60 * 1000
@@ -106,11 +107,16 @@ export function KpiClientShell({
   }, [runRefresh])
 
   return (
-    <main className="app-bg min-h-screen pl-[72px] lg:pl-[224px]">
-      <div className="animate-fade-in fixed inset-y-0 left-0 z-30">
-        <KpiAppSidebar email={email} role={role} view={view} onViewChange={setView} />
-      </div>
-      <section className="page-shell min-h-screen bg-background">
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "15rem",
+          "--sidebar-width-icon": "3.5rem",
+        } as React.CSSProperties
+      }
+    >
+      <KpiAppSidebar email={email} role={role} view={view} onViewChange={setView} />
+      <SidebarInset className="app-bg min-h-svh bg-background">
         <KpiSiteHeader
           view={view}
           syncStatus={syncStatus}
@@ -120,7 +126,7 @@ export function KpiClientShell({
         <div className="min-w-0">
           <KpiWorkspace key={refreshKey} view={view} canEdit={role !== "commercial"} />
         </div>
-      </section>
-    </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
