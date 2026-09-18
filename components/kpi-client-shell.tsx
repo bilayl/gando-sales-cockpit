@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
 import { KpiAppSidebar } from "@/components/kpi-app-sidebar"
 import { KpiSiteHeader } from "@/components/kpi-site-header"
 import { KpiWorkspace } from "@/components/kpi-workspace"
@@ -112,7 +112,7 @@ export function KpiClientShell({
         {
           "--sidebar-width": "15rem",
           "--sidebar-width-icon": "3.5rem",
-        } as React.CSSProperties
+        } as CSSProperties
       }
     >
       <KpiAppSidebar email={email} role={role} view={view} onViewChange={setView} />
