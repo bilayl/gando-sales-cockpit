@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
+import { useKpiEndpoint } from "@/hooks/queries/use-kpi"
 import {
   CartesianGrid,
   Legend,
@@ -92,24 +93,10 @@ const confidenceMeta = {
 }
 
 export function KpiForecastScenarios() {
-  const [data, setData] = useState<Data | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/kpi/decision-intelligence", { cache: "no-store" })
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Impossible de charger les prévisions.")
-        setData(body)
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de charger les prévisions.")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const query = useKpiEndpoint<Data>("decision-intelligence", "/api/kpi/decision-intelligence")
+  const data = query.data
+  const loading = query.isLoading
+  const error = query.error?.message || ""
 
   const trajectory = useMemo(() => {
     if (!data) return []
