@@ -7,6 +7,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Gando · Cockpit",
   description: "Les outils Gando réunis dans un même Cockpit.",
+  icons: {
+    icon: [{ url: "/icon.svg?v=20260921", type: "image/svg+xml" }],
+    shortcut: "/icon.svg?v=20260921",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
