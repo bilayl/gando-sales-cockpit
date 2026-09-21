@@ -12,7 +12,7 @@ import {
   ContactRound,
   FileText,
   Home,
-  KanbanSquare,
+  SquareKanban,
   ListTodo,
   Mail,
   PhoneOutgoing,
@@ -101,7 +101,7 @@ export function AppSidebar({
     { href: "/prospection", label: "Prospection", icon: PhoneOutgoing },
     { href: "/contacts", label: "Contacts", icon: ContactRound },
     { href: "/agenda", label: "Agenda", icon: CalendarDays },
-    { href: "/deal-room", label: "Pipeline", icon: KanbanSquare, visible: canAccessDealRoom },
+    { href: "/deal-room", label: "Pipeline", icon: SquareKanban, visible: canAccessDealRoom },
     { href: "/settings", label: "Paramètres", icon: Settings },
   ].filter(item => item.visible !== false);
 
