@@ -68,7 +68,7 @@ function ChartCard({ title, subtitle, children }: { title: string; subtitle: str
   )
 }
 
-export function KpiActualTrends({
+export function KpiActualTrends({ variant }: { variant: "growth" | "economics" }) {
   const { data, isPending: loading, error } = useKpiDecisionIntelligence();
 
   if (loading) return <Skeleton className="h-[580px] w-full rounded-xl" />
