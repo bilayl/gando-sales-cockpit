@@ -27,6 +27,7 @@ export function DashboardLayout({
 
   return (
     <SidebarProvider
+      className="cockpit-ui"
       open={!sidebarCollapsed}
       onOpenChange={open => setSidebarCollapsed(!open)}
       style={
