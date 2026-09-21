@@ -29,6 +29,21 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+type EventKind = "meeting" | "task" | "reminder";
+
+type DayEvent = {
+  id: string;
+  recordId: string;
+  kind: EventKind;
+  title: string;
+  start: Date;
+  end: Date;
+  location?: string;
+  status?: string;
+  description?: string;
+  isPresentation?: boolean;
+};
+
 const HOUR_HEIGHT = 48;
 const GRID_START = 8;
 const GRID_END = 20;
