@@ -28,6 +28,11 @@ export const queryKeys = {
   agenda: {
     range: (start: string, end: string) => ["agenda", start, end] as const,
   },
+  pipeline: {
+    all: ["pipeline"] as const,
+    deals: ["pipeline", "deals"] as const,
+    rooms: ["pipeline", "rooms"] as const,
+  },
   tasks: {
     all: ["tasks"] as const,
     list: (filters?: Filters) => ["tasks", "list", filters ?? {}] as const,
