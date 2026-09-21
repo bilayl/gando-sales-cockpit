@@ -72,6 +72,86 @@
   color-scheme: dark;
 }
 
+/* Premium cockpit surface: neutral like Linear/Vercel, with Gando violet as a restrained accent. */
+.cockpit-ui {
+  --radius: 0.625rem;
+  --background: #ffffff;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #6f5cf6;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #27272a;
+  --muted: #f6f6f7;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #27272a;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e7e7e9;
+  --input: #dedee2;
+  --ring: #7c6cf5;
+  --chart-1: #6f5cf6;
+  --chart-2: #0f766e;
+  --chart-3: #2563eb;
+  --chart-4: #ca8a04;
+  --chart-5: #db2777;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #27272a;
+  --sidebar-primary: #6f5cf6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f2;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e7e7e9;
+  --sidebar-ring: #7c6cf5;
+  background: var(--background);
+  color: var(--foreground);
+  color-scheme: light;
+}
+
+.dark .cockpit-ui {
+  --background: #0d0d0f;
+  --foreground: #f4f4f5;
+  --card: #111113;
+  --card-foreground: #f4f4f5;
+  --popover: #171719;
+  --popover-foreground: #f4f4f5;
+  --primary: #9b8cff;
+  --primary-foreground: #111113;
+  --secondary: #1c1c1f;
+  --secondary-foreground: #f4f4f5;
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+  --accent: #1f1f22;
+  --accent-foreground: #f4f4f5;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #29292d;
+  --input: #34343a;
+  --ring: #9b8cff;
+  --sidebar: #111113;
+  --sidebar-foreground: #e4e4e7;
+  --sidebar-primary: #9b8cff;
+  --sidebar-primary-foreground: #111113;
+  --sidebar-accent: #1d1d20;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #28282c;
+  --sidebar-ring: #9b8cff;
+  color-scheme: dark;
+}
+
+.cockpit-ui .panel {
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  box-shadow: none;
+}
+
+.cockpit-ui [data-sidebar="sidebar"] {
+  background: var(--sidebar);
+}
+
 /* Cockpit palette: Allo-like light UI with a dedicated dark counterpart. */
 .allo-shell {
   --background: #ffffff;
