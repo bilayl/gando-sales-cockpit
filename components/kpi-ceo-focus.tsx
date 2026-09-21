@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
+import { useKpiEndpoint } from "@/hooks/queries/use-kpi"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -33,24 +34,10 @@ const LEVEL_META = {
 }
 
 export function KpiCeoFocus() {
-  const [data, setData] = useState<Scorecard | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/kpi/ceo-scorecard", { cache: "no-store" })
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Impossible de charger la lecture CEO.")
-        setData(body)
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de charger la lecture CEO.")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const query = useKpiEndpoint<Scorecard>("ceo-scorecard", "/api/kpi/ceo-scorecard")
+  const data = query.data
+  const loading = query.isLoading
+  const error = query.error?.message || ""
 
   const signals = useMemo<Signal[]>(() => {
     if (!data) return []
