@@ -393,6 +393,40 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   const remaining = queue.filter(item => !done.has(item.company.id));
   const current = remaining[Math.min(index, Math.max(remaining.length - 1, 0))] || null;
 
+  useEffect(() => {
+    setSelectedCompanyId(open ? current?.company.id ?? null : null);
+  }, [current?.company.id, open, setSelectedCompanyId]);
+
+  const workflowMutation = useMutation({
+    mutationFn: async ({
+      companyId,
+      action,
+      reminderAt,
+      reason,
+    }: {
+      companyId: string;
+      action: string;
+      reminderAt: string | null;
+      reason: string;
+    }) => {
+      const response = await fetch(`/api/companies/${companyId}/workflow`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, reminderAt, reason }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Impossible d’enregistrer le résultat de l’appel");
+      return payload;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.companies.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.prospection.session(activeIds) }),
+      ]);
+    },
+  });
+  const savingOutcome = workflowMutation.isPending;
+
   function advanceAfterOutcome() {
     if (!current) return;
     setDone(previous => new Set(previous).add(current.company.id));
@@ -474,15 +508,13 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
       nextReminder = parsed.toISOString();
     }
 
-    setSavingOutcome(true);
     try {
-      const response = await fetch(`/api/companies/${current.company.id}/workflow`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action, reminderAt: nextReminder, reason }),
+      await workflowMutation.mutateAsync({
+        companyId: current.company.id,
+        action,
+        reminderAt: nextReminder,
+        reason,
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Impossible d’enregistrer le résultat de l’appel");
 
       const message = outcome === "MEETING"
         ? "RDV enregistré — compte sorti de la file setter."
@@ -496,8 +528,6 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
       advanceAfterOutcome();
     } catch (reasonValue) {
       toast.error(reasonValue instanceof Error ? reasonValue.message : "Impossible d’enregistrer le résultat de l’appel");
-    } finally {
-      setSavingOutcome(false);
     }
   }
 
