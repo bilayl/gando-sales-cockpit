@@ -26,6 +26,9 @@ export const queryKeys = {
   },
   kpi: {
     all: ["kpi"] as const,
+    scorecard: ["kpi", "ceo-scorecard"] as const,
+    liveBusiness: ["kpi", "live-business"] as const,
+    decisionIntelligence: ["kpi", "decision-intelligence"] as const,
     period: (period: string) => ["kpi", "period", period] as const,
     view: (view: string) => ["kpi", "view", view] as const,
   },
