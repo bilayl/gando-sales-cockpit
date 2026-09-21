@@ -1,132 +1,107 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
-import { KpiAppSidebar } from "@/components/kpi-app-sidebar"
-import { KpiSiteHeader } from "@/components/kpi-site-header"
-import { KpiWorkspace } from "@/components/kpi-workspace"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import type { KpiView } from "@/lib/kpi-views"
+import { useEffect, useRef } from "react";
+import { CheckCircle2, RefreshCw, TriangleAlert } from "lucide-react";
+import { parseAsStringEnum, useQueryState } from "nuqs";
+import { Button } from "@/components/ui/button";
+import { KpiWorkspace } from "@/components/kpi-workspace";
+import { PageHeader } from "@/components/layout/page-header";
+import { useKpiSync } from "@/hooks/queries/use-kpi";
+import { KPI_VIEW_META, KPI_VIEWS, type KpiView } from "@/lib/kpi-views";
+import { cn } from "@/lib/utils";
 
-const AUTO_REFRESH_INTERVAL_MS = 60 * 60 * 1000
+const AUTO_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
-const CONTINUOUS_TABLES = [
-  "public.accounts",
-  "public.clients",
-  "public.users",
-  "public.deposits",
-  "public.client_operations",
-  "public.fees",
-  "public.captures",
-  "public.guarantee_activations",
-  "public.psp_transactions",
-  "public.payments",
-]
-
-type SyncStatus = "idle" | "syncing" | "fresh" | "error"
+function syncTime(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
 
 export function KpiClientShell({
-  email,
   role,
 }: {
-  email?: string
-  role: "admin" | "member" | "commercial"
+  email?: string;
+  role: "admin" | "member" | "commercial";
 }) {
-  const [view, setView] = useState<KpiView>("ceo")
-  const [refreshKey, setRefreshKey] = useState(0)
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle")
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
-  const syncInFlight = useRef(false)
-  const lastRefreshAt = useRef(0)
-
-  const refreshDashboard = useCallback(() => {
-    setRefreshKey(value => value + 1)
-  }, [])
-
-  const syncNow = useCallback(async () => {
-    if (role !== "admin") {
-      refreshDashboard()
-      return
-    }
-    if (syncInFlight.current) return
-
-    syncInFlight.current = true
-    setSyncStatus("syncing")
-    try {
-      const response = await fetch("/api/system/supabase-sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tables: CONTINUOUS_TABLES }),
-      })
-      const body = await response.json().catch(() => ({}))
-      if (!response.ok || body?.success === false) {
-        throw new Error(body?.error || "Synchronisation Gando incomplète")
-      }
-
-      setLastSyncedAt(body?.completedAt || new Date().toISOString())
-      setSyncStatus("fresh")
-      refreshDashboard()
-    } catch (error) {
-      console.error("KPI automatic Gando sync failed", error)
-      setSyncStatus("error")
-    } finally {
-      syncInFlight.current = false
-    }
-  }, [refreshDashboard, role])
-
-  const runRefresh = useCallback(() => {
-    lastRefreshAt.current = Date.now()
-    void syncNow()
-  }, [syncNow])
+  const [view, setView] = useQueryState(
+    "view",
+    parseAsStringEnum<KpiView>([...KPI_VIEWS]).withDefault("ceo"),
+  );
+  const sync = useKpiSync(role === "admin");
+  const lastRunAt = useRef(0);
 
   useEffect(() => {
-    runRefresh()
+    const run = () => {
+      if (sync.isPending) return;
+      lastRunAt.current = Date.now();
+      sync.mutate();
+    };
 
-    const refreshTimer = window.setInterval(() => {
-      if (
-        document.visibilityState === "visible" &&
-        Date.now() - lastRefreshAt.current >= AUTO_REFRESH_INTERVAL_MS
-      ) {
-        runRefresh()
-      }
-    }, AUTO_REFRESH_INTERVAL_MS)
+    run();
 
-    const handleVisibility = () => {
-      if (
-        document.visibilityState === "visible" &&
-        Date.now() - lastRefreshAt.current >= AUTO_REFRESH_INTERVAL_MS
-      ) {
-        runRefresh()
-      }
-    }
-    document.addEventListener("visibilitychange", handleVisibility)
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible" && Date.now() - lastRunAt.current >= AUTO_REFRESH_INTERVAL_MS) run();
+    }, AUTO_REFRESH_INTERVAL_MS);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastRunAt.current >= AUTO_REFRESH_INTERVAL_MS) run();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
-      window.clearInterval(refreshTimer)
-      document.removeEventListener("visibilitychange", handleVisibility)
-    }
-  }, [runRefresh])
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [role]);
+
+  const meta = KPI_VIEW_META[view];
+  const lastSync = syncTime(sync.data?.completedAt);
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "15rem",
-          "--sidebar-width-icon": "3.5rem",
-        } as CSSProperties
-      }
-    >
-      <KpiAppSidebar email={email} role={role} view={view} onViewChange={setView} />
-      <SidebarInset className="app-bg min-h-svh bg-background">
-        <KpiSiteHeader
-          view={view}
-          syncStatus={syncStatus}
-          lastSyncedAt={lastSyncedAt}
-          onRefresh={runRefresh}
+    <div className="page-shell min-h-[calc(100svh-3rem)]">
+      <div className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
+        <PageHeader
+          eyebrow="Pilotage"
+          title="KPI"
+          description={meta.description}
+          actions={
+            <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-1.5 text-[11px] text-muted-foreground md:flex">
+                {sync.isPending ? <RefreshCw className="size-3.5 animate-spin" /> : sync.isError ? <TriangleAlert className="size-3.5 text-amber-500" /> : <CheckCircle2 className="size-3.5 text-emerald-500" />}
+                <span>{sync.isPending ? "Synchronisation…" : sync.isError ? "Source à vérifier" : lastSync ? `À jour · ${lastSync}` : "Actualisation automatique"}</span>
+              </div>
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => sync.mutate()} disabled={sync.isPending}>
+                <RefreshCw className={cn("size-3.5", sync.isPending && "animate-spin")} />
+                Actualiser
+              </Button>
+            </div>
+          }
         />
-        <div className="min-w-0">
-          <KpiWorkspace key={refreshKey} view={view} canEdit={role !== "commercial"} />
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
-  )
+
+        <nav className="mt-6 flex min-w-0 gap-1 overflow-x-auto border-b border-border/60 pb-px minari-scrollbar" aria-label="Vues KPI">
+          {KPI_VIEWS.map(id => {
+            const active = view === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => void setView(id)}
+                className={cn(
+                  "relative shrink-0 px-3 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground",
+                  active && "text-foreground",
+                )}
+              >
+                {KPI_VIEW_META[id].label}
+                {active ? <span className="absolute inset-x-2 -bottom-px h-px bg-foreground" /> : null}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      <KpiWorkspace view={view} canEdit={role !== "commercial"} />
+    </div>
+  );
 }
