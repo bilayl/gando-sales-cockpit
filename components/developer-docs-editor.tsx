@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BookOpen,
@@ -15,6 +16,7 @@ import {
   Search,
   Send,
 } from "lucide-react";
+import { GandoMark } from "@/components/gando-mark";
 import { cn } from "@/lib/utils";
 
 type DocStatus = "draft" | "published";
@@ -388,15 +390,17 @@ export function DeveloperDocsEditor() {
   return (
     <div className="flex h-screen min-h-[640px] flex-col overflow-hidden bg-[#fcfcfd] text-[#17181c] dark:bg-background dark:text-foreground">
       <header className="flex h-[58px] shrink-0 items-center justify-between gap-3 border-b border-[#e9eaed] bg-white px-4 dark:border-border dark:bg-background md:px-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#7061ef] text-white shadow-sm">
-            <Code2 className="h-4 w-4" strokeWidth={2} />
-          </div>
+        <Link
+          href="/"
+          title="Retour au Cockpit"
+          className="group flex min-w-0 items-center gap-3 rounded-xl outline-none transition focus-visible:ring-2 focus-visible:ring-[#735DF3] focus-visible:ring-offset-2"
+        >
+          <GandoMark className="h-8 w-8 shrink-0 transition-transform group-hover:scale-[1.04]" />
           <div className="min-w-0">
             <div className="truncate text-[13px] font-semibold tracking-[-0.02em]">Portail développeur</div>
-            <div className="truncate text-[10px] text-[#858891] dark:text-muted-foreground">Documentation Gando</div>
+            <div className="truncate text-[10px] text-[#858891] dark:text-muted-foreground">Documentation Gando · retour au Cockpit</div>
           </div>
-        </div>
+        </Link>
 
         <div className="flex items-center gap-2">
           <div className="hidden items-center gap-1.5 text-[10px] text-[#8a8d95] dark:text-muted-foreground sm:flex">
