@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useKpiEndpoint } from "@/hooks/queries/use-kpi"
+
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -77,24 +78,10 @@ function monthLabel(value: string) {
 }
 
 export function KpiCeoScorecard() {
-  const [data, setData] = useState<Scorecard | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/kpi/ceo-scorecard", { cache: "no-store" })
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Impossible de charger le CEO scorecard.")
-        setData(body)
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de charger le CEO scorecard.")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const query = useKpiEndpoint<Scorecard>("ceo-scorecard", "/api/kpi/ceo-scorecard")
+  const data = query.data
+  const loading = query.isLoading
+  const error = query.error?.message || ""
 
   if (loading) return <Skeleton className="mb-5 h-[270px] w-full rounded-xl" />
   if (error) return <div className="mb-5 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error}</div>
