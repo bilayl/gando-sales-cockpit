@@ -82,7 +82,7 @@ export function KpiAppSidebar({
   return (
     <Sidebar collapsible="icon" className="border-sidebar-border">
       <SidebarHeader>
-        <CockpitSidebarHeader section="KPI & pilotage" canAccessKpi />
+        <CockpitSidebarHeader section="KPI" canAccessKpi />
       </SidebarHeader>
 
       <SidebarSeparator />

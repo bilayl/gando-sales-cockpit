@@ -150,7 +150,7 @@ export function AppSidebar({
     <Sidebar collapsible="icon" className="border-sidebar-border">
       <SidebarHeader>
         <CockpitSidebarHeader
-          section={inSettings ? "Paramètres" : "Cockpit CRM"}
+          section={inSettings ? "PARAMÈTRES" : "CRM"}
           canAccessKpi={canAccessKpi}
         />
       </SidebarHeader>
