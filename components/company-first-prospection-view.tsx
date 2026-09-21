@@ -2,35 +2,44 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { parseAsString, parseAsStringEnum, useQueryState } from "nuqs";
 import { Building2, ListFilter, Loader2, MapPin, RefreshCw, Search, SquareKanban, Table2 } from "lucide-react";
 import { CompanyMultiFilter } from "@/components/company-multi-filter";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
 import { ProspectionSession } from "@/components/prospection-session";
 import { SdrWorkQueue, type SdrWorkFilter } from "@/components/sdr-work-queue";
+import { PageHeader } from "@/components/layout/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  useClaimProspectionSession,
+  useCompanies,
+  useCurrentCockpitUser,
+  useOwners,
+  useProspectionAssignments,
+  useSegments,
+  useSyncCrm,
+  type Company,
+} from "@/hooks/queries/use-prospection-data";
 import { companyMatchesFilters, type CompanyFilters } from "@/lib/company-multi-filters";
 import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
-import { fetchAllPagedResults } from "@/lib/fetch-all-paged-results";
 import {
   PROSPECTION_SEGMENT_PREFS_EVENT,
   orderVisibleCompanySegments,
   readProspectionSegmentPreferences,
   type ProspectionSegmentPreferences,
 } from "@/lib/prospection-segment-preferences";
+import { queryKeys } from "@/lib/query/query-keys";
 import { formatDate } from "@/lib/utils";
 import { getBestCallTimeForProperties } from "@/lib/call-timing";
+import { useProspectionStore } from "@/stores/prospection-store";
 
-type Company = { id: string; properties: Record<string, string | null | undefined> };
-type List = { listId: string; name: string; objectTypeId: string; size?: number };
-type Owner = { id: string; firstName?: string; lastName?: string; email?: string };
-type CockpitAssignment = { company_id: string; assignee_cockpit_email: string };
 type ViewMode = "board" | "table";
 
 const STAGE_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(column => [column.value, column.label]));
@@ -62,33 +71,54 @@ function companySuggestion(stage: CompanyStage, decision: ReturnType<typeof getC
   if (decision.bucket === "EXCLUDED") return "Ne pas appeler";
   if (decision.priority === 1) return "Traiter la tâche en retard";
   if (stage === "FOLLOW_UP") return "Rappeler maintenant";
-  if (stage === "ATTEMPTED_TO_CONTACT") return "Retenter l'appel";
+  if (stage === "ATTEMPTED_TO_CONTACT") return "Retenter l’appel";
   if (stage === "CONNECTED") return "Qualifier la prochaine étape";
   return "Effectuer le prochain appel";
 }
 
 export function CompanyFirstProspectionView() {
   const router = useRouter();
-  const [lists, setLists] = useState<List[]>([]);
+  const queryClient = useQueryClient();
+
+  const [segmentId, setSegmentId] = useQueryState("segment", parseAsString.withDefault(""));
+  const [query, setQuery] = useQueryState("q", parseAsString.withDefault(""));
+  const [workFilter, setWorkFilter] = useQueryState(
+    "bucket",
+    parseAsStringEnum<SdrWorkFilter>(["ACTIONABLE", "OPPORTUNITY", "SNOOZED", "EXCLUDED", "ALL"]).withDefault("ACTIONABLE"),
+  );
+  const [view, setView] = useQueryState(
+    "view",
+    parseAsStringEnum<ViewMode>(["table", "board"]).withDefault("table"),
+  );
+
   const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
-  const [owners, setOwners] = useState<Owner[]>([]);
-  const [currentUserEmail, setCurrentUserEmail] = useState("");
-  const [assignments, setAssignments] = useState<CockpitAssignment[]>([]);
-  const [segmentId, setSegmentId] = useState("");
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<CompanyFilters>({});
-  const [workFilter, setWorkFilter] = useState<SdrWorkFilter>("ACTIONABLE");
-  const [view, setView] = useState<ViewMode>("table");
   const [sessionOpen, setSessionOpen] = useState(false);
   const [sessionCompanies, setSessionCompanies] = useState<Company[]>([]);
-  const [sessionCreating, setSessionCreating] = useState(false);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [evaluationTime, setEvaluationTime] = useState(Date.now);
+  const [actionError, setActionError] = useState("");
+
+  const segmentsQuery = useSegments();
+  const ownersQuery = useOwners();
+  const currentUserQuery = useCurrentCockpitUser();
+  const assignmentsQuery = useProspectionAssignments();
+  const companiesQuery = useCompanies(segmentId || undefined);
+  const syncMutation = useSyncCrm();
+  const claimSession = useClaimProspectionSession();
+
+  const startGlobalSession = useProspectionStore(state => state.startSession);
+  const stopGlobalSession = useProspectionStore(state => state.stopSession);
+
+  const lists = useMemo(
+    () => (segmentsQuery.data || []).filter(item => item.objectTypeId === "0-2"),
+    [segmentsQuery.data],
+  );
+  const owners = ownersQuery.data || [];
+  const assignments = assignmentsQuery.data || [];
+  const companies = companiesQuery.data?.results || [];
+  const total = companiesQuery.data?.total || 0;
+  const currentUserEmail = String(currentUserQuery.data?.email || "").trim().toLowerCase();
 
   useEffect(() => {
     const timer = window.setInterval(() => setEvaluationTime(Date.now()), 60_000);
@@ -96,24 +126,7 @@ export function CompanyFirstProspectionView() {
   }, []);
 
   useEffect(() => {
-    const initialPreferences = readProspectionSegmentPreferences();
-    setSegmentPreferences(initialPreferences);
-    Promise.all([
-      fetch("/api/segments", { cache: "no-store" }).then(response => response.json()).catch(() => ({ lists: [] })),
-      fetch("/api/owners", { cache: "no-store" }).then(response => response.json()).catch(() => ({ results: [] })),
-      fetch("/api/auth/me", { cache: "no-store" }).then(response => response.json()).catch(() => ({})),
-      fetch("/api/prospection/assignments", { cache: "no-store" }).then(response => response.json()).catch(() => ({ results: [] })),
-    ])
-      .then(([segments, ownerData, currentUser, assignmentData]) => {
-        const companyLists = ((segments.lists || []) as List[]).filter(item => item.objectTypeId === "0-2");
-        setLists(companyLists);
-        setOwners(ownerData.results || []);
-        setCurrentUserEmail(String(currentUser.email || "").trim().toLowerCase());
-        setAssignments(assignmentData.results || []);
-        setSegmentId("");
-      })
-      .catch(cause => setError(cause instanceof Error ? cause.message : "Impossible de charger le Cockpit"));
-
+    setSegmentPreferences(readProspectionSegmentPreferences());
     const refreshPreferences = () => setSegmentPreferences(readProspectionSegmentPreferences());
     window.addEventListener(PROSPECTION_SEGMENT_PREFS_EVENT, refreshPreferences);
     window.addEventListener("storage", refreshPreferences);
@@ -126,9 +139,8 @@ export function CompanyFirstProspectionView() {
   const visibleLists = useMemo(() => orderVisibleCompanySegments(lists, segmentPreferences), [lists, segmentPreferences]);
 
   useEffect(() => {
-    if (!segmentId) return;
-    if (!visibleLists.some(item => item.listId === segmentId)) setSegmentId("");
-  }, [visibleLists, segmentId]);
+    if (segmentId && !visibleLists.some(item => item.listId === segmentId)) void setSegmentId("");
+  }, [visibleLists, segmentId, setSegmentId]);
 
   const ownerNames = useMemo(() => Object.fromEntries(owners.map(item => [
     item.id,
@@ -139,25 +151,6 @@ export function CompanyFirstProspectionView() {
     assignment.company_id,
     String(assignment.assignee_cockpit_email || "").trim().toLowerCase(),
   ])), [assignments]);
-
-  async function load(silent = false) {
-    if (!silent) setLoading(true);
-    setError("");
-    try {
-      const params = new URLSearchParams();
-      if (segmentId) params.set("segmentId", segmentId);
-      const payload = await fetchAllPagedResults<Company>(`/api/companies?${params.toString()}`);
-      setCompanies(payload.results);
-      setTotal(payload.total);
-      if (payload.truncated) setError("Le volume est très important : seuls les 10 000 premiers comptes ont été chargés.");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Erreur de chargement");
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }
-
-  useEffect(() => { void load(); }, [segmentId]);
 
   const baseFiltered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -187,107 +180,102 @@ export function CompanyFirstProspectionView() {
     [classified, workFilter],
   );
 
-  const actionableCompanies = useMemo(() => classified.filter(item => item.decision.bucket === "ACTIONABLE").map(item => item.company), [classified]);
+  const actionableCompanies = useMemo(
+    () => classified.filter(item => item.decision.bucket === "ACTIONABLE").map(item => item.company),
+    [classified],
+  );
   const sessionCandidates = useMemo(() => actionableCompanies.filter(company => {
     const assignee = assignmentByCompanyId.get(company.id);
     return (!assignee || assignee === currentUserEmail)
       && getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow;
   }), [actionableCompanies, assignmentByCompanyId, currentUserEmail, evaluationTime]);
-  const myAssignedCompanies = useMemo(() => actionableCompanies.filter(company => assignmentByCompanyId.get(company.id) === currentUserEmail), [actionableCompanies, assignmentByCompanyId, currentUserEmail]);
-  const blockedByTimingCount = myAssignedCompanies.filter(company => !getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow).length;
-  const unassignedCount = actionableCompanies.filter(company => !assignmentByCompanyId.has(company.id)).length;
 
+  const myAssignedCompanies = useMemo(
+    () => actionableCompanies.filter(company => assignmentByCompanyId.get(company.id) === currentUserEmail),
+    [actionableCompanies, assignmentByCompanyId, currentUserEmail],
+  );
+
+  const blockedByTimingCount = myAssignedCompanies.filter(
+    company => !getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow,
+  ).length;
+  const unassignedCount = actionableCompanies.filter(company => !assignmentByCompanyId.has(company.id)).length;
   const currentList = visibleLists.find(item => item.listId === segmentId);
   const actionableCount = classified.filter(item => item.decision.bucket === "ACTIONABLE").length;
   const opportunities = classified.filter(item => item.decision.bucket === "OPPORTUNITY").length;
   const snoozed = classified.filter(item => item.decision.bucket === "SNOOZED").length;
   const excluded = classified.filter(item => item.decision.bucket === "EXCLUDED").length;
 
-  async function sync() {
-    setSyncing(true);
-    try {
-      const response = await fetch("/api/sync?resource=all");
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Synchronisation impossible");
-      await load(true);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Erreur de synchronisation");
-    } finally {
-      setSyncing(false);
-    }
-  }
+  const loading = companiesQuery.isLoading || segmentsQuery.isLoading || ownersQuery.isLoading || assignmentsQuery.isLoading;
+  const serverError = companiesQuery.error || segmentsQuery.error || ownersQuery.error || assignmentsQuery.error;
+  const error = actionError
+    || (companiesQuery.data?.truncated ? "Le volume est très important : seuls les 10 000 premiers comptes ont été chargés." : "")
+    || serverError?.message
+    || syncMutation.error?.message
+    || claimSession.error?.message
+    || "";
 
   async function startSession() {
-    setSessionCreating(true);
-    setError("");
+    setActionError("");
     try {
-      const response = await fetch("/api/prospection/assignments", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ companyIds: sessionCandidates.slice(0, 100).map(company => company.id) }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.message || payload.error || "Impossible d’attribuer la session");
+      const payload = await claimSession.mutateAsync(sessionCandidates.slice(0, 100).map(company => company.id));
       const claimed = new Set((payload.claimedCompanyIds || []).map(String));
       const selected = sessionCandidates.filter(company => claimed.has(company.id));
       if (!selected.length) throw new Error("Aucune entreprise disponible : elles ont peut-être déjà été prises par un autre commercial.");
-      setAssignments(current => {
-        const preserved = current.filter(item => !claimed.has(item.company_id));
-        return [...preserved, ...selected.map(company => ({ company_id: company.id, assignee_cockpit_email: currentUserEmail }))];
-      });
       setSessionCompanies(selected);
+      startGlobalSession();
       setSessionOpen(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Impossible de démarrer la session");
-    } finally {
-      setSessionCreating(false);
+      setActionError(cause instanceof Error ? cause.message : "Impossible de démarrer la session");
     }
   }
 
   function handleStatusChange(id: string, stage: CompanyStage, updated?: Record<string, string | null | undefined>) {
-    setCompanies(current => current.map(company => {
-      if (company.id !== id) return company;
-      const fallback: Record<string, string | null | undefined> = {};
-      if (stage === "WON") fallback.lifecyclestage = "customer";
-      if (stage === "LOST") fallback.hs_lead_status = "UNQUALIFIED";
-      if (stage === "LATER" || stage === "FOLLOW_UP") fallback.hs_lead_status = "BAD_TIMING";
-      if (["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "OPEN_DEAL"].includes(stage)) fallback.hs_lead_status = stage;
-      return { ...company, properties: { ...company.properties, ...fallback, ...(updated || {}) } };
-    }));
-    void load(true);
+    queryClient.setQueryData<any>(
+      queryKeys.companies.list({ segmentId: segmentId || null }),
+      (current: any) => {
+        if (!current?.results) return current;
+        return {
+          ...current,
+          results: current.results.map((company: Company) => {
+            if (company.id !== id) return company;
+            const fallback: Record<string, string | null | undefined> = {};
+            if (stage === "WON") fallback.lifecyclestage = "customer";
+            if (stage === "LOST") fallback.hs_lead_status = "UNQUALIFIED";
+            if (stage === "LATER" || stage === "FOLLOW_UP") fallback.hs_lead_status = "BAD_TIMING";
+            if (["NEW", "OPEN", "ATTEMPTED_TO_CONTACT", "CONNECTED", "OPEN_DEAL"].includes(stage)) fallback.hs_lead_status = stage;
+            return { ...company, properties: { ...company.properties, ...fallback, ...(updated || {}) } };
+          }),
+        };
+      },
+    );
+    void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
   }
 
   return (
-    <div className="page-shell flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden">
-      <header className="shrink-0 border-b border-border bg-card px-4 py-3 sm:px-5 lg:px-7">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">Prospection · Entreprises</span>
-              <span className="text-[10px] text-muted-foreground">{total} prospects enregistrés</span>
-            </div>
-            <p className="mt-0.5 text-sm font-semibold text-foreground">1 entreprise = 1 prospect commercial. Les contacts sont les personnes rattachées au compte.</p>
-          </div>
+    <div className="page-shell min-h-[calc(100svh-3rem)] min-w-0 overflow-hidden">
+      <div className="mx-auto flex h-full min-h-[calc(100svh-3rem)] w-full max-w-[1500px] flex-col px-3 py-5 sm:px-5 lg:px-7">
+        <PageHeader
+          eyebrow="CRM"
+          title="Prospection"
+          description="Une seule file de travail pour qualifier, appeler et faire avancer les entreprises."
+          actions={
+            <>
+              <Select value={segmentId || "__all__"} onValueChange={value => void setSegmentId(value === "__all__" ? "" : value)}>
+                <SelectTrigger className="h-8 w-[210px] border-border/70 bg-background text-xs"><SelectValue placeholder="Segment" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Toutes les entreprises</SelectItem>
+                  {visibleLists.map(list => (
+                    <SelectItem key={list.listId} value={list.listId}>{list.name}{list.size !== undefined ? ` · ${list.size}` : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 text-xs"><a href="/segments"><ListFilter size={14} /> Segments</a></Button>
+              <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => setNewCompanyOpen(true)}><Building2 size={14} /> Ajouter</Button>
+            </>
+          }
+        />
 
-          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap xl:items-center">
-            <Select value={segmentId || "__all__"} onValueChange={value => setSegmentId(value === "__all__" ? "" : value)}>
-              <SelectTrigger className="h-9 w-full xl:w-[220px]"><SelectValue placeholder="Segment" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Toutes les entreprises</SelectItem>
-                {visibleLists.map(list => (
-                  <SelectItem key={list.listId} value={list.listId}>{list.name}{list.size !== undefined ? ` · ${list.size}` : ""}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Button asChild variant="outline" size="sm" className="h-9 w-full gap-1.5 xl:w-auto"><a href="/segments"><ListFilter size={14} /> Segments</a></Button>
-            <Button size="sm" variant="outline" className="h-9 w-full gap-1.5 xl:w-auto" onClick={() => setNewCompanyOpen(true)}><Building2 size={14} /> Ajouter une entreprise</Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="min-h-0 min-w-0 flex-1 overflow-hidden p-2 sm:p-4 lg:px-6 lg:py-5">
-        <Card className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+        <div className="mt-6 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-card/35">
           <SdrWorkQueue
             activeFilter={workFilter}
             actionableCount={actionableCount}
@@ -299,24 +287,35 @@ export function CompanyFirstProspectionView() {
             excludedCount={excluded}
             totalCount={classified.length}
             segmentName={currentList?.name}
-            loading={loading || sessionCreating}
-            onFilterChange={setWorkFilter}
+            loading={loading || claimSession.isPending}
+            onFilterChange={value => void setWorkFilter(value)}
             onStartSession={() => void startSession()}
           />
 
-          <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-3 py-2.5 sm:px-4">
-            <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
-              <Button variant={view === "table" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("table")}><Table2 size={14} /> Base prospects</Button>
-              <Button variant={view === "board" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5" onClick={() => setView("board")}><SquareKanban size={14} /> Pipeline</Button>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2.5 sm:px-4">
+            <div className="flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5">
+              <Button variant={view === "table" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => void setView("table")}><Table2 size={13} /> Base</Button>
+              <Button variant={view === "board" ? "secondary" : "ghost"} size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => void setView("board")}><SquareKanban size={13} /> Pipeline</Button>
             </div>
 
             <CompanyMultiFilter companies={companies} owners={owners} value={filters} onChange={setFilters} />
-            <div className="relative min-w-0 flex-1 sm:flex-none"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Entreprise, domaine, ville…" className="h-9 w-full pl-9 sm:w-56" /></div>
-            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>{syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}</Button>
-            <span className="ml-auto hidden text-[11px] text-muted-foreground 2xl:inline">Une seule base entreprise pilote qualification, attribution, appels et pipeline.</span>
+            <div className="relative min-w-0 flex-1 sm:flex-none">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={event => void setQuery(event.target.value)}
+                placeholder="Entreprise, domaine, ville…"
+                className="h-8 w-full border-border/70 bg-background pl-9 text-xs sm:w-56"
+              />
+            </div>
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+              {syncMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              Synchroniser
+            </Button>
+            <span className="ml-auto hidden text-[11px] text-muted-foreground xl:inline">{total} entreprises</span>
           </div>
 
-          {error ? <div className="mx-4 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
+          {error ? <div className="mx-4 mt-3 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</div> : null}
 
           {view === "board" ? (
             <CompanyProspectionBoard
@@ -325,12 +324,12 @@ export function CompanyFirstProspectionView() {
               loading={loading}
               onOpenCompany={id => router.push(`/companies/${id}`)}
               onStatusChange={handleStatusChange}
-              onError={setError}
+              onError={setActionError}
             />
           ) : null}
 
           {view === "table" ? (
-            <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto border-t border-border minari-scrollbar">
+            <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto border-t border-border/60 minari-scrollbar">
               <Table className="w-full table-fixed">
                 <TableHeader>
                   <TableRow>
@@ -348,7 +347,9 @@ export function CompanyFirstProspectionView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell colSpan={11} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filtered.map(company => {
+                  {loading ? (
+                    <TableRow><TableCell colSpan={11} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow>
+                  ) : filtered.map(company => {
                     const p = company.properties;
                     const stage = deriveCompanyStage(company);
                     const decision = getCompanyProspectionDecision(company, stage);
@@ -383,11 +384,19 @@ export function CompanyFirstProspectionView() {
               </Table>
             </div>
           ) : null}
-        </Card>
+        </div>
       </div>
 
-      <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={sessionCompanies} onOpenCompany={id => router.push(`/companies/${id}`)} />
-      <NewCompanyDialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen} onCreated={() => void load(true)} />
+      <ProspectionSession
+        open={sessionOpen}
+        onOpenChange={open => {
+          setSessionOpen(open);
+          if (!open) stopGlobalSession();
+        }}
+        companies={sessionCompanies}
+        onOpenCompany={id => router.push(`/companies/${id}`)}
+      />
+      <NewCompanyDialog open={newCompanyOpen} onOpenChange={setNewCompanyOpen} onCreated={() => void companiesQuery.refetch()} />
     </div>
   );
 }
