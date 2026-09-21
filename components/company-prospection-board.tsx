@@ -241,7 +241,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
 
       <CompanyLaterFollowupDialog
         open={Boolean(laterCompany)}
-        companyName={laterCompany?.properties.name || laterCompany?.properties.domain}
+        companyName={laterCompany?.properties.name || laterCompany?.properties.domain || undefined}
         saving={Boolean(laterCompany && savingId === laterCompany.id)}
         onOpenChange={open => { if (!open) setLaterCompany(null); }}
         onConfirm={confirmLater}
