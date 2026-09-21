@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
 import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { createCompanyReminderTask } from "@/lib/hubspot/tasks";
 
 type WorkflowAction =
   | "NEW"
@@ -63,6 +64,41 @@ function parseReminder(value: unknown) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/\n/g, "<br>");
+}
+
+async function createCompanyNote(companyId: string, noteBody: string) {
+  const labelsPayload = await hubspotJson("/crm/associations/2026-03/notes/companies/labels");
+  const labels = labelsPayload?.results || [];
+  const association = labels.find((item: any) => item.category === "HUBSPOT_DEFINED" && item.label == null)
+    || labels.find((item: any) => item.category === "HUBSPOT_DEFINED");
+  if (!association?.typeId) throw new Error("Association HubSpot note/entreprise introuvable");
+
+  return hubspotJson("/crm/objects/2026-03/notes", {
+    method: "POST",
+    body: JSON.stringify({
+      properties: {
+        hs_timestamp: new Date().toISOString(),
+        hs_note_body: escapeHtml(noteBody),
+      },
+      associations: [{
+        to: { id: companyId },
+        types: [{
+          associationCategory: association.category,
+          associationTypeId: Number(association.typeId),
+        }],
+      }],
+    }),
+  });
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -74,6 +110,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!allowed.includes(action)) return NextResponse.json({ error: "Action de workflow invalide" }, { status: 400 });
 
     const reminderAt = parseReminder(body.reminderAt);
+    const reason = String(body.reason || "").trim();
+    const createTask = body.createTask === true;
+    const createNote = body.createNote === true && Boolean(reason);
     if (action === "LATER") {
       if (!reminderAt) return NextResponse.json({ error: "Une date de reprise est obligatoire pour Ultérieur" }, { status: 400 });
       if (reminderAt.getTime() <= Date.now()) return NextResponse.json({ error: "La date de reprise doit être dans le futur" }, { status: 400 });
@@ -143,12 +182,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         prospecting_status: PROSPECTION_LABEL[action],
         qualification_status: PROSPECTION_LABEL[action],
         qualification_score: QUALIFICATION_SCORE[action],
-        qualification_reason: body.reason ? String(body.reason) : "Statut modifié depuis le Gando Sales Cockpit",
+        qualification_reason: reason || "Statut modifié depuis le Gando Sales Cockpit",
         qualification_next_action_at: reminderAt?.toISOString() || null,
         qualification_last_call_status: properties.statut_de_lappel || existing.qualification_last_call_status || null,
         qualification_source: "sales_cockpit_manual",
       }).eq("hubspot_id", id);
       if (error) console.error("Supabase workflow company:", error.message);
+    }
+
+    let task: any = null;
+    let note: any = null;
+
+    if (reminderAt && createTask && (action === "LATER" || action === "FOLLOW_UP")) {
+      task = await createCompanyReminderTask(
+        {
+          ...company,
+          id,
+          properties: {
+            ...(company.properties || {}),
+            ...properties,
+          },
+        },
+        reminderAt,
+        reason,
+      );
+    }
+
+    if (createNote && reason) {
+      note = await createCompanyNote(id, reason);
     }
 
     const companyResponse = {
@@ -157,7 +218,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         ...(updated.properties || {}),
         qualification_status: PROSPECTION_LABEL[action],
         qualification_score: String(QUALIFICATION_SCORE[action]),
-        qualification_reason: body.reason ? String(body.reason) : "Statut modifié depuis le Gando Sales Cockpit",
+        qualification_reason: reason || "Statut modifié depuis le Gando Sales Cockpit",
         qualification_next_action_at: reminderAt?.toISOString() || "",
       },
     };
@@ -165,7 +226,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({
       company: companyResponse,
       contact: null,
-      task: null,
+      task,
+      note,
       workflow: {
         action,
         reminderAt: reminderAt?.toISOString() || null,

@@ -5,7 +5,7 @@ import { Building2, CalendarClock, CheckCircle2, Clock3, Loader2, Phone, RotateC
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { CompanyLaterFollowupDialog, type LaterFollowupPayload } from "@/components/company-later-followup-dialog";
 import { getCompanyProspectionDecision, type CompanyStage } from "@/lib/company-prospection-priority";
 import { formatDate } from "@/lib/utils";
 
@@ -86,25 +86,11 @@ function callLabel(value?: string | null) {
   return value ? labels[value] || value : "Aucun appel";
 }
 
-function addMonths(months: number) {
-  const date = new Date();
-  date.setMonth(date.getMonth() + months);
-  date.setHours(9, 0, 0, 0);
-  return date;
-}
-
-function localDateTimeValue(date: Date) {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
 export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpenCompany, onStatusChange, onError }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [laterCompany, setLaterCompany] = useState<Company | null>(null);
-  const [laterAt, setLaterAt] = useState(() => localDateTimeValue(addMonths(3)));
-  const [laterReason, setLaterReason] = useState("");
 
   const groups = useMemo(() => {
     const map = new Map<CompanyStage, Company[]>();
@@ -113,20 +99,34 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
     return map;
   }, [companies]);
 
-  async function applyStage(company: Company, stage: CompanyStage, reminderAt?: string, reason?: string) {
-    if (deriveCompanyStage(company) === stage && stage !== "FOLLOW_UP") return;
+  async function applyStage(
+    company: Company,
+    stage: CompanyStage,
+    reminderAt?: string,
+    reason?: string,
+    createTask = false,
+  ) {
+    if (deriveCompanyStage(company) === stage && stage !== "FOLLOW_UP" && stage !== "LATER") return true;
     setSavingId(company.id);
     try {
       const response = await fetch(`/api/companies/${company.id}/workflow`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: stage, reminderAt, reason }),
+        body: JSON.stringify({
+          action: stage,
+          reminderAt,
+          reason,
+          createTask,
+          createNote: Boolean(reason?.trim()),
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "HubSpot a rejeté le changement de workflow");
       onStatusChange(company.id, stage, data.company?.properties || undefined);
+      return true;
     } catch (error) {
       onError(error instanceof Error ? error.message : "Impossible de déplacer l’entreprise");
+      return false;
     } finally {
       setSavingId(null);
       setDragId(null);
@@ -137,8 +137,6 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
   function move(company: Company, stage: CompanyStage) {
     if (stage === "LATER") {
       setLaterCompany(company);
-      setLaterAt(localDateTimeValue(addMonths(3)));
-      setLaterReason("");
       setDragId(null);
       setDragOver(null);
       return;
@@ -146,19 +144,19 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
     void applyStage(company, stage);
   }
 
-  async function confirmLater() {
-    if (!laterCompany || !laterAt) return;
+  async function confirmLater(payload: LaterFollowupPayload) {
+    if (!laterCompany) return;
     const company = laterCompany;
-    setLaterCompany(null);
-    await applyStage(company, "LATER", new Date(laterAt).toISOString(), laterReason);
+    const saved = await applyStage(company, "LATER", payload.reminderAt, payload.note, payload.createTask);
+    if (saved) setLaterCompany(null);
   }
 
   if (loading) return <div className="grid h-64 place-items-center"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden border-t border-border minari-scrollbar">
-        <div className="flex h-full min-w-max items-start gap-3 p-4">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto border-t border-border minari-scrollbar">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {COMPANY_PIPELINE.map(column => {
             const cards = groups.get(column.value) || [];
             const isOver = dragOver === column.value;
@@ -173,7 +171,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                   const company = companies.find(item => item.id === dragId);
                   if (company) move(company, column.value);
                 }}
-                className={`flex h-full max-h-[calc(100vh-285px)] w-72 shrink-0 flex-col rounded-xl border ${isOver ? "border-primary bg-accent/50" : terminal ? "border-border bg-muted/15" : "border-border bg-muted/30"}`}
+                className={`flex h-[420px] min-w-0 flex-col rounded-xl border ${isOver ? "border-primary bg-accent/50" : terminal ? "border-border bg-muted/15" : "border-border bg-muted/30"}`}
               >
                 <header className="flex items-center gap-2 px-3 py-3">
                   {column.value === "WON" ? <Trophy size={14} className="text-emerald-500" /> : column.value === "LOST" ? <XCircle size={14} className="text-rose-500" /> : column.value === "LATER" ? <Clock3 size={14} className="text-amber-500" /> : column.value === "DEMO_SCHEDULED" ? <CalendarClock size={14} className="text-primary" /> : <span className="h-2 w-2 rounded-full bg-primary" />}
@@ -241,19 +239,13 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
         </div>
       </div>
 
-      {laterCompany ? (
-        <div className="fixed inset-0 z-[120] grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={event => { if (event.currentTarget === event.target) setLaterCompany(null); }}>
-          <div className="w-full max-w-md rounded-2xl border border-border bg-popover p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-3"><div><h3 className="font-display text-lg font-bold">Relance ultérieure</h3><p className="mt-1 text-sm text-muted-foreground">{laterCompany.properties.name || "Cette entreprise"} sort de la file active jusqu’à la date choisie.</p></div><Button variant="ghost" size="icon" onClick={() => setLaterCompany(null)}><XCircle size={17} /></Button></div>
-            <div className="mt-5 grid grid-cols-3 gap-2">
-              {[1, 3, 6].map(months => <Button key={months} variant="outline" size="sm" onClick={() => setLaterAt(localDateTimeValue(addMonths(months)))}>+ {months} mois</Button>)}
-            </div>
-            <div className="mt-4"><label className="text-xs font-semibold text-muted-foreground">Date de reprise</label><Input type="datetime-local" value={laterAt} min={localDateTimeValue(new Date(Date.now() + 60_000))} onChange={event => setLaterAt(event.target.value)} className="mt-1.5" /></div>
-            <div className="mt-4"><label className="text-xs font-semibold text-muted-foreground">Motif / contexte (optionnel)</label><Input value={laterReason} onChange={event => setLaterReason(event.target.value)} placeholder="Ex. saison prochaine, nouveau parc en janvier…" className="mt-1.5" /></div>
-            <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setLaterCompany(null)}>Annuler</Button><Button onClick={() => void confirmLater()} disabled={!laterAt}><CalendarClock size={14} /> Planifier la reprise</Button></div>
-          </div>
-        </div>
-      ) : null}
+      <CompanyLaterFollowupDialog
+        open={Boolean(laterCompany)}
+        companyName={laterCompany?.properties.name || laterCompany?.properties.domain || undefined}
+        saving={Boolean(laterCompany && savingId === laterCompany.id)}
+        onOpenChange={open => { if (!open) setLaterCompany(null); }}
+        onConfirm={confirmLater}
+      />
     </>
   );
 }
