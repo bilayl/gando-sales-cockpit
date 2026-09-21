@@ -56,3 +56,32 @@ export function useKpiSync(canSync: boolean) {
     },
   });
 }
+
+export function useKpiMutation<TData = unknown, TVariables = unknown>({
+  name,
+  path,
+  method = "PUT",
+  invalidate = [name],
+}: {
+  name: string;
+  path: string | ((variables: TVariables) => string);
+  method?: "POST" | "PUT" | "PATCH" | "DELETE";
+  invalidate?: string[];
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation<TData, Error, TVariables>({
+    mutationFn: variables =>
+      apiJson<TData>(typeof path === "function" ? path(variables) : path, {
+        method,
+        body: JSON.stringify(variables),
+      }),
+    onSuccess: async () => {
+      await Promise.all(
+        invalidate.map(key =>
+          queryClient.invalidateQueries({ queryKey: queryKeys.kpi.endpoint(key) }),
+        ),
+      );
+    },
+  });
+}
