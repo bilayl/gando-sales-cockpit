@@ -94,4 +94,5 @@ export function KpiCeoFocus() {
         <p className="mt-1 text-xs leading-5 text-muted-foreground">{priority.text}</p>
       </div>
     </section>
-  )}
+  );
+}
