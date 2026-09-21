@@ -438,12 +438,12 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
   function skip() {
     if (!remaining.length) return;
-    setIndex(previous => (previous + 1) % remaining.length);
+    setIndex((index + 1) % remaining.length);
   }
 
   function previous() {
     if (!remaining.length) return;
-    setIndex(previous => (previous - 1 + remaining.length) % remaining.length);
+    setIndex((index - 1 + remaining.length) % remaining.length);
   }
 
   function openFinish() {
