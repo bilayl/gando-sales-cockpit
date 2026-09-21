@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CalendarDays,
@@ -23,48 +24,10 @@ import { AddContactButton } from "@/components/add-contact-button";
 import { ProspectionSession } from "@/components/prospection-session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { fetchJsonCached, invalidateJsonCache } from "@/lib/client-query-cache";
+import { useTodayDashboard, type AgendaPayload, type OnoffStatus, type TodayContact as Contact, type TodayPayload, type TodayTask as Task } from "@/hooks/queries/use-today-dashboard";
+import { queryKeys } from "@/lib/query/query-keys";
 
 const ONOFF_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
-
-type Contact = {
-  id: string;
-  properties: Record<string, string | null | undefined>;
-  ownership?: "MINE" | "UNASSIGNED" | "OTHER";
-  assignee?: string | null;
-};
-
-type Company = { id: string; properties: Record<string, string | null | undefined> };
-
-type Task = {
-  id: string;
-  properties: Record<string, string | null | undefined>;
-  cockpitAssignee?: { email?: string | null; displayName?: string | null } | null;
-  associations?: {
-    contact?: { id: string; properties?: Record<string, string | null | undefined> } | null;
-    company?: { id: string; properties?: Record<string, string | null | undefined> } | null;
-  };
-};
-
-type TodayPayload = {
-  member?: { email?: string; displayName?: string | null };
-  results?: Contact[];
-  mineCount?: number;
-  availableCount?: number;
-  callableCount?: number;
-  totalActionable?: number;
-  callWindow?: string;
-  error?: string;
-};
-
-type OnoffStatus = {
-  configured?: boolean;
-  connected?: boolean | null;
-  latestProcessingStatus?: string | null;
-  error?: string | null;
-};
-
-type AgendaPayload = { results?: any[]; reminders?: Contact[]; warnings?: string[] };
 
 type UnifiedAction =
   | { kind: "TASK"; key: string; priority: number; at: number; task: Task; overdue: boolean }
@@ -135,14 +98,6 @@ function formatTime(value?: string | null) {
   return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-function dayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-
 function taskLabel(task: Task) {
   return task.properties?.hs_task_subject || "Action commerciale";
 }
@@ -171,74 +126,26 @@ function meetingStart(meeting: any) {
 }
 
 export function TodayDialerView() {
-  const [today, setToday] = useState<TodayPayload | null>(null);
-  const [onoff, setOnoff] = useState<OnoffStatus | null>(null);
-  const [todayTasks, setTodayTasks] = useState<Task[]>([]);
-  const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
-  const [agenda, setAgenda] = useState<AgendaPayload>({});
+  const queryClient = useQueryClient();
+  const dashboard = useTodayDashboard();
+  const today = dashboard.today.data ?? null;
+  const onoff = dashboard.onoff.data ?? null;
+  const todayTasks = dashboard.todayTasks.data ?? [];
+  const overdueTasks = dashboard.overdueTasks.data ?? [];
+  const agenda = dashboard.agenda.data ?? {};
+  const loading = dashboard.isPending;
+  const refreshing = dashboard.isFetching && !dashboard.isPending;
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
-  const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [sessionOpen, setSessionOpen] = useState(false);
-  const [sessionStarting, setSessionStarting] = useState(false);
   const [sessionCompany, setSessionCompany] = useState<Company | null>(null);
-  const loadSequenceRef = useRef(0);
-  const loadedOnceRef = useRef(false);
-
-  async function load(force = false) {
-    const sequence = ++loadSequenceRef.current;
-    if (loadedOnceRef.current) setRefreshing(true);
-    else setLoading(true);
-    setMessage("");
-
-    const range = dayRange();
-    const agendaUrl = `/api/agenda?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`;
-    const auxiliaryPromise = Promise.allSettled([
-      fetchJsonCached<OnoffStatus>("/api/onoff/status", { ttlMs: 30_000, force }),
-      fetchJsonCached<{ results?: Task[] }>("/api/tasks?period=today", { ttlMs: 10_000, force }),
-      fetchJsonCached<{ results?: Task[] }>("/api/tasks?period=overdue", { ttlMs: 10_000, force }),
-      fetchJsonCached<AgendaPayload>(agendaUrl, { ttlMs: 10_000, force }),
-    ]);
-
-    try {
-      // The call queue is the critical payload: show it as soon as it is ready instead
-      // of blocking the whole screen on tasks, agenda and telephony status.
-      const todayPayload = await fetchJsonCached<TodayPayload>("/api/today", { ttlMs: 10_000, force });
-      if (sequence !== loadSequenceRef.current) return;
-
-      setToday(todayPayload);
-      const first = todayPayload.results?.[0];
-      setSelectedId(current => current && todayPayload.results?.some((item: Contact) => item.id === current) ? current : first?.id || null);
-      loadedOnceRef.current = true;
-      setLoading(false);
-
-      const [onoffResult, todayTasksResult, overdueTasksResult, agendaResult] = await auxiliaryPromise;
-      if (sequence !== loadSequenceRef.current) return;
-      if (onoffResult.status === "fulfilled") setOnoff(onoffResult.value);
-      if (todayTasksResult.status === "fulfilled") setTodayTasks(todayTasksResult.value.results || []);
-      if (overdueTasksResult.status === "fulfilled") setOverdueTasks(overdueTasksResult.value.results || []);
-      if (agendaResult.status === "fulfilled") setAgenda(agendaResult.value);
-    } catch (error) {
-      if (sequence === loadSequenceRef.current) {
-        setMessage(error instanceof Error ? error.message : "Erreur de chargement");
-      }
-    } finally {
-      if (sequence === loadSequenceRef.current) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }
-
-  useEffect(() => {
-    void load(false);
-    return () => { loadSequenceRef.current += 1; };
-  }, []);
 
   const results = today?.results || [];
-  const selected = useMemo(() => results.find(contact => contact.id === selectedId) || results[0] || null, [results, selectedId]);
+  const selected = useMemo(
+    () => results.find(contact => contact.id === selectedId) || results[0] || null,
+    [results, selectedId],
+  );
   const p = selected?.properties || {};
   const selectedNumber = numberFor(selected);
   const apiHealthy = Boolean(onoff?.configured && onoff?.connected !== false);
@@ -318,10 +225,8 @@ export function TodayDialerView() {
           : `Prochain rendez-vous à ${formatTime(meetingStart(unifiedActions[0].meeting))}.`
     : "Aucune action commerciale détectée pour le moment.";
 
-  async function completeTask(taskId: string) {
-    setSavingTaskId(taskId);
-    setMessage("");
-    try {
+  const completeTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
       const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -329,38 +234,54 @@ export function TodayDialerView() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Impossible de terminer la tâche");
-      setTodayTasks(current => current.filter(task => task.id !== taskId));
-      setOverdueTasks(current => current.filter(task => task.id !== taskId));
-      invalidateJsonCache("/api/tasks");
-      invalidateJsonCache("/api/agenda");
-    } catch (error) {
+      return taskId;
+    },
+    onMutate: () => setMessage(""),
+    onSuccess: async taskId => {
+      queryClient.setQueryData<Task[]>(queryKeys.tasks.list({ period: "today" }), current =>
+        (current ?? []).filter(task => task.id !== taskId),
+      );
+      queryClient.setQueryData<Task[]>(queryKeys.tasks.list({ period: "overdue" }), current =>
+        (current ?? []).filter(task => task.id !== taskId),
+      );
+      await queryClient.invalidateQueries({ queryKey: dashboard.agendaKey });
+    },
+    onError: error => {
       setMessage(error instanceof Error ? error.message : "Impossible de terminer la tâche");
-    } finally {
-      setSavingTaskId(null);
-    }
+    },
+  });
+
+  function refreshDashboard() {
+    setMessage("");
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["today", "dashboard"] }),
+      queryClient.invalidateQueries({ queryKey: ["onoff", "status"] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
+      queryClient.invalidateQueries({ queryKey: dashboard.agendaKey }),
+    ]);
   }
 
   async function resolveCompanyIds(contact: Contact) {
     let candidate = String(contact.properties.db_company_id || "").trim();
     if (!candidate) {
-      const payload = await fetchJsonCached<any>(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { ttlMs: 5 * 60_000 });
+      const response = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Impossible de charger le contact.");
       candidate = String(payload.companies?.[0]?.id || "").trim();
     }
     if (!candidate) throw new Error("Ce lead n’a aucune entreprise associée : impossible d’ouvrir la session d’appel.");
 
-    const payload = await fetchJsonCached<any>(`/api/prospection/company-id/${encodeURIComponent(candidate)}`, { ttlMs: 5 * 60_000 });
+    const response = await fetch(`/api/prospection/company-id/${encodeURIComponent(candidate)}`, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Impossible de résoudre l’entreprise.");
     const hubspotId = String(payload.hubspotId || "").trim();
     const assignmentId = String(payload.localId || candidate).trim();
     if (!hubspotId) throw new Error("Cette entreprise n’a pas encore d’identifiant HubSpot exploitable.");
     return { assignmentId, hubspotId };
   }
 
-  async function openCallSession(contact = selected) {
-    if (!contact || sessionStarting) return;
-    setSelectedId(contact.id);
-    setSessionStarting(true);
-    setMessage("");
-    try {
+  const sessionMutation = useMutation({
+    mutationFn: async (contact: Contact) => {
       const { assignmentId, hubspotId } = await resolveCompanyIds(contact);
       const assignmentResponse = await fetch("/api/prospection/assignments", {
         method: "POST",
@@ -375,13 +296,23 @@ export function TodayDialerView() {
       const companyResponse = await fetch(`/api/companies/${encodeURIComponent(hubspotId)}/centralized`, { cache: "no-store" });
       const companyPayload = await companyResponse.json().catch(() => ({}));
       if (!companyResponse.ok || !companyPayload.company) throw new Error(companyPayload.error || "Impossible de charger la session d’appel.");
-      setSessionCompany(companyPayload.company as Company);
+      return companyPayload.company as Company;
+    },
+    onMutate: () => setMessage(""),
+    onSuccess: company => {
+      setSessionCompany(company);
       setSessionOpen(true);
-    } catch (error) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.prospection.assignments });
+    },
+    onError: error => {
       setMessage(error instanceof Error ? error.message : "Impossible d’ouvrir la session d’appel.");
-    } finally {
-      setSessionStarting(false);
-    }
+    },
+  });
+
+  async function openCallSession(contact = selected) {
+    if (!contact || sessionMutation.isPending) return;
+    setSelectedId(contact.id);
+    await sessionMutation.mutateAsync(contact).catch(() => null);
   }
 
   return (
@@ -395,7 +326,7 @@ export function TodayDialerView() {
           </div>
           <div className="flex flex-wrap gap-2">
             <AddContactButton />
-            <Button variant="outline" className="h-9 rounded-lg border-border bg-card" onClick={() => void load(true)} disabled={loading || refreshing}>
+            <Button variant="outline" className="h-9 rounded-lg border-border bg-card" onClick={refreshDashboard} disabled={loading || refreshing}>
               {loading || refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Actualiser
             </Button>
             <Button asChild className="h-9 rounded-lg"><Link href="/prospection"><UsersRound className="mr-2 h-4 w-4" />Prospection</Link></Button>
@@ -457,8 +388,8 @@ export function TodayDialerView() {
                   </div>
 
                   <div className="mt-7 flex flex-wrap gap-2">
-                    <Button className="h-11 rounded-xl px-6" onClick={() => void openCallSession()} disabled={sessionStarting || !selectedNumber}>
-                      {sessionStarting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Phone className="mr-2 h-4 w-4" />}Appeler maintenant
+                    <Button className="h-11 rounded-xl px-6" onClick={() => void openCallSession()} disabled={sessionMutation.isPending || !selectedNumber}>
+                      {sessionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Phone className="mr-2 h-4 w-4" />}Appeler maintenant
                     </Button>
                     {p.email ? <Button variant="outline" className="h-11 rounded-xl" asChild><a href={`mailto:${p.email}`}><Mail className="mr-2 h-4 w-4" />Email</a></Button> : null}
                     <Button variant="outline" className="h-11 rounded-xl" asChild><Link href={`/contacts/${selected.id}`}>Voir la fiche <ExternalLink className="ml-2 h-3.5 w-3.5" /></Link></Button>
@@ -502,7 +433,7 @@ export function TodayDialerView() {
                           <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{taskContext(action.task)}</div>
                           <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] text-muted-foreground"><span>{formatDateTime(action.task.properties.hs_timestamp)}</span><span>·</span><span>{taskAssignee(action.task)}</span></div>
                         </div>
-                        <button type="button" title="Marquer comme terminée" onClick={() => void completeTask(action.task.id)} disabled={savingTaskId === action.task.id} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-700 disabled:opacity-50">{savingTaskId === action.task.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}</button>
+                        <button type="button" title="Marquer comme terminée" onClick={() => completeTaskMutation.mutate(action.task.id)} disabled={completeTaskMutation.isPending && completeTaskMutation.variables === action.task.id} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-700 disabled:opacity-50">{completeTaskMutation.isPending && completeTaskMutation.variables === action.task.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}</button>
                       </div>
                     </div>
                   );
