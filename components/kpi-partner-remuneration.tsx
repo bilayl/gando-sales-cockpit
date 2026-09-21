@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
+import { useKpiEndpoint } from "@/hooks/queries/use-kpi"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -74,24 +75,10 @@ function monthLabel(value: string) {
 }
 
 export function KpiPartnerRemuneration() {
-  const [data, setData] = useState<PartnerResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/kpi/partner-remuneration", { cache: "no-store" })
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Impossible de charger les redevances.")
-        setData(body)
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de charger les redevances.")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const query = useKpiEndpoint<PartnerResponse>("partner-remuneration", "/api/kpi/partner-remuneration")
+  const data = query.data
+  const loading = query.isLoading
+  const error = query.error?.message || ""
 
   const monthlyRows = useMemo(() => {
     if (!data) return []
