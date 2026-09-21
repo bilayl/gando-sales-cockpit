@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Briefcase,
   Building2,
@@ -37,34 +38,11 @@ import { Input } from "@/components/ui/input";
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach";
 import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
 import { getBestCallTimeForProperties } from "@/lib/call-timing";
+import { useProspectionSessionData, type ProspectionTaskSummary as TaskSummary } from "@/hooks/queries/use-prospection-session";
+import { queryKeys } from "@/lib/query/query-keys";
+import { useProspectionStore } from "@/stores/prospection-store";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
-
-type TaskSummary = {
-  openTaskCount: number;
-  overdueTaskCount: number;
-  todayTaskCount: number;
-  nextTask: {
-    id: string;
-    subject: string;
-    status: string;
-    priority?: string | null;
-    type?: string | null;
-    dueAt?: string | null;
-    sourceContactId?: string | null;
-    sourceContactName?: string | null;
-    sourceContactPhone?: string | null;
-    sourceContactJobTitle?: string | null;
-  } | null;
-};
-
-type OnoffSessionState = {
-  configured?: boolean;
-  connected?: boolean | null;
-  latestProcessingStatus?: string | null;
-  latestReceivedAt?: string | null;
-  error?: string | null;
-};
 
 type Props = {
   open: boolean;
@@ -349,57 +327,49 @@ function CompanyProfilePanel({
 }
 
 export function ProspectionSession({ open, onOpenChange, companies, onOpenCompany }: Props) {
-  const [summaries, setSummaries] = useState<Record<string, TaskSummary>>({});
-  const [onoff, setOnoff] = useState<OnoffSessionState | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [index, setIndex] = useState(0);
+  const queryClient = useQueryClient();
+  const index = useProspectionStore(state => state.currentLeadIndex);
+  const setIndex = useProspectionStore(state => state.setCurrentLeadIndex);
+  const startGlobalSession = useProspectionStore(state => state.startSession);
+  const resetGlobalSession = useProspectionStore(state => state.resetSession);
+  const setSelectedCompanyId = useProspectionStore(state => state.setSelectedCompanyId);
+
   const [done, setDone] = useState<Set<string>>(new Set());
   const [finishOpen, setFinishOpen] = useState(false);
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
   const [reminderAt, setReminderAt] = useState(reminderPreset(1));
   const [note, setNote] = useState("");
-  const [savingOutcome, setSavingOutcome] = useState(false);
   const [evaluationTime, setEvaluationTime] = useState(Date.now);
 
-  useEffect(() => {
-    if (!open) return;
-    setIndex(0);
-    setDone(new Set());
-    setError("");
-    setOnoff(null);
-    setFinishOpen(false);
-    setOutcome(null);
-    setEvaluationTime(Date.now());
-    const now = Date.now();
-    const activeIds = companies
+  const activeIds = useMemo(() => {
+    const now = evaluationTime;
+    return companies
       .filter(company => {
         const stage = deriveCompanyStage(company, now);
         return getCompanyProspectionDecision(company, stage, now).bucket === "ACTIONABLE";
       })
       .map(company => company.id)
       .slice(0, 100);
-    if (!activeIds.length) {
-      setSummaries({});
+  }, [companies, evaluationTime]);
+
+  const sessionQuery = useProspectionSessionData(activeIds, open);
+  const summaries = sessionQuery.data?.summaries ?? {};
+  const onoff = sessionQuery.data?.onoff ?? null;
+  const loading = open && activeIds.length > 0 && sessionQuery.isPending;
+  const error = sessionQuery.error instanceof Error ? sessionQuery.error.message : "";
+
+  useEffect(() => {
+    if (!open) {
+      resetGlobalSession();
       return;
     }
-
-    setLoading(true);
-    fetch("/api/prospection/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ companyIds: activeIds }),
-      cache: "no-store",
-    })
-      .then(async response => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "Impossible de préparer la session");
-        setSummaries(body.summaries || {});
-        setOnoff((body.onoff || null) as OnoffSessionState | null);
-      })
-      .catch(reason => setError(reason instanceof Error ? reason.message : "Impossible de préparer la session"))
-      .finally(() => setLoading(false));
-  }, [open, companies]);
+    setIndex(0);
+    setDone(new Set());
+    setFinishOpen(false);
+    setOutcome(null);
+    setEvaluationTime(Date.now());
+    startGlobalSession();
+  }, [open, resetGlobalSession, setIndex, startGlobalSession]);
 
   const queue = useMemo(() => {
     const now = evaluationTime;
@@ -423,6 +393,40 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   const remaining = queue.filter(item => !done.has(item.company.id));
   const current = remaining[Math.min(index, Math.max(remaining.length - 1, 0))] || null;
 
+  useEffect(() => {
+    setSelectedCompanyId(open ? current?.company.id ?? null : null);
+  }, [current?.company.id, open, setSelectedCompanyId]);
+
+  const workflowMutation = useMutation({
+    mutationFn: async ({
+      companyId,
+      action,
+      reminderAt,
+      reason,
+    }: {
+      companyId: string;
+      action: string;
+      reminderAt: string | null;
+      reason: string;
+    }) => {
+      const response = await fetch(`/api/companies/${companyId}/workflow`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, reminderAt, reason }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Impossible d’enregistrer le résultat de l’appel");
+      return payload;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.companies.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.prospection.session(activeIds) }),
+      ]);
+    },
+  });
+  const savingOutcome = workflowMutation.isPending;
+
   function advanceAfterOutcome() {
     if (!current) return;
     setDone(previous => new Set(previous).add(current.company.id));
@@ -434,12 +438,12 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
   function skip() {
     if (!remaining.length) return;
-    setIndex(previous => (previous + 1) % remaining.length);
+    setIndex((index + 1) % remaining.length);
   }
 
   function previous() {
     if (!remaining.length) return;
-    setIndex(previous => (previous - 1 + remaining.length) % remaining.length);
+    setIndex((index - 1 + remaining.length) % remaining.length);
   }
 
   function openFinish() {
@@ -504,15 +508,13 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
       nextReminder = parsed.toISOString();
     }
 
-    setSavingOutcome(true);
     try {
-      const response = await fetch(`/api/companies/${current.company.id}/workflow`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action, reminderAt: nextReminder, reason }),
+      await workflowMutation.mutateAsync({
+        companyId: current.company.id,
+        action,
+        reminderAt: nextReminder,
+        reason,
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Impossible d’enregistrer le résultat de l’appel");
 
       const message = outcome === "MEETING"
         ? "RDV enregistré — compte sorti de la file setter."
@@ -526,8 +528,6 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
       advanceAfterOutcome();
     } catch (reasonValue) {
       toast.error(reasonValue instanceof Error ? reasonValue.message : "Impossible d’enregistrer le résultat de l’appel");
-    } finally {
-      setSavingOutcome(false);
     }
   }
 

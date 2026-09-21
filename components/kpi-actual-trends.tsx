@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import {
   CartesianGrid,
   Legend,
@@ -14,23 +13,7 @@ import {
 } from "recharts"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-
-type Row = {
-  month: string
-  partial: boolean
-  cautions: number
-  tdvCents: number
-  revenueCents: number
-  contributionCents: number
-  lossProxyCents: number
-  mau: number
-  cautionsPerMau: number | null
-  revenuePerCautionCents: number | null
-  contributionPerCautionCents: number | null
-  retentionRate: number | null
-}
-
-type Data = { actual: Row[]; drivers: { usageReference: number } }
+import { useKpiDecisionIntelligence } from "@/hooks/queries/use-kpis"
 
 type TooltipItem = { name?: string; value?: number | string; color?: string }
 
@@ -86,27 +69,10 @@ function ChartCard({ title, subtitle, children }: { title: string; subtitle: str
 }
 
 export function KpiActualTrends({ variant }: { variant: "growth" | "economics" }) {
-  const [data, setData] = useState<Data | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/kpi/decision-intelligence", { cache: "no-store" })
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Impossible de charger les tendances.")
-        setData(body)
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de charger les tendances.")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const { data, isPending: loading, error } = useKpiDecisionIntelligence();
 
   if (loading) return <Skeleton className="h-[580px] w-full rounded-xl" />
-  if (error || !data) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error || "Tendances indisponibles"}</div>
+  if (error || !data) return <div className="rounded-lg bg-destructive/7 px-3 py-2.5 text-xs text-destructive">{error instanceof Error ? error.message : "Tendances indisponibles"}</div>
 
   const actual = data.actual.map(row => ({
     ...row,

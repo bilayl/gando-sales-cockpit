@@ -1,15 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { Card } from "@/components/ui/card"
+import { useMemo } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
-
-type Scorecard = {
-  cautions: { current: number; mom: number | null }
-  mau: { current: number; cautionsPerMau: number | null }
-  contribution: { perCautionCents: number | null; complete: boolean; missing: string[] }
-  loss: { rate: number | null; isProxy: boolean }
-}
+import { useKpiScorecard } from "@/hooks/queries/use-kpis"
 
 type Signal = { level: "critical" | "important" | "healthy"; title: string; text: string }
 
@@ -33,24 +26,7 @@ const LEVEL_META = {
 }
 
 export function KpiCeoFocus() {
-  const [data, setData] = useState<Scorecard | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/kpi/ceo-scorecard", { cache: "no-store" })
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Impossible de charger la lecture CEO.")
-        setData(body)
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de charger la lecture CEO.")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const { data, isPending, error } = useKpiScorecard();
 
   const signals = useMemo<Signal[]>(() => {
     if (!data) return []
@@ -89,33 +65,34 @@ export function KpiCeoFocus() {
     return result
   }, [data])
 
-  if (loading) return <Skeleton className="h-[260px] w-full rounded-xl" />
-  if (error || !data) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error || "Lecture CEO indisponible"}</div>
+  if (isPending) return <Skeleton className="h-[180px] w-full rounded-xl" />
+  if (error || !data) return <div className="rounded-lg bg-destructive/7 px-3 py-2.5 text-xs text-destructive">{error instanceof Error ? error.message : "Lecture CEO indisponible"}</div>
 
   const priority = signals.find(signal => signal.level === "critical") || signals.find(signal => signal.level === "important") || signals[0]
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+    <section className="min-w-0">
+      <div className="mb-3 text-xs font-medium text-muted-foreground">Signaux de pilotage</div>
+      <div className="divide-y divide-border/45 border-y border-border/45">
         {signals.map(signal => {
-          const meta = LEVEL_META[signal.level]
+          const meta = LEVEL_META[signal.level];
           return (
-            <Card key={signal.title} className={`p-4 ${meta.border}`}>
-              <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                <span className={`h-2 w-2 rounded-full ${meta.dot}`} /> {meta.label}
+            <div key={signal.title} className="grid gap-2 py-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:items-start">
+              <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.11em] text-muted-foreground">
+                <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+                {signal.title}
               </div>
-              <div className="mt-2 text-sm font-bold">{signal.title}</div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">{signal.text}</p>
-            </Card>
-          )
+              <div className="text-xs leading-5 text-foreground/80">{signal.text}</div>
+            </div>
+          );
         })}
       </div>
 
-      <Card className="border-primary/20 bg-primary/[0.025] px-4 py-3">
-        <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-primary">Priorité CEO</div>
+      <div className="mt-4 rounded-lg bg-muted/40 px-3.5 py-3">
+        <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">Priorité CEO</div>
         <div className="mt-1 text-sm font-semibold">{priority.title}</div>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{priority.text}</p>
-      </Card>
-    </div>
-  )
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{priority.text}</p>
+      </div>
+    </section>
+  );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CalendarDays,
@@ -21,50 +22,16 @@ import {
 } from "lucide-react";
 import { AddContactButton } from "@/components/add-contact-button";
 import { ProspectionSession } from "@/components/prospection-session";
+import { PageHeader } from "@/components/cockpit/page-header";
+import { Stat } from "@/components/cockpit/stat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { fetchJsonCached, invalidateJsonCache } from "@/lib/client-query-cache";
+import { useTodayDashboard, type TodayContact as Contact, type TodayTask as Task } from "@/hooks/queries/use-today-dashboard";
+import { queryKeys } from "@/lib/query/query-keys";
 
 const ONOFF_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
 
-type Contact = {
-  id: string;
-  properties: Record<string, string | null | undefined>;
-  ownership?: "MINE" | "UNASSIGNED" | "OTHER";
-  assignee?: string | null;
-};
-
 type Company = { id: string; properties: Record<string, string | null | undefined> };
-
-type Task = {
-  id: string;
-  properties: Record<string, string | null | undefined>;
-  cockpitAssignee?: { email?: string | null; displayName?: string | null } | null;
-  associations?: {
-    contact?: { id: string; properties?: Record<string, string | null | undefined> } | null;
-    company?: { id: string; properties?: Record<string, string | null | undefined> } | null;
-  };
-};
-
-type TodayPayload = {
-  member?: { email?: string; displayName?: string | null };
-  results?: Contact[];
-  mineCount?: number;
-  availableCount?: number;
-  callableCount?: number;
-  totalActionable?: number;
-  callWindow?: string;
-  error?: string;
-};
-
-type OnoffStatus = {
-  configured?: boolean;
-  connected?: boolean | null;
-  latestProcessingStatus?: string | null;
-  error?: string | null;
-};
-
-type AgendaPayload = { results?: any[]; reminders?: Contact[]; warnings?: string[] };
 
 type UnifiedAction =
   | { kind: "TASK"; key: string; priority: number; at: number; task: Task; overdue: boolean }
@@ -135,14 +102,6 @@ function formatTime(value?: string | null) {
   return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-function dayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-
 function taskLabel(task: Task) {
   return task.properties?.hs_task_subject || "Action commerciale";
 }
@@ -171,74 +130,26 @@ function meetingStart(meeting: any) {
 }
 
 export function TodayDialerView() {
-  const [today, setToday] = useState<TodayPayload | null>(null);
-  const [onoff, setOnoff] = useState<OnoffStatus | null>(null);
-  const [todayTasks, setTodayTasks] = useState<Task[]>([]);
-  const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
-  const [agenda, setAgenda] = useState<AgendaPayload>({});
+  const queryClient = useQueryClient();
+  const dashboard = useTodayDashboard();
+  const today = dashboard.today.data ?? null;
+  const onoff = dashboard.onoff.data ?? null;
+  const todayTasks = dashboard.todayTasks.data ?? [];
+  const overdueTasks = dashboard.overdueTasks.data ?? [];
+  const agenda = dashboard.agenda.data ?? {};
+  const loading = dashboard.isPending;
+  const refreshing = dashboard.isFetching && !dashboard.isPending;
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
-  const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [sessionOpen, setSessionOpen] = useState(false);
-  const [sessionStarting, setSessionStarting] = useState(false);
   const [sessionCompany, setSessionCompany] = useState<Company | null>(null);
-  const loadSequenceRef = useRef(0);
-  const loadedOnceRef = useRef(false);
-
-  async function load(force = false) {
-    const sequence = ++loadSequenceRef.current;
-    if (loadedOnceRef.current) setRefreshing(true);
-    else setLoading(true);
-    setMessage("");
-
-    const range = dayRange();
-    const agendaUrl = `/api/agenda?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`;
-    const auxiliaryPromise = Promise.allSettled([
-      fetchJsonCached<OnoffStatus>("/api/onoff/status", { ttlMs: 30_000, force }),
-      fetchJsonCached<{ results?: Task[] }>("/api/tasks?period=today", { ttlMs: 10_000, force }),
-      fetchJsonCached<{ results?: Task[] }>("/api/tasks?period=overdue", { ttlMs: 10_000, force }),
-      fetchJsonCached<AgendaPayload>(agendaUrl, { ttlMs: 10_000, force }),
-    ]);
-
-    try {
-      // The call queue is the critical payload: show it as soon as it is ready instead
-      // of blocking the whole screen on tasks, agenda and telephony status.
-      const todayPayload = await fetchJsonCached<TodayPayload>("/api/today", { ttlMs: 10_000, force });
-      if (sequence !== loadSequenceRef.current) return;
-
-      setToday(todayPayload);
-      const first = todayPayload.results?.[0];
-      setSelectedId(current => current && todayPayload.results?.some((item: Contact) => item.id === current) ? current : first?.id || null);
-      loadedOnceRef.current = true;
-      setLoading(false);
-
-      const [onoffResult, todayTasksResult, overdueTasksResult, agendaResult] = await auxiliaryPromise;
-      if (sequence !== loadSequenceRef.current) return;
-      if (onoffResult.status === "fulfilled") setOnoff(onoffResult.value);
-      if (todayTasksResult.status === "fulfilled") setTodayTasks(todayTasksResult.value.results || []);
-      if (overdueTasksResult.status === "fulfilled") setOverdueTasks(overdueTasksResult.value.results || []);
-      if (agendaResult.status === "fulfilled") setAgenda(agendaResult.value);
-    } catch (error) {
-      if (sequence === loadSequenceRef.current) {
-        setMessage(error instanceof Error ? error.message : "Erreur de chargement");
-      }
-    } finally {
-      if (sequence === loadSequenceRef.current) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }
-
-  useEffect(() => {
-    void load(false);
-    return () => { loadSequenceRef.current += 1; };
-  }, []);
 
   const results = today?.results || [];
-  const selected = useMemo(() => results.find(contact => contact.id === selectedId) || results[0] || null, [results, selectedId]);
+  const selected = useMemo(
+    () => results.find(contact => contact.id === selectedId) || results[0] || null,
+    [results, selectedId],
+  );
   const p = selected?.properties || {};
   const selectedNumber = numberFor(selected);
   const apiHealthy = Boolean(onoff?.configured && onoff?.connected !== false);
@@ -318,10 +229,8 @@ export function TodayDialerView() {
           : `Prochain rendez-vous à ${formatTime(meetingStart(unifiedActions[0].meeting))}.`
     : "Aucune action commerciale détectée pour le moment.";
 
-  async function completeTask(taskId: string) {
-    setSavingTaskId(taskId);
-    setMessage("");
-    try {
+  const completeTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
       const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -329,38 +238,54 @@ export function TodayDialerView() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Impossible de terminer la tâche");
-      setTodayTasks(current => current.filter(task => task.id !== taskId));
-      setOverdueTasks(current => current.filter(task => task.id !== taskId));
-      invalidateJsonCache("/api/tasks");
-      invalidateJsonCache("/api/agenda");
-    } catch (error) {
+      return taskId;
+    },
+    onMutate: () => setMessage(""),
+    onSuccess: async taskId => {
+      queryClient.setQueryData<Task[]>(queryKeys.tasks.list({ period: "today" }), current =>
+        (current ?? []).filter(task => task.id !== taskId),
+      );
+      queryClient.setQueryData<Task[]>(queryKeys.tasks.list({ period: "overdue" }), current =>
+        (current ?? []).filter(task => task.id !== taskId),
+      );
+      await queryClient.invalidateQueries({ queryKey: dashboard.agendaKey });
+    },
+    onError: error => {
       setMessage(error instanceof Error ? error.message : "Impossible de terminer la tâche");
-    } finally {
-      setSavingTaskId(null);
-    }
+    },
+  });
+
+  function refreshDashboard() {
+    setMessage("");
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["today", "dashboard"] }),
+      queryClient.invalidateQueries({ queryKey: ["onoff", "status"] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
+      queryClient.invalidateQueries({ queryKey: dashboard.agendaKey }),
+    ]);
   }
 
   async function resolveCompanyIds(contact: Contact) {
     let candidate = String(contact.properties.db_company_id || "").trim();
     if (!candidate) {
-      const payload = await fetchJsonCached<any>(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { ttlMs: 5 * 60_000 });
+      const response = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Impossible de charger le contact.");
       candidate = String(payload.companies?.[0]?.id || "").trim();
     }
     if (!candidate) throw new Error("Ce lead n’a aucune entreprise associée : impossible d’ouvrir la session d’appel.");
 
-    const payload = await fetchJsonCached<any>(`/api/prospection/company-id/${encodeURIComponent(candidate)}`, { ttlMs: 5 * 60_000 });
+    const response = await fetch(`/api/prospection/company-id/${encodeURIComponent(candidate)}`, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Impossible de résoudre l’entreprise.");
     const hubspotId = String(payload.hubspotId || "").trim();
     const assignmentId = String(payload.localId || candidate).trim();
     if (!hubspotId) throw new Error("Cette entreprise n’a pas encore d’identifiant HubSpot exploitable.");
     return { assignmentId, hubspotId };
   }
 
-  async function openCallSession(contact = selected) {
-    if (!contact || sessionStarting) return;
-    setSelectedId(contact.id);
-    setSessionStarting(true);
-    setMessage("");
-    try {
+  const sessionMutation = useMutation({
+    mutationFn: async (contact: Contact) => {
       const { assignmentId, hubspotId } = await resolveCompanyIds(contact);
       const assignmentResponse = await fetch("/api/prospection/assignments", {
         method: "POST",
@@ -375,49 +300,54 @@ export function TodayDialerView() {
       const companyResponse = await fetch(`/api/companies/${encodeURIComponent(hubspotId)}/centralized`, { cache: "no-store" });
       const companyPayload = await companyResponse.json().catch(() => ({}));
       if (!companyResponse.ok || !companyPayload.company) throw new Error(companyPayload.error || "Impossible de charger la session d’appel.");
-      setSessionCompany(companyPayload.company as Company);
+      return companyPayload.company as Company;
+    },
+    onMutate: () => setMessage(""),
+    onSuccess: company => {
+      setSessionCompany(company);
       setSessionOpen(true);
-    } catch (error) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.prospection.assignments });
+    },
+    onError: error => {
       setMessage(error instanceof Error ? error.message : "Impossible d’ouvrir la session d’appel.");
-    } finally {
-      setSessionStarting(false);
-    }
+    },
+  });
+
+  async function openCallSession(contact = selected) {
+    if (!contact || sessionMutation.isPending) return;
+    setSelectedId(contact.id);
+    await sessionMutation.mutateAsync(contact).catch(() => null);
   }
 
   return (
-    <div className="min-h-screen bg-background px-4 py-5 text-foreground transition-colors sm:px-6 lg:px-7">
-      <div className="mx-auto max-w-[1540px]">
-        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
-          <div>
-            <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-primary">Aujourd’hui · Tableau de bord SDR</div>
-            <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.035em]">Journée commerciale Gando</h1>
-            <p className="mt-1 max-w-3xl text-[13px] text-muted-foreground">{prioritySentence} Les tâches, relances et RDV sont affichés pour toute l’équipe, sans filtre par SDR.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <AddContactButton />
-            <Button variant="outline" className="h-9 rounded-lg border-border bg-card" onClick={() => void load(true)} disabled={loading || refreshing}>
-              {loading || refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Actualiser
-            </Button>
-            <Button asChild className="h-9 rounded-lg"><Link href="/prospection"><UsersRound className="mr-2 h-4 w-4" />Prospection</Link></Button>
-          </div>
-        </header>
+    <div className="min-h-screen bg-background px-4 py-6 text-foreground transition-colors sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1440px]">
+        <PageHeader
+          eyebrow="Aujourd’hui"
+          title="Journée commerciale"
+          description={`${prioritySentence} Les tâches, relances et rendez-vous sont réunis dans une seule vue.`}
+          actions={
+            <>
+              <AddContactButton />
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={refreshDashboard} disabled={loading || refreshing}>
+                {loading || refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Actualiser
+              </Button>
+              <Button asChild size="sm" className="h-8 gap-1.5">
+                <Link href="/prospection"><UsersRound className="h-3.5 w-3.5" /> Prospection</Link>
+              </Button>
+            </>
+          }
+        />
 
-        <div className="grid grid-cols-2 gap-3 py-5 lg:grid-cols-4">
-          <div className="rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3">
-            <div className="flex items-center justify-between"><ListTodo className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{unifiedActions.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">Actions à faire</div><div className="text-[11px] text-muted-foreground">Toute l’équipe · sans filtre SDR</div>
-          </div>
-          <div className="rounded-xl border border-border bg-card px-4 py-3">
-            <div className="flex items-center justify-between"><PhoneCall className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{results.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">Appels maintenant</div><div className="text-[11px] text-muted-foreground">Joignables dans votre file</div>
-          </div>
-          <Link href="/tasks" className="rounded-xl border border-border bg-card px-4 py-3 transition hover:border-primary/30 hover:bg-muted/20">
-            <div className="flex items-center justify-between"><AlertTriangle className={`h-4 w-4 ${openOverdueTasks.length ? "text-amber-600" : "text-muted-foreground"}`} /><span className="text-[22px] font-semibold tracking-[-0.03em]">{openOverdueTasks.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">En retard</div><div className="text-[11px] text-muted-foreground">Toutes les tâches en retard</div>
+        <div className="mt-6 grid divide-y divide-border/45 border-y border-border/45 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          <Stat label="Actions à faire" value={unifiedActions.length} hint="Toute l’équipe · sans filtre SDR" icon={<ListTodo className="h-3.5 w-3.5" />} className="px-1 sm:px-4 first:sm:pl-0" />
+          <Stat label="Appels maintenant" value={results.length} hint="Joignables dans votre file" icon={<PhoneCall className="h-3.5 w-3.5" />} className="px-1 sm:px-4" />
+          <Link href="/tasks" className="block transition-colors hover:bg-muted/20">
+            <Stat label="En retard" value={openOverdueTasks.length} hint="Tâches à traiter" icon={<AlertTriangle className="h-3.5 w-3.5" />} className="px-1 sm:px-4" />
           </Link>
-          <Link href="/meetings" className="rounded-xl border border-border bg-card px-4 py-3 transition hover:border-primary/30 hover:bg-muted/20">
-            <div className="flex items-center justify-between"><CalendarDays className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{allMeetings.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">RDV aujourd’hui</div><div className="text-[11px] text-muted-foreground">Toute l’équipe commerciale</div>
+          <Link href="/meetings" className="block transition-colors hover:bg-muted/20">
+            <Stat label="Rendez-vous" value={allMeetings.length} hint="Aujourd’hui" icon={<CalendarDays className="h-3.5 w-3.5" />} className="px-1 sm:px-4 last:sm:pr-0" />
           </Link>
         </div>
 
@@ -457,8 +387,8 @@ export function TodayDialerView() {
                   </div>
 
                   <div className="mt-7 flex flex-wrap gap-2">
-                    <Button className="h-11 rounded-xl px-6" onClick={() => void openCallSession()} disabled={sessionStarting || !selectedNumber}>
-                      {sessionStarting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Phone className="mr-2 h-4 w-4" />}Appeler maintenant
+                    <Button className="h-11 rounded-xl px-6" onClick={() => void openCallSession()} disabled={sessionMutation.isPending || !selectedNumber}>
+                      {sessionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Phone className="mr-2 h-4 w-4" />}Appeler maintenant
                     </Button>
                     {p.email ? <Button variant="outline" className="h-11 rounded-xl" asChild><a href={`mailto:${p.email}`}><Mail className="mr-2 h-4 w-4" />Email</a></Button> : null}
                     <Button variant="outline" className="h-11 rounded-xl" asChild><Link href={`/contacts/${selected.id}`}>Voir la fiche <ExternalLink className="ml-2 h-3.5 w-3.5" /></Link></Button>
@@ -502,7 +432,7 @@ export function TodayDialerView() {
                           <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{taskContext(action.task)}</div>
                           <div className="mt-1 flex flex-wrap gap-x-2 text-[10px] text-muted-foreground"><span>{formatDateTime(action.task.properties.hs_timestamp)}</span><span>·</span><span>{taskAssignee(action.task)}</span></div>
                         </div>
-                        <button type="button" title="Marquer comme terminée" onClick={() => void completeTask(action.task.id)} disabled={savingTaskId === action.task.id} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-700 disabled:opacity-50">{savingTaskId === action.task.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}</button>
+                        <button type="button" title="Marquer comme terminée" onClick={() => completeTaskMutation.mutate(action.task.id)} disabled={completeTaskMutation.isPending && completeTaskMutation.variables === action.task.id} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-700 disabled:opacity-50">{completeTaskMutation.isPending && completeTaskMutation.variables === action.task.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}</button>
                       </div>
                     </div>
                   );

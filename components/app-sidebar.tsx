@@ -4,27 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  CalendarCheck2,
-  FileText,
-  Inbox,
-  LifeBuoy,
+  CalendarDays,
+  CircleHelp,
+  ContactRound,
+  Home,
   ListFilter,
   ListTodo,
   Mail,
-  Phone,
+  PhoneCall,
   Search,
   Settings,
-  CreditCard,
-  Hash,
-  KeyRound,
-  PieChart,
-  Plug,
-  ShieldCheck,
-  Tags,
-  UserRound,
-  UsersRound,
-  WandSparkles,
-  Webhook,
+  Workflow,
 } from "lucide-react";
 import {
   Sidebar,
@@ -38,85 +28,56 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import {
-  CockpitSidebarHeader,
   CockpitSidebarUser,
+  GandoSidebarMark,
   type CockpitRole,
 } from "@/components/cockpit-sidebar-shared";
 
-type NavIcon = typeof Phone;
-type NavItem = { href: string; label: string; icon: NavIcon };
+type NavIcon = typeof Home;
+type NavItem = {
+  href: string;
+  label: string;
+  icon: NavIcon;
+  visible?: boolean;
+};
 
-const callNav: NavItem[] = [
-  { href: "/today", label: "Aujourd’hui", icon: Inbox },
-  { href: "/prospection", label: "Prospection", icon: Phone },
-  { href: "/historique", label: "Résumés", icon: FileText },
-];
+function isActive(pathname: string, href: string) {
+  if (href === "/today") return pathname === "/today";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
-const workspaceNav: NavItem[] = [
-  { href: "/sourcing", label: "Sourcing", icon: Search },
-  { href: "/segments", label: "Segments", icon: ListFilter },
-  { href: "/tasks", label: "Tâches", icon: ListTodo },
-  { href: "/analytics", label: "Analyse", icon: BarChart3 },
-  { href: "/settings", label: "Paramètres", icon: Settings },
-];
-
-const followUpNav: NavItem[] = [
-  { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
-  { href: "/emails", label: "Emails", icon: Mail },
-  { href: "/support", label: "Support", icon: LifeBuoy },
-];
-
-
-const settingsWorkspaceNav: NavItem[] = [
-  { href: "/settings/numbers", label: "Numéros", icon: Hash },
-  { href: "/settings/members", label: "Membres", icon: UsersRound },
-  { href: "/settings/billing", label: "Facturation", icon: CreditCard },
-  { href: "/settings/usage", label: "Utilisation", icon: PieChart },
-];
-
-const settingsCallNav: NavItem[] = [
-  { href: "/settings/tags", label: "Tags", icon: Tags },
-  { href: "/settings/models", label: "Modèles", icon: WandSparkles },
-];
-
-const settingsPersonalNav: NavItem[] = [
-  { href: "/settings/profile", label: "Profil", icon: UserRound },
-  { href: "/settings/email-notifications", label: "Notifications par e-mail", icon: Mail },
-];
-
-const settingsOtherNav: NavItem[] = [
-  { href: "/settings/integrations", label: "Intégrations", icon: Plug },
-  { href: "/settings/api-keys", label: "Clés API", icon: KeyRound },
-  { href: "/settings/webhooks", label: "Webhooks", icon: Webhook },
-  { href: "/settings/compliance", label: "Conformité", icon: ShieldCheck },
-];
-
-function NavigationGroup({
+function NavGroup({
   label,
   items,
   pathname,
 }: {
-  label: string;
+  label?: string;
   items: NavItem[];
   pathname: string;
 }) {
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {items.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const Icon = item.icon;
+  const visible = items.filter(item => item.visible !== false);
+  if (!visible.length) return null;
 
+  return (
+    <SidebarGroup className="px-2">
+      {label ? <SidebarGroupLabel className="px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-sidebar-foreground/40">{label}</SidebarGroupLabel> : null}
+      <SidebarGroupContent>
+        <SidebarMenu className="gap-0.5">
+          {visible.map(item => {
+            const Icon = item.icon;
+            const active = isActive(pathname, item.href);
             return (
               <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={active}
+                  tooltip={item.label}
+                  className="h-9 rounded-lg px-2.5 text-[13px] font-medium text-sidebar-foreground/72 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent/70 data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-none"
+                >
                   <Link href={item.href}>
-                    <Icon />
+                    <Icon className="size-[17px]" strokeWidth={1.8} />
                     <span>{item.label}</span>
                   </Link>
                 </SidebarMenuButton>
@@ -133,46 +94,60 @@ export function AppSidebar({
   email,
   role = "member",
   canAccessKpi = true,
+  canAccessDealRoom = true,
 }: {
   email?: string;
   role?: CockpitRole;
   canAccessKpi?: boolean;
+  canAccessDealRoom?: boolean;
 }) {
   const pathname = usePathname();
-  const inSettings = pathname === "/settings" || pathname.startsWith("/settings/");
-  const workspaceItems = role === "commercial"
-    ? workspaceNav.filter((item) => item.href !== "/segments")
-    : workspaceNav;
+
+  const primary: NavItem[] = [
+    { href: "/today", label: "Accueil", icon: Home },
+    { href: "/kpi", label: "KPI", icon: BarChart3, visible: canAccessKpi },
+    { href: "/prospection", label: "Prospection", icon: PhoneCall },
+    { href: "/contacts", label: "Contacts", icon: ContactRound },
+    { href: "/agenda", label: "Agenda", icon: CalendarDays },
+    { href: "/deal-room", label: "Pipeline", icon: Workflow, visible: canAccessDealRoom },
+    { href: "/settings", label: "Paramètres", icon: Settings },
+  ];
+
+  const tools: NavItem[] = [
+    { href: "/sourcing", label: "Sourcing", icon: Search },
+    { href: "/segments", label: "Segments", icon: ListFilter, visible: role !== "commercial" },
+    { href: "/tasks", label: "Tâches", icon: ListTodo },
+    { href: "/emails", label: "Emails", icon: Mail },
+    { href: "/support", label: "Support", icon: CircleHelp },
+  ];
 
   return (
-    <Sidebar collapsible="icon" className="border-sidebar-border">
-      <SidebarHeader>
-        <CockpitSidebarHeader
-          section={inSettings ? "PARAMÈTRES" : "CRM"}
-          canAccessKpi={canAccessKpi}
-        />
+    <Sidebar
+      collapsible="icon"
+      className="border-r border-sidebar-border/50 bg-sidebar"
+    >
+      <SidebarHeader className="px-3 pb-2 pt-3">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild size="lg" className="h-12 rounded-xl px-1.5 hover:bg-sidebar-accent/40">
+              <Link href="/today" aria-label="Accueil du Cockpit Gando">
+                <GandoSidebarMark />
+                <div className="grid min-w-0 flex-1 text-left leading-tight">
+                  <span className="truncate text-[15px] font-semibold tracking-[-0.025em] text-sidebar-foreground">Gando</span>
+                  <span className="truncate text-[9px] font-medium uppercase tracking-[0.18em] text-sidebar-foreground/40">Cockpit</span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarSeparator />
-
-      <SidebarContent>
-        {inSettings ? (
-          <>
-            <NavigationGroup label="Espace de travail" items={settingsWorkspaceNav} pathname={pathname} />
-            <NavigationGroup label="Appel" items={settingsCallNav} pathname={pathname} />
-            <NavigationGroup label="Personnel" items={settingsPersonalNav} pathname={pathname} />
-            <NavigationGroup label="Autres" items={settingsOtherNav} pathname={pathname} />
-          </>
-        ) : (
-          <>
-            <NavigationGroup label="Appels" items={callNav} pathname={pathname} />
-            <NavigationGroup label="Espace de travail" items={workspaceItems} pathname={pathname} />
-            <NavigationGroup label="Suivi" items={followUpNav} pathname={pathname} />
-          </>
-        )}
+      <SidebarContent className="gap-1 pt-1">
+        <NavGroup items={primary} pathname={pathname} />
+        <NavGroup label="Outils" items={tools} pathname={pathname} />
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="px-3 pb-3">
         <CockpitSidebarUser email={email} role={role} />
       </SidebarFooter>
       <SidebarRail />
