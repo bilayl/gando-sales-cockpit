@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
+import { useKpiEndpoint } from "@/hooks/queries/use-kpi"
 import { Activity, BadgeEuro, CircleGauge, DatabaseZap, ShieldCheck, Target, UsersRound } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -135,24 +136,10 @@ function Line({ label, value, detail }: { label: string; value: string; detail?:
 }
 
 export function KpiSystemDashboard() {
-  const [data, setData] = useState<KpiSystem | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/kpi/system", { cache: "no-store" })
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Impossible de calculer les KPI.")
-        setData(body)
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de calculer les KPI.")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const query = useKpiEndpoint<KpiSystem>("system", "/api/kpi/system")
+  const data = query.data
+  const loading = query.isLoading
+  const error = query.error?.message || ""
 
   const coverage = useMemo(() => {
     if (!data) return { ready: 0, cohort: 0, missing: 0, total: 0 }
