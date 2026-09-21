@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useKpiEndpoint } from "@/hooks/queries/use-kpi"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -41,30 +41,12 @@ function percent(value: number | null | undefined, digits = 1) {
 }
 
 export function KpiGrowthUsage() {
-  const [scorecard, setScorecard] = useState<Scorecard | null>(null)
-  const [live, setLive] = useState<Live | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [scoreResponse, liveResponse] = await Promise.all([
-          fetch("/api/kpi/ceo-scorecard", { cache: "no-store" }),
-          fetch("/api/kpi/live-business", { cache: "no-store" }),
-        ])
-        const [scoreBody, liveBody] = await Promise.all([scoreResponse.json(), liveResponse.json()])
-        if (!scoreResponse.ok) throw new Error(scoreBody.error || "Impossible de charger la croissance.")
-        if (!liveResponse.ok) throw new Error(liveBody.error || "Impossible de charger l’usage.")
-        setScorecard(scoreBody)
-        setLive(liveBody)
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de charger les KPI de croissance.")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const scoreQuery = useKpiEndpoint<Scorecard>("ceo-scorecard", "/api/kpi/ceo-scorecard")
+  const liveQuery = useKpiEndpoint<Live>("live-business", "/api/kpi/live-business")
+  const scorecard = scoreQuery.data
+  const live = liveQuery.data
+  const loading = scoreQuery.isLoading || liveQuery.isLoading
+  const error = scoreQuery.error?.message || liveQuery.error?.message || ""
 
   if (loading) return <Skeleton className="h-[520px] w-full rounded-xl" />
   if (error || !scorecard || !live) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error || "Données indisponibles"}</div>
