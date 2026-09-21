@@ -10,7 +10,7 @@ export default async function ContactsPage() {
 
   return (
     <>
-      <ProspectionContactsDirectory />
+      <div className="h-[calc(100svh-3rem)] min-h-0 min-w-0 overflow-hidden"><ProspectionContactsDirectory /></div>
       <PostCallFollowupQueue senderName={identity?.email || undefined} />
     </>
   );
