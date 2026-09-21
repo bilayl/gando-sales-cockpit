@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { AddContactButton } from "@/components/add-contact-button";
 import { ProspectionSession } from "@/components/prospection-session";
+import { PageHeader } from "@/components/cockpit/page-header";
+import { Stat } from "@/components/cockpit/stat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTodayDashboard, type TodayContact as Contact, type TodayTask as Task } from "@/hooks/queries/use-today-dashboard";
@@ -318,39 +320,34 @@ export function TodayDialerView() {
   }
 
   return (
-    <div className="min-h-screen bg-background px-4 py-5 text-foreground transition-colors sm:px-6 lg:px-7">
-      <div className="mx-auto max-w-[1540px]">
-        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
-          <div>
-            <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-primary">Aujourd’hui · Tableau de bord SDR</div>
-            <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.035em]">Journée commerciale Gando</h1>
-            <p className="mt-1 max-w-3xl text-[13px] text-muted-foreground">{prioritySentence} Les tâches, relances et RDV sont affichés pour toute l’équipe, sans filtre par SDR.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <AddContactButton />
-            <Button variant="outline" className="h-9 rounded-lg border-border bg-card" onClick={refreshDashboard} disabled={loading || refreshing}>
-              {loading || refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />} Actualiser
-            </Button>
-            <Button asChild className="h-9 rounded-lg"><Link href="/prospection"><UsersRound className="mr-2 h-4 w-4" />Prospection</Link></Button>
-          </div>
-        </header>
+    <div className="min-h-screen bg-background px-4 py-6 text-foreground transition-colors sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1440px]">
+        <PageHeader
+          eyebrow="Aujourd’hui"
+          title="Journée commerciale"
+          description={`${prioritySentence} Les tâches, relances et rendez-vous sont réunis dans une seule vue.`}
+          actions={
+            <>
+              <AddContactButton />
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={refreshDashboard} disabled={loading || refreshing}>
+                {loading || refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Actualiser
+              </Button>
+              <Button asChild size="sm" className="h-8 gap-1.5">
+                <Link href="/prospection"><UsersRound className="h-3.5 w-3.5" /> Prospection</Link>
+              </Button>
+            </>
+          }
+        />
 
-        <div className="grid grid-cols-2 gap-3 py-5 lg:grid-cols-4">
-          <div className="rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3">
-            <div className="flex items-center justify-between"><ListTodo className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{unifiedActions.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">Actions à faire</div><div className="text-[11px] text-muted-foreground">Toute l’équipe · sans filtre SDR</div>
-          </div>
-          <div className="rounded-xl border border-border bg-card px-4 py-3">
-            <div className="flex items-center justify-between"><PhoneCall className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{results.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">Appels maintenant</div><div className="text-[11px] text-muted-foreground">Joignables dans votre file</div>
-          </div>
-          <Link href="/tasks" className="rounded-xl border border-border bg-card px-4 py-3 transition hover:border-primary/30 hover:bg-muted/20">
-            <div className="flex items-center justify-between"><AlertTriangle className={`h-4 w-4 ${openOverdueTasks.length ? "text-amber-600" : "text-muted-foreground"}`} /><span className="text-[22px] font-semibold tracking-[-0.03em]">{openOverdueTasks.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">En retard</div><div className="text-[11px] text-muted-foreground">Toutes les tâches en retard</div>
+        <div className="mt-6 grid divide-y divide-border/45 border-y border-border/45 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          <Stat label="Actions à faire" value={unifiedActions.length} hint="Toute l’équipe · sans filtre SDR" icon={<ListTodo className="h-3.5 w-3.5" />} className="px-1 sm:px-4 first:sm:pl-0" />
+          <Stat label="Appels maintenant" value={results.length} hint="Joignables dans votre file" icon={<PhoneCall className="h-3.5 w-3.5" />} className="px-1 sm:px-4" />
+          <Link href="/tasks" className="block transition-colors hover:bg-muted/20">
+            <Stat label="En retard" value={openOverdueTasks.length} hint="Tâches à traiter" icon={<AlertTriangle className="h-3.5 w-3.5" />} className="px-1 sm:px-4" />
           </Link>
-          <Link href="/meetings" className="rounded-xl border border-border bg-card px-4 py-3 transition hover:border-primary/30 hover:bg-muted/20">
-            <div className="flex items-center justify-between"><CalendarDays className="h-4 w-4 text-primary" /><span className="text-[22px] font-semibold tracking-[-0.03em]">{allMeetings.length}</span></div>
-            <div className="mt-2 text-[12px] font-medium">RDV aujourd’hui</div><div className="text-[11px] text-muted-foreground">Toute l’équipe commerciale</div>
+          <Link href="/meetings" className="block transition-colors hover:bg-muted/20">
+            <Stat label="Rendez-vous" value={allMeetings.length} hint="Aujourd’hui" icon={<CalendarDays className="h-3.5 w-3.5" />} className="px-1 sm:px-4 last:sm:pr-0" />
           </Link>
         </div>
 
