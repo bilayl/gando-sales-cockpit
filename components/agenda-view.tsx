@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { parseAsString, parseAsStringEnum, useQueryState } from "nuqs";
 import {
   BarChart3,
   BellRing,
@@ -17,6 +18,9 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/layout/page-header";
+import { Stat } from "@/components/cockpit/stat";
+import { useAgenda, useUpdateMeetingStatus } from "@/hooks/queries/use-agenda";
 import { MEETING_STATUSES, meetingStatusBadge, meetingStatusDot, meetingStatusLabel } from "@/lib/statuses";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,67 +28,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-type HMeeting = {
-  id: string;
-  properties?: {
-    hs_meeting_title?: string;
-    hs_meeting_start_time?: string;
-    hs_meeting_end_time?: string;
-    hs_meeting_outcome?: string;
-    hs_meeting_location?: string;
-    hs_meeting_body?: string;
-    hs_timestamp?: string;
-  };
-};
-
-type HTask = {
-  id: string;
-  properties?: {
-    hs_task_subject?: string;
-    hs_task_body?: string;
-    hs_task_status?: string;
-    hs_task_priority?: string;
-    hs_task_type?: string;
-    hs_timestamp?: string;
-  };
-};
-
-type HReminder = {
-  id: string;
-  properties?: {
-    firstname?: string;
-    lastname?: string;
-    email?: string;
-    company?: string;
-    date_prochaine_relance?: string;
-    statut_de_lappel?: string;
-    referly_reason_to_reach_out?: string;
-  };
-};
-
-type EventKind = "meeting" | "task" | "reminder";
-
-type DayEvent = {
-  id: string;
-  recordId: string;
-  kind: EventKind;
-  title: string;
-  start: Date;
-  end: Date;
-  location?: string;
-  status?: string;
-  description?: string;
-  isPresentation?: boolean;
-};
-
-type AgendaStats = {
-  meetings: number;
-  tasks: number;
-  completedTasks: number;
-  reminders: number;
-  total: number;
-};
 
 const HOUR_HEIGHT = 48;
 const GRID_START = 8;
@@ -219,48 +162,46 @@ function eventClasses(kind: EventKind) {
 
 export function AgendaView() {
   const [today] = useState(() => new Date());
-  const [rangeStart, setRangeStart] = useState(() => startOfWeek(new Date()));
-  const [rangeEnd, setRangeEnd] = useState(() => addDays(startOfWeek(new Date()), 6));
-  const [meetings, setMeetings] = useState<HMeeting[]>([]);
-  const [tasks, setTasks] = useState<HTask[]>([]);
-  const [reminders, setReminders] = useState<HReminder[]>([]);
-  const [stats, setStats] = useState<AgendaStats>({ meetings: 0, tasks: 0, completedTasks: 0, reminders: 0, total: 0 });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<EventKind | "all">("all");
-  const [statusFilter, setStatusFilter] = useState("");
+  const defaultStart = startOfWeek(today);
+  const defaultEnd = addDays(defaultStart, 6);
+
+  const [startParam, setStartParam] = useQueryState("start", parseAsString.withDefault(toDateInput(defaultStart)));
+  const [endParam, setEndParam] = useQueryState("end", parseAsString.withDefault(toDateInput(defaultEnd)));
+  const [sourceFilter, setSourceFilter] = useQueryState(
+    "source",
+    parseAsStringEnum<EventKind | "all">(["all", "meeting", "task", "reminder"]).withDefault("all"),
+  );
+  const [statusFilter, setStatusFilter] = useQueryState("status", parseAsString.withDefault(""));
+
+  const rangeStart = fromDateInput(startParam) || defaultStart;
+  const rangeEndCandidate = fromDateInput(endParam) || defaultEnd;
+  const rangeEnd = rangeEndCandidate < rangeStart
+    ? rangeStart
+    : differenceInDays(rangeStart, rangeEndCandidate) >= MAX_RANGE_DAYS
+      ? addDays(rangeStart, MAX_RANGE_DAYS - 1)
+      : rangeEndCandidate;
+
+  const endExclusive = addDays(rangeEnd, 1);
+  const agendaQuery = useAgenda(
+    startOfDay(rangeStart).toISOString(),
+    startOfDay(endExclusive).toISOString(),
+  );
+  const updateMeetingStatus = useUpdateMeetingStatus();
+
+  const meetings = agendaQuery.data?.results || [];
+  const tasks = agendaQuery.data?.tasks || [];
+  const reminders = agendaQuery.data?.reminders || [];
+  const stats = agendaQuery.data?.stats || { meetings: 0, tasks: 0, completedTasks: 0, reminders: 0, total: 0 };
+  const warning = agendaQuery.data?.warnings?.length
+    ? `Certaines sources HubSpot n’ont pas pu être chargées : ${agendaQuery.data.warnings.join(", ")}.`
+    : "";
+  const loading = agendaQuery.isLoading;
+  const [actionError, setActionError] = useState("");
+  const error = actionError || agendaQuery.error?.message || updateMeetingStatus.error?.message || warning;
+
   const [detail, setDetail] = useState<DayEvent | null>(null);
   const [editMeeting, setEditMeeting] = useState<{ id: string; title: string; start: Date; status: string } | null>(null);
   const [editStatus, setEditStatus] = useState("");
-  const [savingStatus, setSavingStatus] = useState(false);
-
-  const loadAgenda = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const endExclusive = addDays(rangeEnd, 1);
-      const response = await fetch(`/api/agenda?start=${encodeURIComponent(startOfDay(rangeStart).toISOString())}&end=${encodeURIComponent(startOfDay(endExclusive).toISOString())}`, { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || data.error || "Impossible de charger l’agenda HubSpot");
-      setMeetings(data.results || []);
-      setTasks(data.tasks || []);
-      setReminders(data.reminders || []);
-      setStats(data.stats || { meetings: 0, tasks: 0, completedTasks: 0, reminders: 0, total: 0 });
-      if (data.warnings?.length) setError(`Certaines sources HubSpot n’ont pas pu être chargées : ${data.warnings.join(", ")}.`);
-    } catch (reason) {
-      setMeetings([]);
-      setTasks([]);
-      setReminders([]);
-      setStats({ meetings: 0, tasks: 0, completedTasks: 0, reminders: 0, total: 0 });
-      setError(reason instanceof Error ? reason.message : "Impossible de charger l’agenda HubSpot");
-    } finally {
-      setLoading(false);
-    }
-  }, [rangeEnd, rangeStart]);
-
-  useEffect(() => {
-    void loadAgenda();
-  }, [loadAgenda]);
 
   const days = useMemo(() => {
     const count = Math.min(MAX_RANGE_DAYS, differenceInDays(rangeStart, rangeEnd) + 1);
@@ -352,35 +293,37 @@ export function AgendaView() {
 
   function setThisWeek() {
     const start = startOfWeek(today);
-    setRangeStart(start);
-    setRangeEnd(addDays(start, 6));
+    void setStartParam(toDateInput(start));
+    void setEndParam(toDateInput(addDays(start, 6)));
   }
 
   function setTodayOnly() {
     const day = startOfDay(today);
-    setRangeStart(day);
-    setRangeEnd(day);
+    const value = toDateInput(day);
+    void setStartParam(value);
+    void setEndParam(value);
   }
 
   function shiftPeriod(direction: -1 | 1) {
     const amount = days.length * direction;
-    setRangeStart(current => addDays(current, amount));
-    setRangeEnd(current => addDays(current, amount));
+    void setStartParam(toDateInput(addDays(rangeStart, amount)));
+    void setEndParam(toDateInput(addDays(rangeEnd, amount)));
   }
 
   function updateStart(value: string) {
     const date = fromDateInput(value);
     if (!date) return;
-    setRangeStart(date);
-    if (date > rangeEnd) setRangeEnd(date);
-    else if (differenceInDays(date, rangeEnd) >= MAX_RANGE_DAYS) setRangeEnd(addDays(date, MAX_RANGE_DAYS - 1));
+    void setStartParam(value);
+    if (date > rangeEnd) void setEndParam(value);
+    else if (differenceInDays(date, rangeEnd) >= MAX_RANGE_DAYS) void setEndParam(toDateInput(addDays(date, MAX_RANGE_DAYS - 1)));
   }
 
   function updateEnd(value: string) {
     const date = fromDateInput(value);
     if (!date) return;
     const validEnd = date < rangeStart ? rangeStart : date;
-    setRangeEnd(differenceInDays(rangeStart, validEnd) >= MAX_RANGE_DAYS ? addDays(rangeStart, MAX_RANGE_DAYS - 1) : validEnd);
+    const bounded = differenceInDays(rangeStart, validEnd) >= MAX_RANGE_DAYS ? addDays(rangeStart, MAX_RANGE_DAYS - 1) : validEnd;
+    void setEndParam(toDateInput(bounded));
   }
 
   function openStatusEditor(event: DayEvent) {
@@ -392,26 +335,16 @@ export function AgendaView() {
 
   async function saveStatus() {
     if (!editMeeting) return;
-    setSavingStatus(true);
-    setError("");
+    setActionError("");
     try {
-      const response = await fetch(`/api/meetings/${editMeeting.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ properties: { hs_meeting_outcome: editStatus } }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || data.error || "HubSpot a rejeté le statut");
-      setMeetings(current => current.map(meeting => meeting.id === editMeeting.id
-        ? { ...meeting, properties: { ...meeting.properties, hs_meeting_outcome: editStatus } }
-        : meeting));
+      await updateMeetingStatus.mutateAsync({ id: editMeeting.id, status: editStatus });
+      const meetingId = editMeeting.id;
       setEditMeeting(null);
-      toast.success(editMeeting.id.startsWith("gcal-") ? "Statut synchronisé avec le CRM." : "Statut enregistré dans HubSpot.");
+      toast.success(meetingId.startsWith("gcal-") ? "Statut synchronisé avec le CRM." : "Statut enregistré dans HubSpot.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Impossible de modifier le statut");
-      toast.error(reason instanceof Error ? reason.message : "Impossible de modifier le statut");
-    } finally {
-      setSavingStatus(false);
+      const message = reason instanceof Error ? reason.message : "Impossible de modifier le statut";
+      setActionError(message);
+      toast.error(message);
     }
   }
 
@@ -422,23 +355,30 @@ export function AgendaView() {
   return (
     <div className="page-shell min-h-screen minari-scrollbar">
       <div className="page-content">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-primary"><CalendarCheck2 className="h-4 w-4" /> Agenda HubSpot</div>
-            <h1 className="mt-2 text-2xl font-bold tracking-[-0.035em]">Agenda</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Tous les rendez-vous Google Calendar et HubSpot, avec les tâches et rappels.</p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => void loadAgenda()}><RefreshCw /> Actualiser</Button>
-        </header>
+        <PageHeader
+          eyebrow="Planning"
+          title="Agenda"
+          description="Rendez-vous, tâches et rappels réunis dans une seule vue."
+          actions={
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => void agendaQuery.refetch()} disabled={agendaQuery.isFetching}>
+              <RefreshCw className={cn("size-3.5", agendaQuery.isFetching && "animate-spin")} />
+              Actualiser
+            </Button>
+          }
+        />
 
         {error ? <div role="alert" className="mt-4 rounded-lg border border-primary/20 bg-primary/[0.06] px-4 py-3 text-sm text-foreground">{error}</div> : null}
 
-        <section className="mt-5 grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-5">
-          {metricRows.map(({ label, value, detail: metricDetail, icon: Icon }, index) => (
-            <div key={label} className={cn("flex min-h-24 items-center gap-3 px-4 py-3", index % 2 === 1 && "border-l border-border", index > 1 && "border-t border-border", index > 0 && "lg:border-l lg:border-t-0", index === 4 && "col-span-2 lg:col-span-1")}>
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-primary/15 bg-primary/[0.06] text-primary"><Icon className="h-4 w-4" /></span>
-              <div><div className="text-xl font-bold tracking-tight">{value}</div><div className="mt-0.5 text-[11px] font-semibold text-foreground">{label}</div><div className="text-[10px] text-muted-foreground">{metricDetail}</div></div>
-            </div>
+        <section className="mt-7 grid grid-cols-2 divide-x divide-y divide-border/60 border-y border-border/60 sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
+          {metricRows.map(({ label, value, detail: metricDetail, icon: Icon }) => (
+            <Stat
+              key={label}
+              label={label}
+              value={value}
+              helper={metricDetail}
+              icon={<Icon className="size-3.5" />}
+              className="px-4"
+            />
           ))}
         </section>
 
@@ -461,11 +401,11 @@ export function AgendaView() {
               <label className="space-y-1.5"><span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Du</span><Input type="date" value={toDateInput(rangeStart)} onChange={event => updateStart(event.target.value)} className="h-9 w-[160px] bg-card" /></label>
               <label className="space-y-1.5"><span className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Au</span><Input type="date" value={toDateInput(rangeEnd)} min={toDateInput(rangeStart)} max={toDateInput(addDays(rangeStart, MAX_RANGE_DAYS - 1))} onChange={event => updateEnd(event.target.value)} className="h-9 w-[160px] bg-card" /></label>
               <div className="ml-auto flex flex-wrap gap-2">
-                <Select value={sourceFilter} onValueChange={value => setSourceFilter(value as EventKind | "all")}>
+                <Select value={sourceFilter} onValueChange={value => void setSourceFilter(value as EventKind | "all")}>
                   <SelectTrigger className="h-9 w-[180px] bg-card text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="all">Toutes les sources</SelectItem><SelectItem value="meeting">Rendez-vous</SelectItem><SelectItem value="task">Tâches HubSpot</SelectItem><SelectItem value="reminder">Rappels HubSpot</SelectItem></SelectContent>
                 </Select>
-                <Select value={statusFilter || "__all__"} onValueChange={value => setStatusFilter(value === "__all__" ? "" : value)}>
+                <Select value={statusFilter || "__all__"} onValueChange={value => void setStatusFilter(value === "__all__" ? "" : value)}>
                   <SelectTrigger className="h-9 w-[180px] bg-card text-xs"><SelectValue placeholder="Statut RDV" /></SelectTrigger>
                   <SelectContent><SelectItem value="__all__">Tous les statuts RDV</SelectItem>{MEETING_STATUSES.map(status => <SelectItem key={status.key} value={status.key}>{status.label}</SelectItem>)}</SelectContent>
                 </Select>
@@ -572,7 +512,7 @@ export function AgendaView() {
           <div className="p-6 pt-5">
             <DialogHeader><div className="flex items-center gap-3 pr-8"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><CalendarCheck2 /></div><div className="min-w-0"><DialogTitle>Changer le statut</DialogTitle><DialogDescription className="mt-0.5 truncate">{editMeeting ? `${editMeeting.title} — ${formatTime(editMeeting.start)}` : ""}</DialogDescription></div></div></DialogHeader>
             <div className="mt-4"><div className="mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">Statut du rendez-vous</div><Select value={editStatus} onValueChange={setEditStatus}><SelectTrigger className="h-11 w-full"><SelectValue placeholder="Choisir un statut" /></SelectTrigger><SelectContent>{MEETING_STATUSES.map(status => <SelectItem key={status.key} value={status.key}>{status.label}</SelectItem>)}</SelectContent></Select></div>
-            <DialogFooter className="mt-5 gap-2"><Button variant="outline" onClick={() => setEditMeeting(null)}>Annuler</Button><Button onClick={() => void saveStatus()} disabled={savingStatus}>{savingStatus ? <Loader2 className="animate-spin" /> : null}Enregistrer</Button></DialogFooter>
+            <DialogFooter className="mt-5 gap-2"><Button variant="outline" onClick={() => setEditMeeting(null)}>Annuler</Button><Button onClick={() => void saveStatus()} disabled={updateMeetingStatus.isPending}>{updateMeetingStatus.isPending ? <Loader2 className="animate-spin" /> : null}Enregistrer</Button></DialogFooter>
           </div>
         </DialogContent>
       </Dialog>
