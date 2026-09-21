@@ -56,9 +56,18 @@ export function useCompanyProspectionParams() {
   }
 
   async function setFilters(filters: CompanyFilters) {
-    const next: Record<string, string[] | null> = {};
-    for (const key of FILTER_KEYS) next[key] = filters[key]?.length ? filters[key]! : null;
-    await setParams(next);
+    await setParams({
+      zip: filters.zip?.length ? filters.zip : null,
+      city: filters.city?.length ? filters.city : null,
+      state: filters.state?.length ? filters.state : null,
+      country: filters.country?.length ? filters.country : null,
+      industry: filters.industry?.length ? filters.industry : null,
+      owner: filters.owner?.length ? filters.owner : null,
+      stage: filters.stage?.length ? filters.stage : null,
+      prospectionStatus: filters.prospectionStatus?.length ? filters.prospectionStatus : null,
+      callStatus: filters.callStatus?.length ? filters.callStatus : null,
+      fleetSize: filters.fleetSize?.length ? filters.fleetSize : null,
+    });
   }
 
   return {
