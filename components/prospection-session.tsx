@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Briefcase,
   Building2,
@@ -37,34 +38,11 @@ import { Input } from "@/components/ui/input";
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach";
 import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
 import { getBestCallTimeForProperties } from "@/lib/call-timing";
+import { useProspectionSessionData, type ProspectionTaskSummary as TaskSummary } from "@/hooks/queries/use-prospection-session";
+import { queryKeys } from "@/lib/query/query-keys";
+import { useProspectionStore } from "@/stores/prospection-store";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
-
-type TaskSummary = {
-  openTaskCount: number;
-  overdueTaskCount: number;
-  todayTaskCount: number;
-  nextTask: {
-    id: string;
-    subject: string;
-    status: string;
-    priority?: string | null;
-    type?: string | null;
-    dueAt?: string | null;
-    sourceContactId?: string | null;
-    sourceContactName?: string | null;
-    sourceContactPhone?: string | null;
-    sourceContactJobTitle?: string | null;
-  } | null;
-};
-
-type OnoffSessionState = {
-  configured?: boolean;
-  connected?: boolean | null;
-  latestProcessingStatus?: string | null;
-  latestReceivedAt?: string | null;
-  error?: string | null;
-};
 
 type Props = {
   open: boolean;
