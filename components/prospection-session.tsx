@@ -327,57 +327,49 @@ function CompanyProfilePanel({
 }
 
 export function ProspectionSession({ open, onOpenChange, companies, onOpenCompany }: Props) {
-  const [summaries, setSummaries] = useState<Record<string, TaskSummary>>({});
-  const [onoff, setOnoff] = useState<OnoffSessionState | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [index, setIndex] = useState(0);
+  const queryClient = useQueryClient();
+  const index = useProspectionStore(state => state.currentLeadIndex);
+  const setIndex = useProspectionStore(state => state.setCurrentLeadIndex);
+  const startGlobalSession = useProspectionStore(state => state.startSession);
+  const resetGlobalSession = useProspectionStore(state => state.resetSession);
+  const setSelectedCompanyId = useProspectionStore(state => state.setSelectedCompanyId);
+
   const [done, setDone] = useState<Set<string>>(new Set());
   const [finishOpen, setFinishOpen] = useState(false);
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
   const [reminderAt, setReminderAt] = useState(reminderPreset(1));
   const [note, setNote] = useState("");
-  const [savingOutcome, setSavingOutcome] = useState(false);
   const [evaluationTime, setEvaluationTime] = useState(Date.now);
 
-  useEffect(() => {
-    if (!open) return;
-    setIndex(0);
-    setDone(new Set());
-    setError("");
-    setOnoff(null);
-    setFinishOpen(false);
-    setOutcome(null);
-    setEvaluationTime(Date.now());
-    const now = Date.now();
-    const activeIds = companies
+  const activeIds = useMemo(() => {
+    const now = evaluationTime;
+    return companies
       .filter(company => {
         const stage = deriveCompanyStage(company, now);
         return getCompanyProspectionDecision(company, stage, now).bucket === "ACTIONABLE";
       })
       .map(company => company.id)
       .slice(0, 100);
-    if (!activeIds.length) {
-      setSummaries({});
+  }, [companies, evaluationTime]);
+
+  const sessionQuery = useProspectionSessionData(activeIds, open);
+  const summaries = sessionQuery.data?.summaries ?? {};
+  const onoff = sessionQuery.data?.onoff ?? null;
+  const loading = open && activeIds.length > 0 && sessionQuery.isPending;
+  const error = sessionQuery.error instanceof Error ? sessionQuery.error.message : "";
+
+  useEffect(() => {
+    if (!open) {
+      resetGlobalSession();
       return;
     }
-
-    setLoading(true);
-    fetch("/api/prospection/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ companyIds: activeIds }),
-      cache: "no-store",
-    })
-      .then(async response => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "Impossible de préparer la session");
-        setSummaries(body.summaries || {});
-        setOnoff((body.onoff || null) as OnoffSessionState | null);
-      })
-      .catch(reason => setError(reason instanceof Error ? reason.message : "Impossible de préparer la session"))
-      .finally(() => setLoading(false));
-  }, [open, companies]);
+    setIndex(0);
+    setDone(new Set());
+    setFinishOpen(false);
+    setOutcome(null);
+    setEvaluationTime(Date.now());
+    startGlobalSession();
+  }, [open, resetGlobalSession, setIndex, startGlobalSession]);
 
   const queue = useMemo(() => {
     const now = evaluationTime;
