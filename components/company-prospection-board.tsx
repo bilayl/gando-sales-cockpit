@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompanyLaterFollowupDialog, type LaterFollowupPayload } from "@/components/company-later-followup-dialog";
+import { useCompanyWorkflowMutation } from "@/hooks/queries/use-prospection-data";
 import { getCompanyProspectionDecision, type CompanyStage } from "@/lib/company-prospection-priority";
 import { formatDate } from "@/lib/utils";
 
@@ -91,6 +92,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [laterCompany, setLaterCompany] = useState<Company | null>(null);
+  const workflowMutation = useCompanyWorkflowMutation();
 
   const groups = useMemo(() => {
     const map = new Map<CompanyStage, Company[]>();
@@ -109,19 +111,14 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
     if (deriveCompanyStage(company) === stage && stage !== "FOLLOW_UP" && stage !== "LATER") return true;
     setSavingId(company.id);
     try {
-      const response = await fetch(`/api/companies/${company.id}/workflow`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: stage,
-          reminderAt,
-          reason,
-          createTask,
-          createNote: Boolean(reason?.trim()),
-        }),
+      const data = await workflowMutation.mutateAsync({
+        companyId: company.id,
+        action: stage,
+        reminderAt,
+        reason,
+        createTask,
+        createNote: Boolean(reason?.trim()),
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "HubSpot a rejeté le changement de workflow");
       onStatusChange(company.id, stage, data.company?.properties || undefined);
       return true;
     } catch (error) {
