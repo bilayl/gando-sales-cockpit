@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useKpiEndpoint, useKpiSync } from "@/hooks/queries/use-kpi"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -22,45 +22,12 @@ function integer(value: number | null | undefined) {
 }
 
 export function KpiDataSourceHealth({ canEdit }: { canEdit: boolean }) {
-  const [data, setData] = useState<Live | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [error, setError] = useState("")
-
-  const load = useCallback(async () => {
-    try {
-      setError("")
-      const response = await fetch("/api/kpi/live-business", { cache: "no-store" })
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || "Impossible de lire la source Gando.")
-      setData(body)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Impossible de lire la source Gando.")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { void load() }, [load])
-
-  const sync = async () => {
-    setSyncing(true)
-    setError("")
-    try {
-      const response = await fetch("/api/system/supabase-sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      })
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || "Synchronisation impossible.")
-      await load()
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Synchronisation impossible.")
-    } finally {
-      setSyncing(false)
-    }
-  }
+  const liveQuery = useKpiEndpoint<Live>("live-business", "/api/kpi/live-business")
+  const syncMutation = useKpiSync(canEdit)
+  const data = liveQuery.data
+  const loading = liveQuery.isLoading
+  const error = liveQuery.error?.message || syncMutation.error?.message || ""
+  const syncing = syncMutation.isPending
 
   if (loading) return <Skeleton className="h-[220px] w-full rounded-xl" />
   if (!data) return null
@@ -82,7 +49,7 @@ export function KpiDataSourceHealth({ canEdit }: { canEdit: boolean }) {
           {canEdit ? (
             <button
               type="button"
-              onClick={() => void sync()}
+              onClick={() => syncMutation.mutate()}
               disabled={syncing}
               className="h-8 rounded-md border border-border bg-background px-3 text-[11px] font-semibold hover:bg-muted disabled:opacity-50"
             >
