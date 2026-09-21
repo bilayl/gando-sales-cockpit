@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Briefcase, Check, FileText, Globe, Loader2, MapPin, Pencil, PhoneCall, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
+import { CompanyLaterFollowupDialog, type LaterFollowupPayload } from "@/components/company-later-followup-dialog";
 
 type CRMProperties = Record<string, string | null | undefined>;
 type Kind = "contact" | "company";
@@ -234,6 +235,8 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
   const [definitions, setDefinitions] = useState<Record<string, PropertyDefinition>>({});
   const [metadataLoading, setMetadataLoading] = useState(true);
   const [metadataError, setMetadataError] = useState("");
+  const [laterOpen, setLaterOpen] = useState(false);
+  const [laterSaving, setLaterSaving] = useState(false);
 
   useEffect(() => setSelf(properties), [properties]);
   useEffect(() => setFallback(fallbackProperties), [fallbackProperties]);
@@ -260,6 +263,10 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
 
   async function saveField(spec: FieldSpec, value: string) {
     if (!selfId) throw new Error("Identifiant HubSpot introuvable.");
+    if (kind === "company" && spec.key === "prospection" && value === "Ultérieur") {
+      setLaterOpen(true);
+      return;
+    }
     const patchProperties = kind === "company" && spec.key === "prospection"
       ? companyStatusProperties(value)
       : { [spec.property]: value };
@@ -273,6 +280,38 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
     if (!response.ok) throw new Error(data.error || "HubSpot a rejeté la modification");
     setSelf(current => ({ ...current, ...patchProperties, ...(data.properties ?? {}) }));
     toast.success(`${definitions[spec.property]?.label || spec.fallbackLabel} mis à jour dans HubSpot.`);
+  }
+
+  async function confirmLater(payload: LaterFollowupPayload) {
+    if (!selfId || laterSaving) return;
+    setLaterSaving(true);
+    try {
+      const response = await fetch(`/api/companies/${selfId}/workflow`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "LATER",
+          reminderAt: payload.reminderAt,
+          reason: payload.note,
+          createTask: payload.createTask,
+          createNote: Boolean(payload.note),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Impossible de planifier la relance");
+      const updated = data.company?.properties || {};
+      setSelf(current => ({
+        ...current,
+        ...companyStatusProperties("Ultérieur"),
+        ...updated,
+      }));
+      setLaterOpen(false);
+      toast.success("Relance ultérieure planifiée dans HubSpot.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Impossible de planifier la relance");
+    } finally {
+      setLaterSaving(false);
+    }
   }
 
   return (
@@ -301,6 +340,16 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
           );
         })}
       </div>
+
+      {kind === "company" ? (
+        <CompanyLaterFollowupDialog
+          open={laterOpen}
+          companyName={String(self.name || self.domain || "Cette entreprise")}
+          saving={laterSaving}
+          onOpenChange={setLaterOpen}
+          onConfirm={confirmLater}
+        />
+      ) : null}
     </section>
   );
 }
