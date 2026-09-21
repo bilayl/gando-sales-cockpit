@@ -164,9 +164,9 @@ export function ProspectionContactsDirectory() {
   const currentList = lists.find(item => item.listId === segmentId);
 
   return (
-    <div className="page-shell flex h-screen flex-col overflow-hidden">
-      <header className="shrink-0 border-b border-border bg-card px-5 py-3 lg:px-7">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="page-shell flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden">
+      <header className="shrink-0 border-b border-border bg-card px-4 py-3 sm:px-5 lg:px-7">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">Prospection · Contacts</span>
@@ -175,9 +175,9 @@ export function ProspectionContactsDirectory() {
             <p className="mt-0.5 text-sm font-semibold text-foreground">1 contact = 1 personne à joindre. Le prospect commercial reste l’entreprise associée.</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap xl:items-center">
             <Select value={segmentId || "__all__"} onValueChange={value => setSegmentId(value === "__all__" ? "" : value)}>
-              <SelectTrigger className="h-9 w-[220px]"><SelectValue placeholder="Segment" /></SelectTrigger>
+              <SelectTrigger className="h-9 w-full xl:w-[220px]"><SelectValue placeholder="Segment" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Tous les contacts</SelectItem>
                 {lists.map(list => (
@@ -185,13 +185,13 @@ export function ProspectionContactsDirectory() {
                 ))}
               </SelectContent>
             </Select>
-            <Button asChild variant="outline" size="sm" className="h-9 gap-1.5"><a href="/segments"><ListFilter size={14} /> Segments</a></Button>
+            <Button asChild variant="outline" size="sm" className="h-9 w-full gap-1.5 xl:w-auto"><a href="/segments"><ListFilter size={14} /> Segments</a></Button>
           </div>
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-hidden p-4 lg:px-6 lg:py-5">
-        <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="min-h-0 min-w-0 flex-1 overflow-hidden p-2 sm:p-4 lg:px-6 lg:py-5">
+        <Card className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
           <section className="border-b border-border bg-card">
             <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
               <div className="min-w-0">
@@ -230,13 +230,13 @@ export function ProspectionContactsDirectory() {
             </div>
           </section>
 
-          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-4 py-2.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-3 py-2.5 sm:px-4">
             <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
               <Button variant="secondary" size="sm" className="h-7 gap-1.5"><Table2 size={14} /> Base contacts</Button>
             </div>
 
             <Select value={ownerFilter || "__all__"} onValueChange={value => setOwnerFilter(value === "__all__" ? "" : value)}>
-              <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="Commercial" /></SelectTrigger>
+              <SelectTrigger className="h-9 w-full sm:w-[180px]"><SelectValue placeholder="Commercial" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Tous les commerciaux</SelectItem>
                 {owners.map(owner => <SelectItem key={owner.id} value={owner.id}>{ownerNames[owner.id]}</SelectItem>)}
@@ -244,7 +244,7 @@ export function ProspectionContactsDirectory() {
             </Select>
 
             <Select value={callFilter || "__all__"} onValueChange={value => setCallFilter(value === "__all__" ? "" : value)}>
-              <SelectTrigger className="h-9 w-[170px]"><SelectValue placeholder="Dernier appel" /></SelectTrigger>
+              <SelectTrigger className="h-9 w-full sm:w-[170px]"><SelectValue placeholder="Dernier appel" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Tous les résultats</SelectItem>
                 <SelectItem value="interesse">Intéressé</SelectItem>
@@ -259,27 +259,27 @@ export function ProspectionContactsDirectory() {
               </SelectContent>
             </Select>
 
-            <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Contact, entreprise, email…" className="h-9 w-56 pl-9" /></div>
+            <div className="relative min-w-0 flex-1 sm:flex-none"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Contact, entreprise, email…" className="h-9 w-full pl-9 sm:w-56" /></div>
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => void sync()} disabled={syncing}>{syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncing ? "Synchronisation…" : "Synchroniser"}</Button>
             <span className="ml-auto hidden text-[11px] text-muted-foreground 2xl:inline">Même expérience que la base entreprises, sans recréer un pipeline contact parallèle.</span>
           </div>
 
           {error ? <div className="mx-4 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div> : null}
 
-          <div className="min-h-0 flex-1 overflow-auto border-t border-border minari-scrollbar">
-            <Table className="min-w-[1500px]">
+          <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto border-t border-border minari-scrollbar">
+            <Table className="w-full table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead>Contact</TableHead>
-                  <TableHead>Entreprise</TableHead>
-                  <TableHead>Fonction</TableHead>
-                  <TableHead>Téléphone</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Dernier appel</TableHead>
-                  <TableHead>Rappel prévu</TableHead>
-                  <TableHead>Localisation</TableHead>
-                  <TableHead>Commercial</TableHead>
-                  <TableHead>Dernière activité</TableHead>
+                  <TableHead className="hidden xl:table-cell">Entreprise</TableHead>
+                  <TableHead className="hidden 2xl:table-cell">Fonction</TableHead>
+                  <TableHead className="hidden lg:table-cell">Téléphone</TableHead>
+                  <TableHead className="hidden 2xl:table-cell">Email</TableHead>
+                  <TableHead className="w-[140px]">Dernier appel</TableHead>
+                  <TableHead className="hidden w-[145px] lg:table-cell">Rappel prévu</TableHead>
+                  <TableHead className="hidden 2xl:table-cell">Localisation</TableHead>
+                  <TableHead className="hidden xl:table-cell">Commercial</TableHead>
+                  <TableHead className="hidden 2xl:table-cell">Dernière activité</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -297,15 +297,15 @@ export function ProspectionContactsDirectory() {
                           <div className="min-w-0"><div className="truncate font-medium">{contactName(p)}</div><div className="text-[11px] text-muted-foreground">{p.hs_object_source_label || "HubSpot"}</div></div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm">{p.company || <span className="text-muted-foreground">Non renseignée</span>}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{p.jobtitle || "—"}</TableCell>
-                      <TableCell>{phone ? <a href={`tel:${phone}`} onClick={event => event.stopPropagation()} className="inline-flex items-center gap-1.5 text-sm hover:text-primary"><Phone size={13} /> {phone}</a> : "—"}</TableCell>
-                      <TableCell>{p.email ? <a href={`mailto:${p.email}`} onClick={event => event.stopPropagation()} className="inline-flex items-center gap-1.5 text-sm hover:text-primary"><Mail size={13} /> {p.email}</a> : "—"}</TableCell>
+                      <TableCell className="hidden text-sm xl:table-cell">{p.company || <span className="text-muted-foreground">Non renseignée</span>}</TableCell>
+                      <TableCell className="hidden text-sm text-muted-foreground 2xl:table-cell">{p.jobtitle || "—"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{phone ? <a href={`tel:${phone}`} onClick={event => event.stopPropagation()} className="inline-flex items-center gap-1.5 text-sm hover:text-primary"><Phone size={13} /> {phone}</a> : "—"}</TableCell>
+                      <TableCell className="hidden 2xl:table-cell">{p.email ? <a href={`mailto:${p.email}`} onClick={event => event.stopPropagation()} className="inline-flex items-center gap-1.5 text-sm hover:text-primary"><Mail size={13} /> {p.email}</a> : "—"}</TableCell>
                       <TableCell><Badge variant="outline">{callStatus(p.statut_de_lappel)}</Badge></TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{nextFollowup ? formatDate(nextFollowup) : "—"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground"><span className="inline-flex items-center gap-1.5"><MapPin size={12} />{contactLocation(p)}</span></TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "Commercial" : "Non assigné"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{formatDate(p.hs_last_sales_activity_timestamp || p.notes_last_contacted)}</TableCell>
+                      <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">{nextFollowup ? formatDate(nextFollowup) : "—"}</TableCell>
+                      <TableCell className="hidden text-xs text-muted-foreground 2xl:table-cell"><span className="inline-flex items-center gap-1.5"><MapPin size={12} />{contactLocation(p)}</span></TableCell>
+                      <TableCell className="hidden text-xs text-muted-foreground xl:table-cell">{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "Commercial" : "Non assigné"}</TableCell>
+                      <TableCell className="hidden text-xs text-muted-foreground 2xl:table-cell">{formatDate(p.hs_last_sales_activity_timestamp || p.notes_last_contacted)}</TableCell>
                     </TableRow>
                   );
                 })}
