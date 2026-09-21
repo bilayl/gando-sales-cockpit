@@ -35,36 +35,19 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach";
+import { useCompanyCentralized } from "@/hooks/queries/use-company-detail";
+import {
+  useCompanyWorkflowMutation,
+  useProspectionSessionData,
+  type OnoffSessionState,
+  type ProspectionTaskSummary as TaskSummary,
+} from "@/hooks/queries/use-prospection-data";
+import { useProspectionStore } from "@/stores/prospection-store";
 import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
 import { getBestCallTimeForProperties } from "@/lib/call-timing";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
 
-type TaskSummary = {
-  openTaskCount: number;
-  overdueTaskCount: number;
-  todayTaskCount: number;
-  nextTask: {
-    id: string;
-    subject: string;
-    status: string;
-    priority?: string | null;
-    type?: string | null;
-    dueAt?: string | null;
-    sourceContactId?: string | null;
-    sourceContactName?: string | null;
-    sourceContactPhone?: string | null;
-    sourceContactJobTitle?: string | null;
-  } | null;
-};
-
-type OnoffSessionState = {
-  configured?: boolean;
-  connected?: boolean | null;
-  latestProcessingStatus?: string | null;
-  latestReceivedAt?: string | null;
-  error?: string | null;
-};
 
 type Props = {
   open: boolean;
@@ -176,30 +159,10 @@ function CompanyProfilePanel({
   fallbackCompany: Company;
   onOpenCompany: (companyId: string) => void;
 }) {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setData(null);
-    setLoading(true);
-    setError("");
-    fetch(`/api/companies/${companyId}/centralized`, { cache: "no-store", signal: controller.signal })
-      .then(async response => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "Impossible de charger la fiche entreprise");
-        return body;
-      })
-      .then(companyData => setData(companyData))
-      .catch(reason => {
-        if ((reason as Error).name !== "AbortError") setError(reason instanceof Error ? reason.message : "Impossible de charger la fiche entreprise");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [companyId]);
+  const companyQuery = useCompanyCentralized(companyId);
+  const data = companyQuery.data;
+  const loading = companyQuery.isLoading;
+  const error = companyQuery.error?.message || "";
 
   const p = data?.company?.properties || fallbackCompany.properties;
   const timing = getBestCallTimeForProperties(p);
@@ -349,57 +312,41 @@ function CompanyProfilePanel({
 }
 
 export function ProspectionSession({ open, onOpenChange, companies, onOpenCompany }: Props) {
-  const [summaries, setSummaries] = useState<Record<string, TaskSummary>>({});
-  const [onoff, setOnoff] = useState<OnoffSessionState | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [index, setIndex] = useState(0);
   const [done, setDone] = useState<Set<string>>(new Set());
   const [finishOpen, setFinishOpen] = useState(false);
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
   const [reminderAt, setReminderAt] = useState(reminderPreset(1));
   const [note, setNote] = useState("");
-  const [savingOutcome, setSavingOutcome] = useState(false);
   const [evaluationTime, setEvaluationTime] = useState(Date.now);
+  const currentLeadIndex = useProspectionStore(state => state.currentLeadIndex);
+  const setCurrentLeadIndex = useProspectionStore(state => state.setCurrentLeadIndex);
+  const workflowMutation = useCompanyWorkflowMutation();
 
   useEffect(() => {
     if (!open) return;
-    setIndex(0);
+    setCurrentLeadIndex(0);
     setDone(new Set());
-    setError("");
-    setOnoff(null);
     setFinishOpen(false);
     setOutcome(null);
     setEvaluationTime(Date.now());
-    const now = Date.now();
-    const activeIds = companies
+  }, [open, setCurrentLeadIndex]);
+
+  const activeCompanyIds = useMemo(() => {
+    const now = evaluationTime;
+    return companies
       .filter(company => {
         const stage = deriveCompanyStage(company, now);
         return getCompanyProspectionDecision(company, stage, now).bucket === "ACTIONABLE";
       })
       .map(company => company.id)
       .slice(0, 100);
-    if (!activeIds.length) {
-      setSummaries({});
-      return;
-    }
+  }, [companies, evaluationTime]);
 
-    setLoading(true);
-    fetch("/api/prospection/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ companyIds: activeIds }),
-      cache: "no-store",
-    })
-      .then(async response => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "Impossible de préparer la session");
-        setSummaries(body.summaries || {});
-        setOnoff((body.onoff || null) as OnoffSessionState | null);
-      })
-      .catch(reason => setError(reason instanceof Error ? reason.message : "Impossible de préparer la session"))
-      .finally(() => setLoading(false));
-  }, [open, companies]);
+  const sessionQuery = useProspectionSessionData(activeCompanyIds, open);
+  const summaries = sessionQuery.data?.summaries || {};
+  const onoff = (sessionQuery.data?.onoff || null) as OnoffSessionState | null;
+  const loading = sessionQuery.isLoading;
+  const error = sessionQuery.error?.message || "";
 
   const queue = useMemo(() => {
     const now = evaluationTime;
@@ -421,12 +368,12 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   }, [companies, summaries, evaluationTime]);
 
   const remaining = queue.filter(item => !done.has(item.company.id));
-  const current = remaining[Math.min(index, Math.max(remaining.length - 1, 0))] || null;
+  const current = remaining[Math.min(currentLeadIndex, Math.max(remaining.length - 1, 0))] || null;
 
   function advanceAfterOutcome() {
     if (!current) return;
     setDone(previous => new Set(previous).add(current.company.id));
-    setIndex(0);
+    setCurrentLeadIndex(0);
     setOutcome(null);
     setNote("");
     setReminderAt(reminderPreset(1));
@@ -434,12 +381,12 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
   function skip() {
     if (!remaining.length) return;
-    setIndex(previous => (previous + 1) % remaining.length);
+    setCurrentLeadIndex((currentLeadIndex + 1) % remaining.length);
   }
 
   function previous() {
     if (!remaining.length) return;
-    setIndex(previous => (previous - 1 + remaining.length) % remaining.length);
+    setCurrentLeadIndex((currentLeadIndex - 1 + remaining.length) % remaining.length);
   }
 
   function openFinish() {
@@ -465,7 +412,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   }
 
   async function saveOutcome() {
-    if (!current || !outcome || savingOutcome) return;
+    if (!current || !outcome || workflowMutation.isPending) return;
 
     let action = "CONNECTED";
     let nextReminder: string | null = null;
@@ -504,15 +451,13 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
       nextReminder = parsed.toISOString();
     }
 
-    setSavingOutcome(true);
     try {
-      const response = await fetch(`/api/companies/${current.company.id}/workflow`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action, reminderAt: nextReminder, reason }),
+      await workflowMutation.mutateAsync({
+        companyId: current.company.id,
+        action,
+        reminderAt: nextReminder,
+        reason,
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Impossible d’enregistrer le résultat de l’appel");
 
       const message = outcome === "MEETING"
         ? "RDV enregistré — compte sorti de la file setter."
@@ -526,8 +471,6 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
       advanceAfterOutcome();
     } catch (reasonValue) {
       toast.error(reasonValue instanceof Error ? reasonValue.message : "Impossible d’enregistrer le résultat de l’appel");
-    } finally {
-      setSavingOutcome(false);
     }
   }
 
@@ -535,6 +478,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   const task = current?.summary?.nextTask || null;
   const currentReminder = p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date;
   const needsReminder = outcome === "FOLLOW_UP" || outcome === "NO_ANSWER" || outcome === "WRONG_CONTACT";
+  const savingOutcome = workflowMutation.isPending;
   const onoffReady = Boolean(onoff?.configured && onoff?.connected !== false);
 
   return (
