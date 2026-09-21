@@ -24,10 +24,12 @@ import { AddContactButton } from "@/components/add-contact-button";
 import { ProspectionSession } from "@/components/prospection-session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useTodayDashboard, type AgendaPayload, type OnoffStatus, type TodayContact as Contact, type TodayPayload, type TodayTask as Task } from "@/hooks/queries/use-today-dashboard";
+import { useTodayDashboard, type TodayContact as Contact, type TodayTask as Task } from "@/hooks/queries/use-today-dashboard";
 import { queryKeys } from "@/lib/query/query-keys";
 
 const ONOFF_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
+
+type Company = { id: string; properties: Record<string, string | null | undefined> };
 
 type UnifiedAction =
   | { kind: "TASK"; key: string; priority: number; at: number; task: Task; overdue: boolean }
