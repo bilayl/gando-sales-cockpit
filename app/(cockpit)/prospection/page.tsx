@@ -26,8 +26,8 @@ export default async function ProspectionPage({ searchParams }: { searchParams: 
 
   return (
     <>
-      <div className="flex h-screen min-h-0 flex-col overflow-hidden">
-        <nav className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-5 py-2 lg:px-7" aria-label="Type de données de prospection">
+      <div className="flex h-svh w-full min-w-0 max-w-full flex-col overflow-hidden">
+        <nav className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-card px-4 py-2 sm:px-5 lg:px-7" aria-label="Type de données de prospection">
           <Link
             href="/prospection"
             className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition ${!contactsMode ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
@@ -41,10 +41,10 @@ export default async function ProspectionPage({ searchParams }: { searchParams: 
             <Users size={14} /> Contacts
           </Link>
           <span className="ml-2 hidden text-[11px] text-muted-foreground md:inline">Entreprise = prospect · Contact = personne à joindre</span>
-          <AddContactButton className="ml-auto" />
+          <AddContactButton className="ml-auto shrink-0" />
         </nav>
 
-        <div className="min-h-0 flex-1 overflow-hidden [&>.page-shell]:!h-full">
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden [&>.page-shell]:!h-full">
           {contactsMode ? <ProspectionContactsDirectory /> : <CompanyFirstProspectionView />}
         </div>
       </div>
