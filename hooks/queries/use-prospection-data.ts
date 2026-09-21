@@ -105,3 +105,72 @@ export function useClaimProspectionSession() {
     },
   });
 }
+
+export type ProspectionTaskSummary = {
+  openTaskCount: number;
+  overdueTaskCount: number;
+  todayTaskCount: number;
+  nextTask: {
+    id: string;
+    subject: string;
+    status: string;
+    priority?: string | null;
+    type?: string | null;
+    dueAt?: string | null;
+    sourceContactId?: string | null;
+    sourceContactName?: string | null;
+    sourceContactPhone?: string | null;
+    sourceContactJobTitle?: string | null;
+  } | null;
+};
+
+export type OnoffSessionState = {
+  configured?: boolean;
+  connected?: boolean | null;
+  latestProcessingStatus?: string | null;
+  latestReceivedAt?: string | null;
+  error?: string | null;
+};
+
+export function useProspectionSessionData(companyIds: string[], enabled = true) {
+  const stableIds = [...companyIds].sort();
+  return useQuery({
+    queryKey: queryKeys.prospection.session(stableIds),
+    queryFn: () => apiJson<{ summaries?: Record<string, ProspectionTaskSummary>; onoff?: OnoffSessionState | null }>(
+      "/api/prospection/session",
+      {
+        method: "POST",
+        body: JSON.stringify({ companyIds: stableIds.slice(0, 100) }),
+      },
+    ),
+    enabled: enabled && stableIds.length > 0,
+    staleTime: 30_000,
+  });
+}
+
+export function useCompanyWorkflowMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      companyId,
+      ...payload
+    }: {
+      companyId: string;
+      action: string;
+      reminderAt?: string | null;
+      reason?: string;
+      createTask?: boolean;
+      createNote?: boolean;
+    }) => apiJson<any>(`/api/companies/${encodeURIComponent(companyId)}/workflow`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.companies.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.companies.centralized(variables.companyId) }),
+        queryClient.invalidateQueries({ queryKey: ["prospection", "session"] }),
+      ]);
+    },
+  });
+}
