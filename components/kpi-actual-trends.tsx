@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useKpiEndpoint } from "@/hooks/queries/use-kpi"
+
 import {
   CartesianGrid,
   Legend,
@@ -86,24 +87,10 @@ function ChartCard({ title, subtitle, children }: { title: string; subtitle: str
 }
 
 export function KpiActualTrends({ variant }: { variant: "growth" | "economics" }) {
-  const [data, setData] = useState<Data | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch("/api/kpi/decision-intelligence", { cache: "no-store" })
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error || "Impossible de charger les tendances.")
-        setData(body)
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Impossible de charger les tendances.")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  const query = useKpiEndpoint<Data>("decision-intelligence", "/api/kpi/decision-intelligence")
+  const data = query.data
+  const loading = query.isLoading
+  const error = query.error?.message || ""
 
   if (loading) return <Skeleton className="h-[580px] w-full rounded-xl" />
   if (error || !data) return <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">{error || "Tendances indisponibles"}</div>
