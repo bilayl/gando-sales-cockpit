@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DealRoomDeal } from "@/lib/deal-room-types";
-import type { SDRoomMode } from "@/lib/sd-room-types";
+import type { SDCode, SDDocumentStatus, SDRoomMode } from "@/lib/sd-room-types";
 import { apiJson } from "@/lib/query/api-client";
 import { queryKeys } from "@/lib/query/query-keys";
 
@@ -22,8 +22,8 @@ export type PipelineRoom = {
   updated_at: string;
   documents: Array<{
     room_id: string;
-    code: string;
-    status: string;
+    code: SDCode;
+    status: SDDocumentStatus;
     source_mode: "manual" | "agent" | "mixed";
     version: number;
     published_version: number | null;
