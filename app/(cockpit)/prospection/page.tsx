@@ -1,8 +1,15 @@
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { CompanyFirstProspectionView } from "@/components/company-first-prospection-view";
 import { PostCallFollowupQueue } from "@/components/post-call-followup-queue";
 import { getHubSpotIdentity, isAuthBypassEnabled } from "@/lib/hubspot";
 import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
+
+const ensureQualificationSchema = unstable_cache(
+  async () => ensureCompanyQualificationProperties(),
+  ["gando-company-qualification-schema"],
+  { revalidate: 60 * 60 },
+);
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +20,7 @@ export default async function ProspectionPage({ searchParams }: { searchParams: 
   const bypass = isAuthBypassEnabled();
   const identity = bypass ? null : await getHubSpotIdentity().catch(() => null);
 
-  await ensureCompanyQualificationProperties().catch(error => {
+  await ensureQualificationSchema().catch(error => {
     console.error("HubSpot qualification schema bootstrap:", error);
   });
 
