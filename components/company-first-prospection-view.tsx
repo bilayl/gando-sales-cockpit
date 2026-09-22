@@ -10,6 +10,7 @@ import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type Com
 import { ProspectionSession } from "@/components/prospection-session";
 import { SdrWorkQueue } from "@/components/sdr-work-queue";
 import { PageHeader } from "@/components/cockpit/page-header";
+import { ProspectionPageSkeleton } from "@/components/prospection-page-skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -280,6 +281,10 @@ export function CompanyFirstProspectionView() {
   const error = localError
     || (companiesQuery.data?.truncated ? "Le volume est très important : seuls les 10 000 premiers comptes ont été chargés." : "")
     || (queryError instanceof Error ? queryError.message : "");
+
+  if (loading && !companiesQuery.data) {
+    return <ProspectionPageSkeleton />;
+  }
 
   return (
     <div className="mx-auto flex h-full w-full max-w-[1440px] min-w-0 flex-col overflow-hidden px-3 py-5 sm:px-5 lg:px-7 lg:py-7">
