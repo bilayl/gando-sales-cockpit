@@ -13,14 +13,10 @@ export function DashboardLayout({
   children,
   email,
   role,
-  canAccessKpi,
-  canAccessDealRoom,
 }: {
   children: ReactNode;
   email?: string;
   role: CockpitRole;
-  canAccessKpi: boolean;
-  canAccessDealRoom: boolean;
 }) {
   const sidebarOpen = useUIStore(state => state.sidebarOpen);
   const setSidebarOpen = useUIStore(state => state.setSidebarOpen);
@@ -36,12 +32,7 @@ export function DashboardLayout({
         } as CSSProperties
       }
     >
-      <AppSidebar
-        email={email}
-        role={role}
-        canAccessKpi={canAccessKpi}
-        canAccessDealRoom={canAccessDealRoom}
-      />
+      <AppSidebar email={email} role={role} />
       <SidebarInset className="min-h-svh min-w-0 bg-background text-foreground">
         <DashboardHeader />
         <main className="min-h-0 min-w-0 flex-1">
