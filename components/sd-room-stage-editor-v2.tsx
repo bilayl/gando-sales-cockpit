@@ -16,7 +16,7 @@ type RoomResponse = { documents: SDDocumentRecord[]; room: { id: string; title: 
 const CODES: SDCode[] = ["SD02", "SD03", "SD04", "SD05"];
 const OPTIONAL = new Set<SDCode>(["SD03", "SD04"]);
 const REQUIRED_BEFORE: Partial<Record<SDCode, SDCode[]>> = {
-  SD02: ["SD01"],
+  SD02: [],
   SD03: ["SD02"],
   SD04: ["SD02"],
   SD05: ["SD01", "SD02"],
@@ -197,7 +197,7 @@ export function SDRoomStageEditorV2({ dealId }: { dealId: string }) {
   const title = useMemo(() => `${active} · ${SD_STAGE_META[active].title}`, [active]);
   if (loading && !data) return <div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
-  const requirementCopy = canPublish ? `${requiredBefore.join(" + ") || "Aucun prérequis"} validé · publication autorisée` : `${missingRequired.join(" + ")} à valider avant publication`;
+  const requirementCopy = canPublish ? (requiredBefore.length ? `${requiredBefore.join(" + ")} validé · publication autorisée` : active === "SD02" ? "Publication possible sans validation préalable du SD01" : "Aucun prérequis · publication autorisée") : `${missingRequired.join(" + ")} à valider avant publication`;
   const stageIcon = active === "SD04" ? Presentation : active === "SD05" ? FileSignature : Target;
   const StageIcon = stageIcon;
 
