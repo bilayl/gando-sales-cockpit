@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   BadgeEuro,
   ChartSpline,
@@ -26,19 +26,28 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { CockpitSidebarHeader, CockpitSidebarUser, type CockpitRole } from "@/components/cockpit-sidebar-shared";
+import {
+  CockpitSidebarHeader,
+  CockpitSidebarUser,
+  type CockpitRole,
+} from "@/components/cockpit-sidebar-shared";
 
 const items = [
-  { id: "overview", label: "Vue d’ensemble", icon: LayoutDashboard },
-  { id: "growth", label: "Croissance", icon: TrendingUp },
-  { id: "economics", label: "Économie & risque", icon: BadgeEuro },
-  { id: "forecast", label: "Prévisions", icon: ChartSpline },
-  { id: "acquisition", label: "Acquisition", icon: Target },
-  { id: "cash", label: "Cash & coûts", icon: WalletCards },
-  { id: "remuneration", label: "Redevances", icon: HandCoins },
-  { id: "history", label: "Historique", icon: History },
-  { id: "data", label: "Données", icon: Database },
+  { href: "/kpi", label: "Vue d’ensemble", icon: LayoutDashboard },
+  { href: "/kpi/growth", label: "Croissance", icon: TrendingUp },
+  { href: "/kpi/economics", label: "Économie & risque", icon: BadgeEuro },
+  { href: "/kpi/forecast", label: "Prévisions", icon: ChartSpline },
+  { href: "/kpi/acquisition", label: "Acquisition", icon: Target },
+  { href: "/kpi/cash", label: "Cash & coûts", icon: WalletCards },
+  { href: "/kpi/remuneration", label: "Redevances", icon: HandCoins },
+  { href: "/kpi/history", label: "Historique", icon: History },
+  { href: "/kpi/data", label: "Données", icon: Database },
 ] as const;
+
+function isActive(pathname: string, href: string) {
+  if (href === "/kpi") return pathname === "/kpi";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function KpiSidebar({
   email,
@@ -47,14 +56,7 @@ export function KpiSidebar({
   email?: string;
   role: CockpitRole;
 }) {
-  const [active, setActive] = useState("overview");
-
-  useEffect(() => {
-    const syncFromHash = () => setActive(window.location.hash.replace("#", "") || "overview");
-    syncFromHash();
-    window.addEventListener("hashchange", syncFromHash);
-    return () => window.removeEventListener("hashchange", syncFromHash);
-  }, []);
+  const pathname = usePathname();
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border/50 bg-sidebar">
@@ -71,16 +73,17 @@ export function KpiSidebar({
             <SidebarMenu className="gap-0.5">
               {items.map(item => {
                 const Icon = item.icon;
-                const isActive = active === item.id;
+                const active = isActive(pathname, item.href);
+
                 return (
-                  <SidebarMenuItem key={item.id}>
+                  <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       asChild
-                      isActive={isActive}
+                      isActive={active}
                       tooltip={item.label}
-                      className="h-9 rounded-lg px-2.5 text-[13px] font-medium text-sidebar-foreground/72 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent/70 data-[active=true]:text-sidebar-foreground"
+                      className="h-9 rounded-lg px-2.5 text-[13px] font-medium text-sidebar-foreground/72 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground data-[active=true]:bg-sidebar-accent/70 data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-none"
                     >
-                      <Link href={`/kpi#${item.id}`} onClick={() => setActive(item.id)}>
+                      <Link href={item.href}>
                         <Icon className="size-[17px]" strokeWidth={1.8} />
                         <span>{item.label}</span>
                       </Link>
