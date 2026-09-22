@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarCheck2, UsersRound } from "lucide-react";
+import { CalendarCheck2, CalendarPlus, ExternalLink, UsersRound } from "lucide-react";
 import { MeetingsView } from "@/components/meetings-view";
 import { SetterMeetingsPanel } from "@/components/setter-meetings-panel";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 type MeetingsCategory = "setter" | "all";
 
@@ -15,6 +16,27 @@ export function MeetingsCategoryView() {
     <div className="min-h-screen">
       <div className="px-5 pt-5 lg:px-7 lg:pt-6">
         <div className="mx-auto max-w-[1500px]">
+          <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">CRM</div>
+              <h1 className="mt-1 text-2xl font-semibold tracking-[-0.035em]">Rendez-vous</h1>
+              <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Suivez les rendez-vous commerciaux et planifiez directement une présentation Gando.
+              </p>
+            </div>
+            <Button asChild className="h-9 gap-2">
+              <a
+                href="https://meet.brevo.com/gando-presentation/presentation"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <CalendarPlus className="h-4 w-4" />
+                Planifier un rendez-vous
+                <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+              </a>
+            </Button>
+          </div>
+
           <div className="inline-flex rounded-xl border border-border bg-card p-1 shadow-sm">
             <button
               type="button"
