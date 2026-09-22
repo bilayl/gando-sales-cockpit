@@ -7,6 +7,6 @@ export const dynamic = "force-dynamic";
 export default async function DealRoomLayout({ children }: { children: ReactNode }) {
   const access = await getCockpitAccess();
   if (!access) redirect("/login");
-  if (!access.canAccessDealRoom) redirect("/today?access=deal-room-denied");
+  if (!access.canAccessDealRoom) redirect("/");
   return children;
 }
