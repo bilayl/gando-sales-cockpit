@@ -50,7 +50,7 @@ function ResultIcon({ type }: { type: SearchResult["type"] }) {
   );
 }
 
-export function CrmGlobalSearch() {
+export function CrmGlobalSearch({ placement = "header" }: { placement?: "header" | "sidebar" }) {
   const router = useRouter();
   const open = useUIStore(state => state.commandMenuOpen);
   const setOpen = useUIStore(state => state.setCommandMenuOpen);
@@ -137,12 +137,23 @@ export function CrmGlobalSearch() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="group flex h-8 min-w-0 items-center gap-2 rounded-lg border border-border/60 bg-background px-2.5 text-left text-xs text-muted-foreground transition hover:border-border hover:bg-muted/30 sm:w-[260px] lg:w-[320px]"
+        className={cn(
+          "group flex min-w-0 items-center gap-2 rounded-lg text-left text-xs text-muted-foreground transition",
+          placement === "sidebar"
+            ? "h-9 w-full border border-sidebar-border/60 bg-sidebar-accent/35 px-2.5 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:w-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:px-0"
+            : "h-8 border border-border/60 bg-background px-2.5 hover:border-border hover:bg-muted/30 sm:w-[260px] lg:w-[320px]",
+        )}
         aria-label="Rechercher dans le CRM"
       >
         <Search className="h-3.5 w-3.5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">Rechercher contacts et entreprises…</span>
-        <kbd className="hidden rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-sans text-[9px] font-medium text-muted-foreground sm:inline">
+        <span className={cn(
+          "min-w-0 flex-1 truncate",
+          placement === "sidebar" && "group-data-[collapsible=icon]:hidden",
+        )}>Rechercher</span>
+        <kbd className={cn(
+          "rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-sans text-[9px] font-medium text-muted-foreground",
+          placement === "sidebar" ? "group-data-[collapsible=icon]:hidden" : "hidden sm:inline",
+        )}>
           ⌘K
         </kbd>
       </button>
