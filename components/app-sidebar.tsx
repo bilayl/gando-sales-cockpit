@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  CalendarCheck2,
   CalendarDays,
   CircleHelp,
   ContactRound,
@@ -12,7 +13,6 @@ import {
   Mail,
   PhoneCall,
   Search,
-  Settings,
 } from "lucide-react";
 import {
   Sidebar,
@@ -103,7 +103,7 @@ export function AppSidebar({
     { href: "/prospection", label: "Prospection", icon: PhoneCall },
     { href: "/contacts", label: "Contacts", icon: ContactRound },
     { href: "/agenda", label: "Agenda", icon: CalendarDays },
-    { href: "/settings", label: "Paramètres", icon: Settings },
+    { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
   ];
 
   const tools: NavItem[] = [
