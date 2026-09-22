@@ -134,7 +134,7 @@ export function KpiPageShell({
 
       <div
         key={refreshKey}
-        className="mt-8 min-w-0 space-y-5 [&_.shadow-sm]:shadow-none [&_.shadow-md]:shadow-none [&_.shadow-lg]:shadow-none"
+        className="mt-8 min-w-0 space-y-5 [&_.panel]:border-border/50 [&_.panel]:bg-background [&_.panel]:shadow-none [&_.shadow-sm]:shadow-none [&_.shadow-md]:shadow-none [&_.shadow-lg]:shadow-none"
       >
         {children}
       </div>
