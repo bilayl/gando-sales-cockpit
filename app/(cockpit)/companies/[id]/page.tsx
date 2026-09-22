@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
-    <div className="crm-record-white-scope">
+    <div className="crm-record-theme-scope">
       <CompanyLocationEditor recordId={id} />
       <CRMRecordPage kind="company" recordId={id} />
     </div>
