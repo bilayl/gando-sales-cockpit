@@ -27,6 +27,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { CrmGlobalSearch } from "@/components/crm-global-search";
 import {
   CockpitSidebarUser,
   GandoSidebarMark,
@@ -132,6 +133,9 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <div className="mt-2 px-0.5 group-data-[collapsible=icon]:px-0">
+          <CrmGlobalSearch placement="sidebar" />
+        </div>
       </SidebarHeader>
 
       <SidebarContent className="gap-1 pt-1">
