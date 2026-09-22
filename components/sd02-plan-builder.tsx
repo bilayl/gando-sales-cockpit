@@ -18,6 +18,28 @@ type StepOrganization = "joint" | "client" | "gando";
 
 const EMPTY_STEP: MutualActionItem = { milestone: "", workstream: "business", organization: "joint", owner: "", dueDate: "", status: "not_started", dependency: "" };
 
+function stepStatusLabel(status: StepStatus) {
+  return status === "done" ? "Terminé" : status === "in_progress" ? "En cours" : "À faire";
+}
+
+function stepStatusClasses(status: StepStatus) {
+  if (status === "done") return {
+    card: "border-emerald-200/80 bg-emerald-50/45 dark:border-emerald-900/60 dark:bg-emerald-950/15",
+    badge: "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300",
+    dot: "bg-emerald-500",
+  };
+  if (status === "in_progress") return {
+    card: "border-amber-200/80 bg-amber-50/45 dark:border-amber-900/60 dark:bg-amber-950/15",
+    badge: "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300",
+    dot: "bg-amber-500",
+  };
+  return {
+    card: "border-border bg-background",
+    badge: "border-zinc-200 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+    dot: "bg-zinc-400",
+  };
+}
+
 function normalizeStep(item: Partial<MutualActionItem>): MutualActionItem {
   const status: StepStatus = item.status === "done" || item.status === "in_progress" ? item.status : "not_started";
   const workstream: StepWorkstream = item.workstream === "technical" || item.workstream === "legal" || item.workstream === "procurement" || item.workstream === "other" ? item.workstream : "business";
@@ -180,13 +202,19 @@ export function SD02PlanBuilder({ dealId }: { dealId: string }) {
         </div>
 
         <div className="space-y-3 p-5 sm:p-7">
-          {content.milestones.map((step, index) => <div key={index} className="group rounded-xl border border-border bg-background p-4">
+          {content.milestones.map((step, index) => {
+            const statusStyle = stepStatusClasses(step.status as StepStatus);
+            return <div key={index} className={`group rounded-xl border p-4 transition-colors ${statusStyle.card}`}>
             <div className="flex items-start gap-3">
               <div className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{index + 1}</div>
               <div className="min-w-0 flex-1">
                 <Input value={step.milestone} onChange={event => updateStep(index, "milestone", event.target.value)} placeholder="Décrire la prochaine étape…" className="h-auto border-0 bg-transparent p-0 text-[15px] font-semibold shadow-none focus-visible:ring-0" disabled={locked} />
                 <textarea value={step.dependency} onChange={event => updateStep(index, "dependency", event.target.value)} rows={2} placeholder="Détail ou dépendance éventuelle…" className="mt-2 w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 text-muted-foreground outline-none placeholder:text-muted-foreground/50 disabled:opacity-70" disabled={locked} />
                 <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex h-9 items-center gap-2 rounded-lg border px-2.5 text-xs font-semibold ${statusStyle.badge}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${statusStyle.dot}`} />
+                    {stepStatusLabel(step.status as StepStatus)}
+                  </span>
                   <Input value={step.owner} onChange={event => updateStep(index, "owner", event.target.value)} placeholder="Responsable" className="h-9 w-36 text-xs" disabled={locked} />
                   <Input type="date" value={step.dueDate} onChange={event => updateStep(index, "dueDate", event.target.value)} className="h-9 w-40 text-xs" disabled={locked} />
                   <Select value={step.status} onChange={value => updateStep(index, "status", value as StepStatus)} disabled={locked}><option value="not_started">À faire</option><option value="in_progress">En cours</option><option value="done">Terminé</option></Select>
@@ -200,7 +228,8 @@ export function SD02PlanBuilder({ dealId }: { dealId: string }) {
                 <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeStep(index)} disabled={locked}><Trash2 className="h-4 w-4" /></Button>
               </div>
             </div>
-          </div>)}
+          </div>;
+          })}
 
           {!content.milestones.length && !generating ? <div className="rounded-xl border border-dashed border-border p-8 text-center"><div className="text-sm font-semibold">Aucune prochaine étape</div><p className="mt-1 text-xs text-muted-foreground">Génère-les depuis SD01 ou ajoute-les manuellement.</p><div className="mt-4 flex justify-center gap-2"><Button variant="outline" onClick={() => void regenerate()}><Sparkles className="mr-2 h-4 w-4" />Générer</Button><Button variant="outline" onClick={addStep}><Plus className="mr-2 h-4 w-4" />Ajouter</Button></div></div> : null}
         </div>
