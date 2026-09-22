@@ -12,12 +12,7 @@ export default async function CockpitLayout({ children }: { children: ReactNode 
   const accountLabel = access.email || access.displayName || "Compte Gando";
 
   return (
-    <DashboardLayout
-      email={accountLabel}
-      role={access.role}
-      canAccessKpi={access.canAccessKpi}
-      canAccessDealRoom={access.canAccessDealRoom}
-    >
+    <DashboardLayout email={accountLabel} role={access.role}>
       {children}
     </DashboardLayout>
   );
