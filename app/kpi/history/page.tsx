@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
-import { KpiCeoFocus } from "@/components/kpi-ceo-focus";
-import { KpiCeoScorecard } from "@/components/kpi-ceo-scorecard";
+import { KpiMonthlyShadcn } from "@/components/kpi-monthly-shadcn";
 import { KpiPageShell } from "@/components/kpi/kpi-page-shell";
 import { getCockpitAccess } from "@/lib/cockpit-access";
 
 export const dynamic = "force-dynamic";
 
-export default async function KpiOverviewPage() {
+export default async function KpiHistoryPage() {
   const access = await getCockpitAccess();
   if (!access) redirect("/login");
   if (!access.canAccessKpi) redirect("/");
@@ -14,11 +13,10 @@ export default async function KpiOverviewPage() {
   return (
     <KpiPageShell
       role={access.role}
-      title="Pilotage"
-      description="Les indicateurs essentiels pour piloter Gando, suivre la dynamique du mois et identifier les décisions prioritaires."
+      title="Historique"
+      description="Comparer les résultats réels et les projections mois par mois, avec accès au détail des activations et des principaux ratios."
     >
-      <KpiCeoScorecard />
-      <KpiCeoFocus />
+      <KpiMonthlyShadcn canEdit={access.role !== "commercial"} />
     </KpiPageShell>
   );
 }

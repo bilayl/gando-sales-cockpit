@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { KpiSidebar } from "@/components/kpi/kpi-sidebar";
+import { PageTransition } from "@/components/page-transition";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import type { CockpitRole } from "@/components/cockpit-sidebar-shared";
 
@@ -31,7 +32,7 @@ export function KpiLayoutShell({
           <div className="h-4 w-px bg-border/70" />
           <span className="text-[13px] font-medium text-muted-foreground">KPI</span>
         </header>
-        <main className="min-h-0 min-w-0 flex-1">{children}</main>
+        <main className="min-h-0 min-w-0 flex-1"><PageTransition>{children}</PageTransition></main>
       </SidebarInset>
     </SidebarProvider>
   );
