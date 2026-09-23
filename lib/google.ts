@@ -251,6 +251,36 @@ export type GoogleCalendarEvent = {
   end?: { dateTime?: string; date?: string };
 };
 
+export async function createGoogleCalendarEvent(input: {
+  calendarId: string;
+  summary: string;
+  description?: string;
+  start: string;
+  end: string;
+}) {
+  const response = await googleAuthorizedFetch(
+    `${GOOGLE_CALENDAR}/calendars/${encodeURIComponent(input.calendarId)}/events`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        summary: input.summary,
+        description: input.description || undefined,
+        start: { dateTime: input.start },
+        end: { dateTime: input.end },
+      }),
+    },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const messageText = data?.error?.message || `Google Calendar ${response.status}`;
+    const error = new Error(messageText) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+  return data as GoogleCalendarEvent;
+}
+
 export async function getAllGoogleCalendarEvents(opts: { calendarId: string; timeMin: string; timeMax: string }) {
   const items: GoogleCalendarEvent[] = [];
   let pageToken: string | undefined;
