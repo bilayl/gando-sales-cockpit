@@ -62,8 +62,22 @@ export type SD04Content = {
   validityDate: string;
 };
 
-export type SD05TemplateId = "gando_standard" | "legal_convention";
+export type SD05TemplateId = "gando_standard" | "legal_convention" | "rental_exact";
 export type SD05SignatureProvider = "gando" | "odoo";
+
+export type SD05RentalTemplateData = {
+  legalName: string;
+  legalForm: string;
+  shareCapital: string;
+  siren: string;
+  vatNumber: string;
+  registeredOffice: string;
+  contactEmail: string;
+  activityRegion: string;
+  gandoRate: string;
+  partnerRate: string;
+  totalRate: string;
+};
 
 export type SD05Content = {
   contractTitle: string;
@@ -72,6 +86,7 @@ export type SD05Content = {
   contractUrl: string;
   signatureUrl: string;
   signatureProvider: SD05SignatureProvider;
+  rentalTemplate: SD05RentalTemplateData;
   contractStatus: "draft" | "internal_review" | "client_review" | "ready_to_sign" | "signed";
   contractSummary: string;
   contractTemplate: SD05TemplateId;
@@ -148,6 +163,19 @@ export function createEmptySD05(): SD05Content {
     contractUrl: "",
     signatureUrl: "",
     signatureProvider: "gando",
+    rentalTemplate: {
+      legalName: "",
+      legalForm: "SAS",
+      shareCapital: "",
+      siren: "",
+      vatNumber: "",
+      registeredOffice: "",
+      contactEmail: "",
+      activityRegion: "",
+      gandoRate: "2,70",
+      partnerRate: "0,70",
+      totalRate: "3,40",
+    },
     contractStatus: "draft",
     contractSummary: "",
     contractTemplate: "gando_standard",
@@ -258,8 +286,9 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
   }
   if (code === "SD05") {
     const contractStatus: SD05Content["contractStatus"] = source.contractStatus === "internal_review" || source.contractStatus === "client_review" || source.contractStatus === "ready_to_sign" || source.contractStatus === "signed" ? source.contractStatus : "draft";
-    const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : "gando_standard";
+    const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : source.contractTemplate === "rental_exact" ? "rental_exact" : "gando_standard";
     const signatureProvider: SD05SignatureProvider = source.signatureProvider === "odoo" ? "odoo" : "gando";
+    const rentalSource = source.rentalTemplate && typeof source.rentalTemplate === "object" ? source.rentalTemplate as Record<string, unknown> : {};
     const result: SD05Content = {
       contractTitle: text(source.contractTitle, 500),
       contractReference: text(source.contractReference, 300),
@@ -267,6 +296,19 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       contractUrl: text(source.contractUrl, 2000),
       signatureUrl: text(source.signatureUrl, 2000),
       signatureProvider,
+      rentalTemplate: {
+        legalName: text(rentalSource.legalName, 300),
+        legalForm: text(rentalSource.legalForm, 120),
+        shareCapital: text(rentalSource.shareCapital, 120),
+        siren: text(rentalSource.siren, 120),
+        vatNumber: text(rentalSource.vatNumber, 120),
+        registeredOffice: text(rentalSource.registeredOffice, 800),
+        contactEmail: text(rentalSource.contactEmail, 320),
+        activityRegion: text(rentalSource.activityRegion, 300),
+        gandoRate: text(rentalSource.gandoRate, 30) || "2,70",
+        partnerRate: text(rentalSource.partnerRate, 30) || "0,70",
+        totalRate: text(rentalSource.totalRate, 30) || "3,40",
+      },
       contractStatus,
       contractSummary: text(source.contractSummary),
       contractTemplate,
