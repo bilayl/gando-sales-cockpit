@@ -155,7 +155,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto border-t border-border minari-scrollbar">
+      <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain border-t border-border minari-scrollbar">
         <div className="grid min-w-0 grid-cols-1 items-start gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {COMPANY_PIPELINE.map(column => {
             const cards = groups.get(column.value) || [];
