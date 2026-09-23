@@ -1,10 +1,26 @@
 import type { SD05Content, SD05TemplateId } from "@/lib/sd-stage-content";
+import rentalPage02 from "@/lib/sd05-rental-body/page-02";
+import rentalPage03 from "@/lib/sd05-rental-body/page-03";
+import rentalPage04 from "@/lib/sd05-rental-body/page-04";
+import rentalPage05 from "@/lib/sd05-rental-body/page-05";
+import rentalPage06 from "@/lib/sd05-rental-body/page-06";
+import rentalPage07 from "@/lib/sd05-rental-body/page-07";
+import rentalPage08 from "@/lib/sd05-rental-body/page-08";
+import rentalPage09 from "@/lib/sd05-rental-body/page-09";
+import rentalPage10 from "@/lib/sd05-rental-body/page-10";
+import rentalPage11 from "@/lib/sd05-rental-body/page-11";
+import rentalPage12 from "@/lib/sd05-rental-body/page-12";
 
 export const SD05_SIGNATURE_CONSENT =
   "Je reconnais avoir lu le contrat dans son intégralité, je confirme mon identité et mon pouvoir de représenter l'organisation indiquée, et j'accepte de signer électroniquement ce document. Je comprends que mon nom, mon adresse email, la date et l'heure, les informations techniques de connexion, mon mode de signature, mes paraphes et l'empreinte du document seront conservés comme éléments de preuve.";
 
 export const SD05_TEMPLATE_VERSION = "GANDO-SD05-2026-08";
 export const SD05_PARTNERSHIP_TEMPLATE_VERSION = "GANDO-SD05-PARTNER-2026-08";
+const RENTAL_TEMPLATE_BODY = [
+  rentalPage02, rentalPage03, rentalPage04, rentalPage05, rentalPage06, rentalPage07,
+  rentalPage08, rentalPage09, rentalPage10, rentalPage11, rentalPage12,
+].join("\n\n[[PAGE_BREAK]]\n\n");
+
 export const SD05_DEFAULT_FOOTER =
   "CONFIDENTIALITÉ — Ce document (ainsi que toutes les pièces jointes et éléments de preuve) est confidentiel. Toute publication, utilisation ou diffusion, même partielle, doit être autorisée préalablement. Si vous n'êtes pas destinataire de ce document, merci d'en avertir immédiatement Gando à contact@gando.app. GANDO SOLUTIONS · SAS au capital de 1 000,00 euros · 3 chemin de la porte verte, 77144 Montévrain · RCS Meaux 943 391 201.";
 
@@ -293,6 +309,7 @@ export function createGandoRentalTemplate(companyName = "Loueur"): SD05Content {
     contractTitle: `Contrat Gando × ${companyName}`,
     contractReference: `SD05-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-`,
     contractTemplate: "rental_exact",
+    contractSummary: RENTAL_TEMPLATE_BODY,
     signatureProvider: "odoo",
     rentalTemplate: {
       ...template.rentalTemplate,
