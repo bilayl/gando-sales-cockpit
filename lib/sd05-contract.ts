@@ -16,7 +16,7 @@ export const SD05_SIGNATURE_CONSENT =
 
 export const SD05_TEMPLATE_VERSION = "GANDO-SD05-2026-08";
 export const SD05_PARTNERSHIP_TEMPLATE_VERSION = "GANDO-SD05-PARTNER-2026-08";
-const RENTAL_TEMPLATE_BODY = [
+export const RENTAL_TEMPLATE_BODY = [
   rentalPage02, rentalPage03, rentalPage04, rentalPage05, rentalPage06, rentalPage07,
   rentalPage08, rentalPage09, rentalPage10, rentalPage11, rentalPage12,
 ].join("\n\n[[PAGE_BREAK]]\n\n");
