@@ -31,10 +31,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     if (!document) throw Object.assign(new Error("Contrat indisponible."), { status: 404 });
 
     const content = normalizeSD05NativeContent(document.published_content || document.content);
-    if (content.contractTemplate !== "rental_exact") {
-      throw Object.assign(new Error("Ce contrat n'est pas un modèle Gando généré."), { status: 409 });
-    }
-
     const pdf = buildBrandedSD05Pdf({ content, companyName: room.company_name || content.rentalTemplate.legalName || "Loueur", signatures: [] });
     const safe = String(content.contractReference || "SD05-Gando").replace(/[^a-zA-Z0-9_-]+/g, "-");
     return new Response(new Uint8Array(pdf), {

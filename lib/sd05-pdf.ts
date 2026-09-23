@@ -217,7 +217,9 @@ function rentalPageChrome(page: Page, content: SD05Content, pageNumber: number, 
   page.commands.push(circleCommands(PAGE_W / 2, PAGE_H - 31, 17.5, "1 1 1", violet));
   page.commands.push(circleCommands(PAGE_W / 2, PAGE_H - 31, 13.2, violet));
   page.commands.push(textCommand("G", PAGE_W / 2, PAGE_H - 36.5, 13.2, "F2", "1 1 1", "center"));
-  page.commands.push(textCommand("G gando", PAGE_W / 2, 51, 10.5, "F2", "0.10 0.10 0.11", "center"));
+  page.commands.push(circleCommands(PAGE_W / 2 - 25, 51.5, 6.4, "0.12 0.12 0.13"));
+  page.commands.push(textCommand("G", PAGE_W / 2 - 25, 49.2, 6.8, "F2", "1 1 1", "center"));
+  page.commands.push(textCommand("gando", PAGE_W / 2 - 15, 47.8, 10.8, "F2", "0.12 0.12 0.13"));
   const footer = content.footerConfidentialityText || "CONFIDENTIALITÉ - Ce document est confidentiel. Toute publication, utilisation ou diffusion, même partielle, doit être autorisée préalablement.";
   const footerLines = wrap(footer, 510, 5.1).slice(0, 3);
   footerLines.forEach((line, index) => page.commands.push(textCommand(line, PAGE_W / 2, 34 - index * 6.2, 5.1, "F1", "0.31 0.31 0.33", "center")));
@@ -228,7 +230,7 @@ function rentalTextLines(page: Page, source: string, content: SD05Content, compa
   const violet = "0.37 0.20 0.74";
   const navy = "0.03 0.12 0.20";
   const body = personalizeRentalText(source, content, companyName);
-  const rawLines = body.split(/\n/).map(line => line.trim()).filter(Boolean);
+  const rawLines = body.split(/\n/).map(line => line.trim());
   const cols = mode === "columns"
     ? [{ x: 36, width: 238 }, { x: 321, width: 238 }]
     : [{ x: 36, width: 523 }];
@@ -242,6 +244,11 @@ function rentalTextLines(page: Page, source: string, content: SD05Content, compa
   };
 
   for (let raw of rawLines) {
+    if (!raw) {
+      if (y - 6 < 76) moveColumn();
+      else y -= 6;
+      continue;
+    }
     if (raw === "–" || raw === "·" || raw === "•") { bullet = true; continue; }
     const article = /^(ARTICLE\s+\d+|PRÉAMBULE|ANNEXE\s+\d+)/i.test(raw);
     const subsection = /^\d+\.\d+\s+/.test(raw);
@@ -252,7 +259,7 @@ function rentalTextLines(page: Page, source: string, content: SD05Content, compa
     const size = article ? 10.8 : subsection ? 9.1 : miniHeading || numericHeading ? 9 : definition ? 8.8 : 8.35;
     const color = article ? violet : navy;
     const lineHeight = article ? 13.2 : subsection ? 11.8 : 10.25;
-    const gap = article ? 7 : subsection ? 4 : miniHeading ? 4 : 0;
+    const gap = article ? 9 : subsection ? 5 : miniHeading ? 4 : 0;
     const prefix = bullet ? "•  " : "";
     bullet = false;
     const lines = wrap(prefix + raw, cols[col].width, size);
@@ -417,7 +424,7 @@ function buildExactRentalSD05Pdf(input: { content: SD05Content; companyName: str
   if(rental.contactEmail) p1.commands.push(textCommand(rental.contactEmail,rightX,ry,8.2,"F1","0 0 0","right"));
 
   p1.commands.push(textCommand("Service(s) de l’offre de sécurisation de caution en ligne Gando",36,595,11,"F2",dark));
-  p1.commands.push(rectCommand(36,412,523,166,"0.965 0.960 0.990",violet,0.7));
+  p1.commands.push(rectCommand(36,412,523,166,"0.974 0.970 0.998",violet,0.7));
   p1.commands.push(textCommand("STRUCTURE TARIFAIRE",42,559,10.2,"F2",violet));
   const tLines=[
     `Frais de sécurisation Gando : Fixés à ${gl} % HT du montant de la caution Gando activée.`,
