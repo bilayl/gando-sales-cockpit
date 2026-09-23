@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
 import { getSDRoomBundle, saveSDDocument } from "@/lib/sd-room";
 import { requireSDInternalAccess } from "@/lib/sd-room-access";
+import { createGandoRentalTemplate } from "@/lib/sd05-contract";
 import { createEmptySD05, type SD05Content } from "@/lib/sd-stage-content";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -108,7 +109,57 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (bundle.room.room_mode !== "standard") throw Object.assign(new Error("Action réservée aux Deals rapides."), { status: 409 });
 
     const current = currentContent(bundle);
-    if (!current.contractUrl) throw Object.assign(new Error("Ajoutez d’abord le contrat au deal."), { status: 409 });
+
+    if (body?.action === "generate_template") {
+      const base = current.contractTemplate === "rental_exact"
+        ? current
+        : createGandoRentalTemplate(bundle.room.company_name || bundle.room.title || "Loueur");
+      const incoming = body?.rentalTemplate && typeof body.rentalTemplate === "object" ? body.rentalTemplate as Record<string, unknown> : {};
+      const rentalTemplate: SD05Content["rentalTemplate"] = {
+        ...base.rentalTemplate,
+        legalName: String(incoming.legalName ?? base.rentalTemplate.legalName).trim().slice(0, 300),
+        legalForm: String(incoming.legalForm ?? base.rentalTemplate.legalForm).trim().slice(0, 120),
+        shareCapital: String(incoming.shareCapital ?? base.rentalTemplate.shareCapital).trim().slice(0, 120),
+        siren: String(incoming.siren ?? base.rentalTemplate.siren).trim().slice(0, 120),
+        vatNumber: String(incoming.vatNumber ?? base.rentalTemplate.vatNumber).trim().slice(0, 120),
+        registeredOffice: String(incoming.registeredOffice ?? base.rentalTemplate.registeredOffice).trim().slice(0, 800),
+        contactEmail: String(incoming.contactEmail ?? base.rentalTemplate.contactEmail).trim().slice(0, 320),
+        activityRegion: String(incoming.activityRegion ?? base.rentalTemplate.activityRegion).trim().slice(0, 300),
+        gandoRate: String(incoming.gandoRate ?? base.rentalTemplate.gandoRate).trim().slice(0, 30) || "2,70",
+        partnerRate: String(incoming.partnerRate ?? base.rentalTemplate.partnerRate).trim().slice(0, 30) || "0,70",
+        totalRate: String(incoming.totalRate ?? base.rentalTemplate.totalRate).trim().slice(0, 30) || "3,40",
+      };
+      const content: SD05Content = {
+        ...base,
+        contractUrl: "",
+        signatureProvider: "odoo",
+        rentalTemplate,
+        goLiveDate: String(body?.goLiveDate || base.goLiveDate).trim().slice(0, 40),
+        signatureDeadline: String(body?.signatureDeadline || base.signatureDeadline).trim().slice(0, 40),
+        contractStatus: base.contractStatus === "signed" ? "signed" : (base.signatureUrl ? "ready_to_sign" : "client_review"),
+      };
+      const document = await saveSDDocument({
+        roomId: bundle.room.id,
+        code: "SD05",
+        content,
+        sourceMode: "manual",
+        updatedByEmail: userEmail,
+        status: content.contractStatus === "signed" ? "validated" : "published",
+        changeSummary: current.contractTemplate === "rental_exact" ? "Modèle SD05 loueur mis à jour" : "Modèle SD05 loueur généré",
+      });
+      const now = new Date().toISOString();
+      const { data: room, error: roomError } = await getSupabaseAdmin()
+        .from("deal_rooms")
+        .update({ contract_uploaded_at: bundle.room.contract_uploaded_at || now, contract_signed_at: content.contractStatus === "signed" ? bundle.room.contract_signed_at : null, contract_signed_by_email: content.contractStatus === "signed" ? bundle.room.contract_signed_by_email : null })
+        .eq("id", bundle.room.id)
+        .select("*")
+        .single();
+      if (roomError) throw roomError;
+      return Response.json({ document, room });
+    }
+
+    const hasContract = Boolean(current.contractUrl || (current.contractTemplate === "rental_exact" && current.contractSummary));
+    if (!hasContract) throw Object.assign(new Error("Ajoutez ou générez d’abord le contrat."), { status: 409 });
 
     if (body?.action === "configure_signature") {
       const signatureUrl = String(body?.signatureUrl || "").trim().slice(0, 2_000);
