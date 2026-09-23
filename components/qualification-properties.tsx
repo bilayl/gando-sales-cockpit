@@ -251,6 +251,7 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
   const [metadataError, setMetadataError] = useState("");
   const [laterOpen, setLaterOpen] = useState(false);
   const [laterSaving, setLaterSaving] = useState(false);
+  const [pendingFollowupStatus, setPendingFollowupStatus] = useState("");
 
   useEffect(() => setSelf(properties), [properties]);
   useEffect(() => setFallback(fallbackProperties), [fallbackProperties]);
@@ -278,11 +279,19 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
   async function saveField(spec: FieldSpec, value: string) {
     if (!selfId) throw new Error("Identifiant HubSpot introuvable.");
 
-    if (kind === "company" && spec.key === "prospection") {
-      if (value === "Ultérieur") {
+    if (spec.key === "prospection") {
+      const needsFollowupDate = kind === "company"
+        ? value === "À relancer" || value === "Ultérieur"
+        : value === "À recycler";
+
+      if (needsFollowupDate) {
+        setPendingFollowupStatus(value);
         setLaterOpen(true);
         return;
       }
+    }
+
+    if (kind === "company" && spec.key === "prospection") {
 
       const action = COMPANY_STATUS_ACTION[value];
       if (!action) throw new Error("Statut entreprise non reconnu.");
@@ -324,30 +333,120 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
   }
 
   async function confirmLater(payload: LaterFollowupPayload) {
-    if (!selfId || laterSaving) return;
+    if (!selfId || laterSaving || !pendingFollowupStatus) return;
     setLaterSaving(true);
+
     try {
-      const response = await fetch(`/api/companies/${selfId}/workflow`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "LATER",
-          reminderAt: payload.reminderAt,
-          reason: payload.note,
-          createTask: payload.createTask,
-          createNote: Boolean(payload.note),
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Impossible de planifier la relance");
-      const updated = data.company?.properties || {};
-      setSelf(current => ({
-        ...current,
-        ...companyStatusProperties("Ultérieur"),
-        ...updated,
-      }));
+      if (kind === "company") {
+        const action = COMPANY_STATUS_ACTION[pendingFollowupStatus];
+        if (!action) throw new Error("Statut de relance entreprise non reconnu.");
+
+        const response = await fetch(`/api/companies/${selfId}/workflow`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action,
+            reminderAt: payload.reminderAt,
+            reason: payload.note,
+            createTask: payload.createTask,
+            createCalendarEvent: payload.createCalendarEvent,
+            createNote: Boolean(payload.note),
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Impossible de planifier la relance");
+
+        const updated = data.company?.properties || {};
+        setSelf(current => ({
+          ...current,
+          ...companyStatusProperties(pendingFollowupStatus),
+          ...updated,
+        }));
+
+        if (payload.createCalendarEvent && data.calendar?.created === false && data.calendar?.error) {
+          toast.warning(`Relance enregistrée, mais calendrier non ajouté : ${data.calendar.error}`);
+        } else {
+          toast.success("Relance, tâche et calendrier mis à jour.");
+        }
+      } else {
+        const contactName = [self.firstname, self.lastname].filter(Boolean).join(" ")
+          || String(self.email || self.company || "Contact");
+        const patchProperties: Record<string, string> = {
+          statut_prospection: pendingFollowupStatus,
+          date_prochaine_relance: payload.reminderAt,
+        };
+        if (pendingFollowupStatus === "À recycler") {
+          patchProperties.date_recyclage = payload.reminderAt;
+          patchProperties.statut_de_lappel = "a_une_date_ulterieure";
+        }
+
+        const response = await fetch(`/api/contacts/${selfId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ properties: patchProperties }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Impossible de planifier la relance contact");
+
+        const warnings: string[] = [];
+
+        if (payload.createTask) {
+          const taskResponse = await fetch(`/api/contacts/${selfId}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              type: "task",
+              properties: {
+                hs_task_subject: `Rappeler — ${contactName}`,
+                hs_task_body: payload.note
+                  ? `Rappel planifié depuis Gando Sales Cockpit. Contexte : ${payload.note}`
+                  : "Rappel planifié depuis Gando Sales Cockpit.",
+                hs_timestamp: payload.reminderAt,
+                hs_task_status: "NOT_STARTED",
+                hs_task_priority: "HIGH",
+                hs_task_type: "CALL",
+                ...(self.hubspot_owner_id ? { hubspot_owner_id: String(self.hubspot_owner_id) } : {}),
+              },
+            }),
+          });
+          if (!taskResponse.ok) {
+            const taskData = await taskResponse.json().catch(() => ({}));
+            warnings.push(taskData.error || "tâche HubSpot non créée");
+          }
+        }
+
+        if (payload.createCalendarEvent) {
+          const calendarResponse = await fetch("/api/calendar/events", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              summary: `Rappeler — ${contactName}`,
+              description: [
+                "Relance créée depuis Gando Sales Cockpit.",
+                self.company ? `Entreprise : ${self.company}` : "",
+                payload.note ? `Contexte : ${payload.note}` : "",
+                `Contact HubSpot : ${selfId}`,
+              ].filter(Boolean).join("\n"),
+              start: payload.reminderAt,
+              durationMinutes: 30,
+            }),
+          });
+          if (!calendarResponse.ok) {
+            const calendarData = await calendarResponse.json().catch(() => ({}));
+            warnings.push(calendarData.error || "événement calendrier non créé");
+          }
+        }
+
+        setSelf(current => ({ ...current, ...patchProperties, ...(data.properties ?? {}) }));
+        if (warnings.length) {
+          toast.warning(`Relance enregistrée. ${warnings.join(" · ")}`);
+        } else {
+          toast.success("Relance, tâche et calendrier mis à jour.");
+        }
+      }
+
       setLaterOpen(false);
-      toast.success("Relance ultérieure planifiée dans HubSpot.");
+      setPendingFollowupStatus("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible de planifier la relance");
     } finally {
@@ -397,15 +496,26 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
         })}
       </div>
 
-      {kind === "company" ? (
-        <CompanyLaterFollowupDialog
-          open={laterOpen}
-          companyName={String(self.name || self.domain || "Cette entreprise")}
-          saving={laterSaving}
-          onOpenChange={setLaterOpen}
-          onConfirm={confirmLater}
-        />
-      ) : null}
+      <CompanyLaterFollowupDialog
+        open={laterOpen}
+        companyName={kind === "company" ? String(self.name || self.domain || "Cette entreprise") : undefined}
+        subjectLabel={kind === "company"
+          ? String(self.name || self.domain || "Cette entreprise")
+          : [self.firstname, self.lastname].filter(Boolean).join(" ") || String(self.email || self.company || "Ce contact")}
+        title={pendingFollowupStatus === "Ultérieur" || pendingFollowupStatus === "À recycler"
+          ? "Planifier une relance ultérieure"
+          : "Planifier la relance"}
+        description={pendingFollowupStatus === "Ultérieur" || pendingFollowupStatus === "À recycler"
+          ? "Choisis la date de reprise. La relance apparaîtra dans le Cockpit et peut créer une tâche HubSpot ainsi qu’un événement dans sales@gando.app."
+          : "Choisis la date de rappel. La relance apparaîtra dans le Cockpit et peut créer une tâche HubSpot ainsi qu’un événement dans sales@gando.app."}
+        presetMode={pendingFollowupStatus === "Ultérieur" || pendingFollowupStatus === "À recycler" ? "long" : "short"}
+        saving={laterSaving}
+        onOpenChange={open => {
+          setLaterOpen(open);
+          if (!open && !laterSaving) setPendingFollowupStatus("");
+        }}
+        onConfirm={confirmLater}
+      />
     </section>
   );
 }
