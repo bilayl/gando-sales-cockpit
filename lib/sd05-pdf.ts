@@ -448,7 +448,7 @@ function buildExactRentalSD05Pdf(input: { content: SD05Content; companyName: str
   p1.commands.push(textCommand(`Fonction  ${gandoSigner?.role || "Président"}`,286,196,9.2,"F1","0.03 0.03 0.04"));
   p1.commands.push(textCommand("Le",286,172,9.2,"F1","0.03 0.03 0.04"));
 
-  const bodyPages=content.contractSummary.split(/\s*\[\[PAGE_BREAK\]\]\s*/).filter(Boolean);
+  const bodyPages=(content.contractSummary || RENTAL_TEMPLATE_BODY).split(/\s*\[\[PAGE_BREAK\]\]\s*/).filter(Boolean);
   for(let i=0;i<8;i++) rentalTextLines(pages[i+1],bodyPages[i] || "",content,companyName,"columns");
   renderRentalAnnex10(pages[9],content,companyName);
   renderRentalAnnex11(pages[10],content,companyName);
