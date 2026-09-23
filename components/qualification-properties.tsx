@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Briefcase, Check, FileText, Globe, Loader2, MapPin, Pencil, PhoneCall, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
 import { CompanyLaterFollowupDialog, type LaterFollowupPayload } from "@/components/company-later-followup-dialog";
+import { CRMProspectionStatusEditor } from "@/components/crm-prospection-status-editor";
 
 type CRMProperties = Record<string, string | null | undefined>;
 type Kind = "contact" | "company";
@@ -96,6 +97,19 @@ function companyStatusProperties(value: string) {
   };
   return map[value] || { statut_prospection: value };
 }
+
+const COMPANY_STATUS_ACTION: Record<string, string> = {
+  "À contacter": "OPEN",
+  "Tentative": "ATTEMPTED_TO_CONTACT",
+  "Contact établi": "CONNECTED",
+  "À relancer": "FOLLOW_UP",
+  "Ultérieur": "LATER",
+  "Démo prévue": "DEMO_SCHEDULED",
+  "Opportunité": "OPEN_DEAL",
+  "Gagné": "WON",
+  "Pas intéressé": "NOT_INTERESTED",
+  "Perdu": "LOST",
+};
 
 function resolveType(kind: Kind, spec: FieldSpec, definition?: PropertyDefinition): FieldType {
   if (spec.key === "prospection") return kind === "company" ? "company-status" : "select";
@@ -263,13 +277,40 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
 
   async function saveField(spec: FieldSpec, value: string) {
     if (!selfId) throw new Error("Identifiant HubSpot introuvable.");
-    if (kind === "company" && spec.key === "prospection" && value === "Ultérieur") {
-      setLaterOpen(true);
+
+    if (kind === "company" && spec.key === "prospection") {
+      if (value === "Ultérieur") {
+        setLaterOpen(true);
+        return;
+      }
+
+      const action = COMPANY_STATUS_ACTION[value];
+      if (!action) throw new Error("Statut entreprise non reconnu.");
+
+      const response = await fetch(`/api/companies/${selfId}/workflow`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action,
+          reason: "Statut modifié depuis la fiche CRM",
+          createTask: false,
+          createNote: false,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "HubSpot a rejeté la modification");
+
+      const updated = data.company?.properties || {};
+      setSelf(current => ({
+        ...current,
+        ...companyStatusProperties(value),
+        ...updated,
+      }));
+      toast.success("Statut prospection mis à jour dans HubSpot.");
       return;
     }
-    const patchProperties = kind === "company" && spec.key === "prospection"
-      ? companyStatusProperties(value)
-      : { [spec.property]: value };
+
+    const patchProperties = { [spec.property]: value };
     const endpoint = kind === "company" ? `/api/companies/${selfId}` : `/api/contacts/${selfId}`;
     const response = await fetch(endpoint, {
       method: "PATCH",
@@ -327,13 +368,28 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {specs.map(spec => {
           const definition = definitions[spec.property];
+          const currentValue = String(valueFor(spec, kind, self, fallback) || "");
+
+          if (spec.key === "prospection") {
+            return (
+              <CRMProspectionStatusEditor
+                key={spec.key}
+                kind={kind}
+                value={currentValue}
+                options={definition?.options || []}
+                disabled={!selfId}
+                onSave={value => saveField(spec, value)}
+              />
+            );
+          }
+
           return (
             <EditablePropertyCard
               key={spec.key}
               spec={spec}
               definition={definition}
               type={resolveType(kind, spec, definition)}
-              value={String(valueFor(spec, kind, self, fallback) || "")}
+              value={currentValue}
               disabled={!selfId || metadataLoading || Boolean(metadataError)}
               onSave={value => saveField(spec, value)}
             />
