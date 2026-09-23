@@ -98,6 +98,19 @@ function companyStatusProperties(value: string) {
   return map[value] || { statut_prospection: value };
 }
 
+const COMPANY_STATUS_ACTION: Record<string, string> = {
+  "À contacter": "OPEN",
+  "Tentative": "ATTEMPTED_TO_CONTACT",
+  "Contact établi": "CONNECTED",
+  "À relancer": "FOLLOW_UP",
+  "Ultérieur": "LATER",
+  "Démo prévue": "DEMO_SCHEDULED",
+  "Opportunité": "OPEN_DEAL",
+  "Gagné": "WON",
+  "Pas intéressé": "NOT_INTERESTED",
+  "Perdu": "LOST",
+};
+
 function resolveType(kind: Kind, spec: FieldSpec, definition?: PropertyDefinition): FieldType {
   if (spec.key === "prospection") return kind === "company" ? "company-status" : "select";
   if (definition?.fieldType === "checkbox") return "multi";
@@ -264,13 +277,40 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
 
   async function saveField(spec: FieldSpec, value: string) {
     if (!selfId) throw new Error("Identifiant HubSpot introuvable.");
-    if (kind === "company" && spec.key === "prospection" && value === "Ultérieur") {
-      setLaterOpen(true);
+
+    if (kind === "company" && spec.key === "prospection") {
+      if (value === "Ultérieur") {
+        setLaterOpen(true);
+        return;
+      }
+
+      const action = COMPANY_STATUS_ACTION[value];
+      if (!action) throw new Error("Statut entreprise non reconnu.");
+
+      const response = await fetch(`/api/companies/${selfId}/workflow`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action,
+          reason: "Statut modifié depuis la fiche CRM",
+          createTask: false,
+          createNote: false,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "HubSpot a rejeté la modification");
+
+      const updated = data.company?.properties || {};
+      setSelf(current => ({
+        ...current,
+        ...companyStatusProperties(value),
+        ...updated,
+      }));
+      toast.success("Statut prospection mis à jour dans HubSpot.");
       return;
     }
-    const patchProperties = kind === "company" && spec.key === "prospection"
-      ? companyStatusProperties(value)
-      : { [spec.property]: value };
+
+    const patchProperties = { [spec.property]: value };
     const endpoint = kind === "company" ? `/api/companies/${selfId}` : `/api/contacts/${selfId}`;
     const response = await fetch(endpoint, {
       method: "PATCH",
