@@ -221,13 +221,26 @@ function cleanList(value: unknown, maxItems = 80) {
 }
 
 function baseTemplate(companyName: string, template: SD05TemplateId): Pick<SD05Content,
-  "contractUrl" | "signatureUrl" | "signatureProvider" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
+  "contractUrl" | "signatureUrl" | "signatureProvider" | "rentalTemplate" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
   "footerConfidentialityText" | "emailIntroText" | "allowTypedSignature" | "allowDrawnSignature" | "requireInitialsEachPage" | "contractTemplate"
 > {
   return {
     contractUrl: "",
     signatureUrl: "",
     signatureProvider: "gando",
+    rentalTemplate: {
+      legalName: companyName,
+      legalForm: "SAS",
+      shareCapital: "",
+      siren: "",
+      vatNumber: "",
+      registeredOffice: "",
+      contactEmail: "",
+      activityRegion: "",
+      gandoRate: "2,70",
+      partnerRate: "0,70",
+      totalRate: "3,40",
+    },
     contractStatus: "draft",
     contractTemplate: template,
     footerConfidentialityText: SD05_DEFAULT_FOOTER,
@@ -273,6 +286,29 @@ export function createGandoSD05Template(companyName = "Client"): SD05Content {
   };
 }
 
+export function createGandoRentalTemplate(companyName = "Loueur"): SD05Content {
+  const template = createGandoSD05Template(companyName);
+  return {
+    ...template,
+    contractTitle: `Contrat Gando × ${companyName}`,
+    contractReference: `SD05-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-`,
+    contractTemplate: "rental_exact",
+    signatureProvider: "odoo",
+    rentalTemplate: {
+      ...template.rentalTemplate,
+      legalName: companyName,
+    },
+    legalItems: [
+      { topic: "Frais de sécurisation Gando", status: "approved", owner: "Gando", notes: "2,70 % HT du montant de la Caution Gando activée." },
+      { topic: "Tarification totale client", status: "approved", owner: companyName, notes: "3,40 % HT du montant de chaque Caution activée (2,70 % HT Gando + 0,70 % HT partenaire)." },
+      { topic: `Marge ${companyName}`, status: "approved", owner: companyName, notes: "0,70 % HT du montant de chaque Caution activée, sans seuil ni palier." },
+      { topic: "Plafond de Caution", status: "approved", owner: "Gando", notes: "2 500 € par Caution Éligible." },
+      { topic: "Durée", status: "approved", owner: "Gando", notes: "Soixante (60) jours maximum." },
+      { topic: "Frais d'encaissement", status: "approved", owner: "Loueur", notes: "3,5 % du montant encaissé + 2 € HT." },
+    ],
+  };
+}
+
 export function createGandoPartnershipTemplate(companyName = "Partenaire"): SD05Content {
   return {
     ...baseTemplate(companyName, "legal_convention"),
@@ -304,8 +340,9 @@ export function createGandoPartnershipTemplate(companyName = "Partenaire"): SD05
 export function normalizeSD05NativeContent(value: unknown): SD05Content {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const contractStatus: SD05Content["contractStatus"] = source.contractStatus === "internal_review" || source.contractStatus === "client_review" || source.contractStatus === "ready_to_sign" || source.contractStatus === "signed" ? source.contractStatus : "draft";
-  const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : "gando_standard";
+  const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : source.contractTemplate === "rental_exact" ? "rental_exact" : "gando_standard";
   const signatureProvider = source.signatureProvider === "odoo" ? "odoo" : "gando";
+  const rentalSource = source.rentalTemplate && typeof source.rentalTemplate === "object" ? source.rentalTemplate as Record<string, unknown> : {};
   return {
     contractTitle: clean(source.contractTitle, 500),
     contractReference: clean(source.contractReference, 300),
@@ -313,6 +350,19 @@ export function normalizeSD05NativeContent(value: unknown): SD05Content {
     contractUrl: clean(source.contractUrl, 2_000),
     signatureUrl: clean(source.signatureUrl, 2_000),
     signatureProvider,
+    rentalTemplate: {
+      legalName: clean(rentalSource.legalName, 300),
+      legalForm: clean(rentalSource.legalForm, 120),
+      shareCapital: clean(rentalSource.shareCapital, 120),
+      siren: clean(rentalSource.siren, 120),
+      vatNumber: clean(rentalSource.vatNumber, 120),
+      registeredOffice: clean(rentalSource.registeredOffice, 800),
+      contactEmail: clean(rentalSource.contactEmail, 320),
+      activityRegion: clean(rentalSource.activityRegion, 300),
+      gandoRate: clean(rentalSource.gandoRate, 30) || "2,70",
+      partnerRate: clean(rentalSource.partnerRate, 30) || "0,70",
+      totalRate: clean(rentalSource.totalRate, 30) || "3,40",
+    },
     contractStatus,
     contractSummary: clean(source.contractSummary, 60_000),
     contractTemplate,
