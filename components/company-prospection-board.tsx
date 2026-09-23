@@ -91,6 +91,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [laterCompany, setLaterCompany] = useState<Company | null>(null);
+  const [followupStage, setFollowupStage] = useState<"FOLLOW_UP" | "LATER">("LATER");
 
   const groups = useMemo(() => {
     const map = new Map<CompanyStage, Company[]>();
@@ -105,6 +106,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
     reminderAt?: string,
     reason?: string,
     createTask = false,
+    createCalendarEvent = false,
   ) {
     if (deriveCompanyStage(company) === stage && stage !== "FOLLOW_UP" && stage !== "LATER") return true;
     setSavingId(company.id);
@@ -117,6 +119,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
           reminderAt,
           reason,
           createTask,
+          createCalendarEvent,
           createNote: Boolean(reason?.trim()),
         }),
       });
@@ -135,7 +138,8 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
   }
 
   function move(company: Company, stage: CompanyStage) {
-    if (stage === "LATER") {
+    if (stage === "LATER" || stage === "FOLLOW_UP") {
+      setFollowupStage(stage);
       setLaterCompany(company);
       setDragId(null);
       setDragOver(null);
@@ -147,7 +151,14 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
   async function confirmLater(payload: LaterFollowupPayload) {
     if (!laterCompany) return;
     const company = laterCompany;
-    const saved = await applyStage(company, "LATER", payload.reminderAt, payload.note, payload.createTask);
+    const saved = await applyStage(
+      company,
+      followupStage,
+      payload.reminderAt,
+      payload.note,
+      payload.createTask,
+      payload.createCalendarEvent,
+    );
     if (saved) setLaterCompany(null);
   }
 
@@ -242,6 +253,12 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
       <CompanyLaterFollowupDialog
         open={Boolean(laterCompany)}
         companyName={laterCompany?.properties.name || laterCompany?.properties.domain || undefined}
+        subjectLabel={laterCompany?.properties.name || laterCompany?.properties.domain || undefined}
+        title={followupStage === "FOLLOW_UP" ? "Planifier la relance" : "Planifier une relance ultérieure"}
+        description={followupStage === "FOLLOW_UP"
+          ? "Choisis la date de rappel. Tu peux créer la tâche HubSpot et l’ajouter au calendrier partagé Gando."
+          : "Le compte sort de la file active jusqu’à la date choisie. Une tâche et un événement calendrier peuvent être créés."}
+        presetMode={followupStage === "FOLLOW_UP" ? "short" : "long"}
         saving={Boolean(laterCompany && savingId === laterCompany.id)}
         onOpenChange={open => { if (!open) setLaterCompany(null); }}
         onConfirm={confirmLater}
