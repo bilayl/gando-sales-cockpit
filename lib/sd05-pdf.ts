@@ -460,6 +460,9 @@ function buildExactRentalSD05Pdf(input: { content: SD05Content; companyName: str
 
 export function buildBrandedSD05Pdf(input: { content: SD05Content; companyName: string; signatures?: SD05PdfSignature[] }) {
   const { content, companyName } = input;
+  if (content.contractTemplate === "rental_exact") {
+    return buildExactRentalSD05Pdf(input);
+  }
   const signatures = input.signatures || [];
   const pages: Page[] = [];
   const legal = content.contractTemplate === "legal_convention";
