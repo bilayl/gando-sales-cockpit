@@ -86,7 +86,7 @@ export function PublicQuickDealRoom({ token }: { token: string }) {
   const generatedContract = contractContent.contractTemplate === "rental_exact";
   const hasContract = Boolean(contractContent.contractUrl || generatedContract);
   const publicContractHref = generatedContract
-    ? `/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(data?.visitorEmail || email)}`
+    ? `/api/public/deal-room/${encodeURIComponent(token)}/quick-contract-pdf`
     : contractContent.contractUrl;
   const odooReady = contractContent.signatureProvider === "odoo" && /^https?:\/\//i.test(contractContent.signatureUrl || "");
 
