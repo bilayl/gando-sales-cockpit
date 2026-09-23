@@ -158,7 +158,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return Response.json({ document, room });
     }
 
-    const hasContract = Boolean(current.contractUrl || (current.contractTemplate === "rental_exact" && current.contractSummary));
+    const hasContract = Boolean(current.contractUrl || current.contractTemplate === "rental_exact");
     if (!hasContract) throw Object.assign(new Error("Ajoutez ou générez d’abord le contrat."), { status: 409 });
 
     if (body?.action === "configure_signature") {
