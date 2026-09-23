@@ -37,9 +37,10 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
       if (!response.ok) throw new Error(payload.message || payload.error || "Chargement impossible");
       setData(payload);
       const quickContract = (payload.documents || []).find((item: SDDocumentRecord) => item.code === "SD05");
+      const quickContent = (quickContract?.content || {}) as Partial<SD05Content>;
       setSignedAt(localDateTime(payload.room?.contract_signed_at || null));
       setSignedByEmail(payload.room?.contract_signed_by_email || "");
-      setSignatureUrl(String(quickContract?.content?.signatureUrl || ""));
+      setSignatureUrl(String(quickContent.signatureUrl || ""));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Chargement impossible");
     } finally {
