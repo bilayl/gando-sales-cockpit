@@ -59,7 +59,7 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
   const document = data?.documents.find(item => item.code === "SD05");
   const value = { ...createEmptySD05(), ...((document?.content || {}) as Partial<SD05Content>) };
   const signed = value.contractStatus === "signed" || document?.status === "validated";
-  const generated = value.contractTemplate === "rental_exact" && Boolean(value.contractSummary);
+  const generated = value.contractTemplate === "rental_exact";
   const hasContract = Boolean(value.contractUrl || generated);
   const odooReady = value.signatureProvider === "odoo" && /^https?:\/\//i.test(value.signatureUrl || "");
 
