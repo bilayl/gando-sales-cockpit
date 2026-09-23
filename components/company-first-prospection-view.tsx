@@ -313,7 +313,7 @@ export function CompanyFirstProspectionView() {
         }
       />
 
-      <div className="mt-6 min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-border/50 bg-background">
+      <div className="mt-6 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/50 bg-background">
         <SdrWorkQueue
           activeFilter={workFilter}
           actionableCount={actionableCount}
@@ -371,7 +371,7 @@ export function CompanyFirstProspectionView() {
         ) : null}
 
         {view === "table" ? (
-          <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto border-t border-border/45 minari-scrollbar">
+          <div className="min-h-0 min-w-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain border-t border-border/45 minari-scrollbar">
             <Table className="w-full table-fixed">
               <TableHeader>
                 <TableRow>
