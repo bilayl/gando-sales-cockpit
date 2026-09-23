@@ -1,4 +1,5 @@
 import type { SD05Content } from "./sd-stage-content";
+import { RENTAL_TEMPLATE_BODY } from "./sd05-contract";
 
 export type SD05PdfSignature = {
   signerName: string;
