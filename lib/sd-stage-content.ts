@@ -70,6 +70,7 @@ export type SD05Content = {
   contractReference: string;
   contractVersion: string;
   contractUrl: string;
+  signatureUrl: string;
   signatureProvider: SD05SignatureProvider;
   contractStatus: "draft" | "internal_review" | "client_review" | "ready_to_sign" | "signed";
   contractSummary: string;
@@ -145,6 +146,7 @@ export function createEmptySD05(): SD05Content {
     contractReference: "",
     contractVersion: "",
     contractUrl: "",
+    signatureUrl: "",
     signatureProvider: "gando",
     contractStatus: "draft",
     contractSummary: "",
@@ -263,6 +265,7 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       contractReference: text(source.contractReference, 300),
       contractVersion: text(source.contractVersion, 100),
       contractUrl: text(source.contractUrl, 2000),
+      signatureUrl: text(source.signatureUrl, 2000),
       signatureProvider,
       contractStatus,
       contractSummary: text(source.contractSummary),
