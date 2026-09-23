@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, Download, FileSignature, Loader2, Mail, Save, Send, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { CheckCircle2, Download, ExternalLink, FileSignature, Loader2, Mail, Save, Send, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -134,20 +134,22 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
   const requiredReady = ["SD01", "SD02"].every(code => data?.documents.find(item => item.code === code)?.status === "validated");
   const sd05 = data?.documents.find(item => item.code === "SD05");
   const locked = value.contractStatus === "signed" || sd05?.status === "validated";
+  const usesOdoo = value.signatureProvider === "odoo";
   const companyName = data?.room?.company_name || data?.room?.title?.replace(/\s*[×x]\s*Gando.*$/i, "") || "Client";
   const latestContractHash = useMemo(() => signatures.find(item => ["signed", "viewed", "sent"].includes(item.status))?.contractHash || signatures[0]?.contractHash || null, [signatures]);
 
   async function persist(publish: boolean, successToast = true) {
     const content: SD05Content = {
       ...value,
-      contractTitle: value.contractTitle.trim(), contractReference: value.contractReference.trim(), contractVersion: value.contractVersion.trim(), contractSummary: value.contractSummary.trim(),
+      contractTitle: value.contractTitle.trim(), contractReference: value.contractReference.trim(), contractVersion: value.contractVersion.trim(), contractSummary: value.contractSummary.trim(), contractUrl: value.contractUrl.trim(),
       footerConfidentialityText: value.footerConfidentialityText.trim(), emailIntroText: value.emailIntroText.trim(), term: value.term.trim(), renewal: value.renewal.trim(), terminationNotice: value.terminationNotice.trim(),
       signatories: value.signatories.map(item => ({ ...item, name: item.name.trim(), email: item.email.trim().toLowerCase(), role: item.role.trim(), organization: item.organization.trim() })).filter(item => item.name || item.email),
       legalItems: value.legalItems.map(item => ({ ...item, topic: item.topic.trim(), owner: item.owner.trim(), notes: item.notes.trim() })).filter(item => item.topic),
     };
     if (!content.contractTitle) throw new Error("Ajoutez un titre de contrat.");
     if (!content.contractSummary) throw new Error("Ajoutez le texte contractuel.");
-    if (!content.allowTypedSignature && !content.allowDrawnSignature) throw new Error("Activez au moins un mode de signature.");
+    if (content.signatureProvider === "gando" && !content.allowTypedSignature && !content.allowDrawnSignature) throw new Error("Activez au moins un mode de signature.");
+    if (publish && content.signatureProvider === "odoo" && !/^https?:\/\//i.test(content.contractUrl)) throw new Error("Ajoutez un lien Odoo Signature valide avant de publier le contrat.");
     const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/document`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "SD05", content, publish }) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.message || payload.error || "Enregistrement impossible");
@@ -164,6 +166,7 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
 
   async function sendForSignature(signerEmail?: string) {
     if (working || locked) return;
+    if (value.signatureProvider === "odoo") return toast.error("Ce contrat utilise Odoo Signature. Publiez-le puis utilisez le lien Odoo depuis la Dealroom.");
     if (!requiredReady) return toast.error("SD01 et SD02 doivent être validés avant l'envoi du contrat en signature.");
     if (!value.signatories.some(item => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email.trim()))) return toast.error("Ajoutez au moins un signataire avec une adresse email valide.");
     setWorking(true);
@@ -182,7 +185,7 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
   function applyTemplate(templateId: SD05TemplateId) {
     if (locked) return;
     const template = templateId === "legal_convention" ? createGandoPartnershipTemplate(companyName) : createGandoSD05Template(companyName);
-    setValue(current => ({ ...template, contractReference: current.contractReference || template.contractReference, signatureDeadline: current.signatureDeadline, goLiveDate: current.goLiveDate, effectiveDate: current.effectiveDate }));
+    setValue(current => ({ ...template, contractReference: current.contractReference || template.contractReference, signatureDeadline: current.signatureDeadline, goLiveDate: current.goLiveDate, effectiveDate: current.effectiveDate, signatureProvider: current.signatureProvider, contractUrl: current.contractUrl }));
     toast.success(templateId === "legal_convention" ? "Modèle Convention juridique chargé." : "Modèle Services Gando chargé.");
   }
 
@@ -197,16 +200,39 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
   if (loading && !data) return <div className="grid min-h-[50vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
   return <div className="page-shell min-h-screen p-5 lg:p-7"><div className="mx-auto max-w-[1180px] space-y-5">
-    <Card className="overflow-hidden p-0"><div className="flex flex-col gap-4 border-b border-border bg-primary/[0.04] p-5 lg:flex-row lg:items-center"><div className="flex items-start gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><FileSignature className="h-5 w-5" /></div><div><div className="text-xs font-bold uppercase tracking-[0.14em] text-primary">SD05 · Contrat & signature électronique</div><h1 className="mt-1 text-2xl font-bold tracking-[-0.03em]">Contrats juridiques Gando</h1><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Mise en page juridique, paraphes, signature manuscrite ou écrite et preuve horodatée.</p></div></div><div className="flex flex-wrap items-center gap-2 lg:ml-auto">{locked ? <Badge variant="outline" className="border-emerald-500/30 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Signé · version figée</Badge> : null}{locked ? <Button variant="outline" asChild><a href={`/api/deals/${encodeURIComponent(dealId)}/sd-room/sd05-pdf`}><Download className="mr-2 h-4 w-4" /> Télécharger le PDF</a></Button> : null}<Button variant="outline" onClick={() => void save(false)} disabled={working || locked}><Save className="mr-2 h-4 w-4" /> Enregistrer</Button><Button onClick={() => void sendForSignature()} disabled={working || locked || !requiredReady}><Send className="mr-2 h-4 w-4" /> Envoyer pour signature</Button></div></div>{!requiredReady ? <div className="border-b border-amber-500/20 bg-amber-500/[0.06] px-5 py-3 text-xs text-amber-700">SD01 et SD02 doivent être validés avant l'envoi du contrat en signature.</div> : null}</Card>
+    <Card className="overflow-hidden p-0"><div className="flex flex-col gap-4 border-b border-border bg-primary/[0.04] p-5 lg:flex-row lg:items-center"><div className="flex items-start gap-3"><div className="rounded-xl bg-primary/10 p-2.5 text-primary"><FileSignature className="h-5 w-5" /></div><div><div className="text-xs font-bold uppercase tracking-[0.14em] text-primary">SD05 · Contrat & signature électronique</div><h1 className="mt-1 text-2xl font-bold tracking-[-0.03em]">Contrats juridiques Gando</h1><p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">Mise en page juridique, paraphes, signature manuscrite ou écrite et preuve horodatée.</p></div></div><div className="flex flex-wrap items-center gap-2 lg:ml-auto">{locked ? <Badge variant="outline" className="border-emerald-500/30 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Signé · version figée</Badge> : null}{value.contractSummary ? <Button variant="outline" asChild><a href={`/api/deals/${encodeURIComponent(dealId)}/sd-room/sd05-pdf`} target="_blank" rel="noreferrer"><Download className="mr-2 h-4 w-4" /> Aperçu PDF</a></Button> : null}<Button variant="outline" onClick={() => void save(false)} disabled={working || locked}><Save className="mr-2 h-4 w-4" /> Enregistrer</Button>{usesOdoo ? <Button onClick={() => void save(true)} disabled={working || locked || !/^https?:\/\//i.test(value.contractUrl.trim())}><Send className="mr-2 h-4 w-4" /> Publier pour signature</Button> : <Button onClick={() => void sendForSignature()} disabled={working || locked || !requiredReady}><Send className="mr-2 h-4 w-4" /> Envoyer pour signature</Button>}</div></div>{!requiredReady && !usesOdoo ? <div className="border-b border-amber-500/20 bg-amber-500/[0.06] px-5 py-3 text-xs text-amber-700">SD01 et SD02 doivent être validés avant l'envoi du contrat en signature Gando.</div> : null}</Card>
 
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_350px]"><div className="space-y-5">
       <Card className="space-y-4 p-5"><div><h2 className="font-semibold">Modèle de contrat</h2><p className="mt-1 text-xs text-muted-foreground">Le premier modèle conserve sa première page Gando. Le second reprend une présentation de convention juridique.</p></div><div className="grid gap-3 sm:grid-cols-2"><button type="button" disabled={locked} onClick={() => applyTemplate("gando_standard")} className={value.contractTemplate === "gando_standard" ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left hover:bg-muted/30"}><div className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-primary" /> Services Gando</div><p className="mt-1 text-xs text-muted-foreground">Structure Gando d'origine, bandeau violet.</p></button><button type="button" disabled={locked} onClick={() => applyTemplate("legal_convention")} className={value.contractTemplate === "legal_convention" ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left hover:bg-muted/30"}><div className="flex items-center gap-2 text-sm font-semibold"><FileSignature className="h-4 w-4 text-primary" /> Convention juridique</div><p className="mt-1 text-xs text-muted-foreground">Bandeau sombre et structure institutionnelle.</p></button></div></Card>
 
       <Card className="space-y-5 p-5"><div className="grid gap-4 md:grid-cols-2"><Field label="Titre du contrat"><Input disabled={locked} value={value.contractTitle} onChange={event => set("contractTitle", event.target.value)} /></Field><Field label="Référence SD05"><Input disabled={locked} value={value.contractReference} onChange={event => set("contractReference", event.target.value)} /></Field><Field label="Version"><Input disabled={locked} value={value.contractVersion} onChange={event => set("contractVersion", event.target.value)} /></Field><Field label="Date limite de signature"><Input disabled={locked} type="date" value={value.signatureDeadline} onChange={event => set("signatureDeadline", event.target.value)} /></Field><Field label="Mise en production"><Input disabled={locked} type="date" value={value.goLiveDate} onChange={event => set("goLiveDate", event.target.value)} /></Field><Field label="Durée initiale"><Input disabled={locked} value={value.term} onChange={event => set("term", event.target.value)} /></Field></div><Field label="Renouvellement"><Input disabled={locked} value={value.renewal} onChange={event => set("renewal", event.target.value)} /></Field><Field label="Préavis / résiliation"><Input disabled={locked} value={value.terminationNotice} onChange={event => set("terminationNotice", event.target.value)} /></Field></Card>
 
-      <Card className="space-y-4 p-5"><div><h2 className="font-semibold">Signature & paraphes</h2><p className="mt-1 text-xs text-muted-foreground">Options figées lors de l'envoi.</p></div><div className="grid gap-3 md:grid-cols-3"><ToggleField disabled={locked} checked={value.allowTypedSignature} onChange={next => set("allowTypedSignature", next)} label="Signature écrite" description="Nom et prénom avec rendu signature." /><ToggleField disabled={locked} checked={value.allowDrawnSignature} onChange={next => set("allowDrawnSignature", next)} label="Signature manuscrite" description="Dessin à la souris ou au doigt." /><ToggleField disabled={locked} checked={value.requireInitialsEachPage} onChange={next => set("requireInitialsEachPage", next)} label="Paraphe obligatoire" description="Chaque page doit être paraphée." /></div></Card>
+      <Card className="space-y-4 p-5">
+        <div><h2 className="font-semibold">Moteur de signature</h2><p className="mt-1 text-xs text-muted-foreground">Le Dealroom prépare et affiche le contrat. Le moteur choisi prend uniquement en charge la signature.</p></div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button type="button" disabled={locked} onClick={() => set("signatureProvider", "odoo")} className={usesOdoo ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left hover:bg-muted/30"}>
+            <div className="flex items-center gap-2 text-sm font-semibold"><FileSignature className="h-4 w-4 text-primary" /> Odoo Signature</div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">Recommandé pour le POC : le PDF Gando est envoyé dans Odoo et le client signe depuis le lien Odoo.</p>
+          </button>
+          <button type="button" disabled={locked} onClick={() => set("signatureProvider", "gando")} className={!usesOdoo ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left hover:bg-muted/30"}>
+            <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-primary" /> Signature Gando</div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">Conserve le parcours actuel : invitation personnelle, paraphes et preuve horodatée dans Gando.</p>
+          </button>
+        </div>
+        {usesOdoo ? <div className="rounded-xl border border-primary/20 bg-primary/[0.035] p-4">
+          <Field label="Lien Odoo Signature" hint="Dans Odoo Signature : ouvrez le modèle, choisissez Partager, puis collez ici le lien public de signature.">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input disabled={locked} type="url" value={value.contractUrl} onChange={event => set("contractUrl", event.target.value)} placeholder="https://votre-instance.odoo.com/sign/..." />
+              {/^(https?:\/\/)/i.test(value.contractUrl.trim()) ? <Button type="button" variant="outline" asChild><a href={value.contractUrl.trim()} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Tester</a></Button> : null}
+            </div>
+          </Field>
+          <div className="mt-3 text-[11px] leading-5 text-muted-foreground">1. Génère l'aperçu PDF ci-dessus. 2. Importe ce PDF dans Odoo Signature et place les champs. 3. Colle le lien partagé ici. 4. Publie : le bouton « Signer le contrat » apparaîtra dans la Dealroom.</div>
+        </div> : null}
+      </Card>
 
-      <Card className="space-y-4 p-5"><div><h2 className="font-semibold">Email de signature</h2><p className="mt-1 text-xs text-muted-foreground">Le lien envoyé ouvre désormais le contrat directement dans la Room via /contract.</p></div><Field label="Texte d'introduction"><Area disabled={locked} value={value.emailIntroText} onChange={next => set("emailIntroText", next)} rows={3} /></Field></Card>
+      {!usesOdoo ? <Card className="space-y-4 p-5"><div><h2 className="font-semibold">Signature & paraphes</h2><p className="mt-1 text-xs text-muted-foreground">Options figées lors de l'envoi.</p></div><div className="grid gap-3 md:grid-cols-3"><ToggleField disabled={locked} checked={value.allowTypedSignature} onChange={next => set("allowTypedSignature", next)} label="Signature écrite" description="Nom et prénom avec rendu signature." /><ToggleField disabled={locked} checked={value.allowDrawnSignature} onChange={next => set("allowDrawnSignature", next)} label="Signature manuscrite" description="Dessin à la souris ou au doigt." /><ToggleField disabled={locked} checked={value.requireInitialsEachPage} onChange={next => set("requireInitialsEachPage", next)} label="Paraphe obligatoire" description="Chaque page doit être paraphée." /></div></Card> : null}
+
+      {!usesOdoo ? <Card className="space-y-4 p-5"><div><h2 className="font-semibold">Email de signature</h2><p className="mt-1 text-xs text-muted-foreground">Le lien envoyé ouvre désormais le contrat directement dans la Room via /contract.</p></div><Field label="Texte d'introduction"><Area disabled={locked} value={value.emailIntroText} onChange={next => set("emailIntroText", next)} rows={3} /></Field></Card> : null}
 
       <Card className="space-y-4 p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold">Conditions particulières</h2><p className="mt-1 text-xs text-muted-foreground">Affichées sur la première page.</p></div>{!locked ? <Button type="button" variant="outline" size="sm" onClick={addTerm}>Ajouter</Button> : null}</div>{value.legalItems.length ? <div className="space-y-3">{value.legalItems.map((item, index) => <div key={index} className="grid gap-3 rounded-xl border border-border bg-muted/20 p-4 md:grid-cols-[220px_1fr_auto]"><Input disabled={locked} value={item.topic} onChange={event => updateTerm(index, "topic", event.target.value)} placeholder="Intitulé" /><Input disabled={locked} value={item.notes} onChange={event => updateTerm(index, "notes", event.target.value)} placeholder="Condition" />{!locked ? <Button type="button" variant="ghost" size="icon" onClick={() => removeTerm(index)}><Trash2 className="h-4 w-4" /></Button> : null}</div>)}</div> : <div className="rounded-xl border border-dashed p-5 text-center text-sm text-muted-foreground">Aucune condition particulière.</div>}</Card>
       <Card className="space-y-4 p-5">
