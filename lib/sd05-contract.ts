@@ -221,11 +221,12 @@ function cleanList(value: unknown, maxItems = 80) {
 }
 
 function baseTemplate(companyName: string, template: SD05TemplateId): Pick<SD05Content,
-  "contractUrl" | "signatureProvider" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
+  "contractUrl" | "signatureUrl" | "signatureProvider" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
   "footerConfidentialityText" | "emailIntroText" | "allowTypedSignature" | "allowDrawnSignature" | "requireInitialsEachPage" | "contractTemplate"
 > {
   return {
     contractUrl: "",
+    signatureUrl: "",
     signatureProvider: "gando",
     contractStatus: "draft",
     contractTemplate: template,
@@ -310,6 +311,7 @@ export function normalizeSD05NativeContent(value: unknown): SD05Content {
     contractReference: clean(source.contractReference, 300),
     contractVersion: clean(source.contractVersion, 100),
     contractUrl: clean(source.contractUrl, 2_000),
+    signatureUrl: clean(source.signatureUrl, 2_000),
     signatureProvider,
     contractStatus,
     contractSummary: clean(source.contractSummary, 60_000),
