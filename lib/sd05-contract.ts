@@ -304,10 +304,18 @@ export function createGandoSD05Template(companyName = "Client"): SD05Content {
 
 export function createGandoRentalTemplate(companyName = "Loueur"): SD05Content {
   const template = createGandoSD05Template(companyName);
+  const now = new Date();
+  const validity = new Date(now);
+  validity.setDate(validity.getDate() + 7);
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
   return {
     ...template,
     contractTitle: `Contrat Gando × ${companyName}`,
-    contractReference: `SD05-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-`,
+    contractReference: `SD05-${dd}${mm}-${String(Date.now()).slice(-4)}`,
+    effectiveDate: now.toISOString().slice(0, 10),
+    goLiveDate: now.toISOString().slice(0, 10),
+    signatureDeadline: validity.toISOString().slice(0, 10),
     contractTemplate: "rental_exact",
     contractSummary: RENTAL_TEMPLATE_BODY,
     signatureProvider: "odoo",
