@@ -70,6 +70,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ...previous,
       contractTitle: file.name,
       contractUrl: publicUrl.publicUrl,
+      signatureUrl: "",
+      signatureProvider: "gando",
       contractStatus: "client_review",
     };
     const document = await saveSDDocument({
@@ -107,6 +109,30 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const current = currentContent(bundle);
     if (!current.contractUrl) throw Object.assign(new Error("Ajoutez d’abord le contrat au deal."), { status: 409 });
+
+    if (body?.action === "configure_signature") {
+      const signatureUrl = String(body?.signatureUrl || "").trim().slice(0, 2_000);
+      const signatureProvider: SD05Content["signatureProvider"] = signatureUrl ? "odoo" : "gando";
+      if (signatureUrl && !/^https?:\/\//i.test(signatureUrl)) {
+        throw Object.assign(new Error("Ajoutez un lien Odoo Signature valide."), { status: 400 });
+      }
+      const content: SD05Content = {
+        ...current,
+        signatureProvider,
+        signatureUrl,
+        contractStatus: current.contractStatus === "signed" ? "signed" : (signatureUrl ? "ready_to_sign" : "client_review"),
+      };
+      const document = await saveSDDocument({
+        roomId: bundle.room.id,
+        code: "SD05",
+        content,
+        sourceMode: "manual",
+        updatedByEmail: userEmail,
+        status: current.contractStatus === "signed" ? "validated" : "published",
+        changeSummary: signatureUrl ? "Odoo Signature configuré sur le Deal rapide" : "Signature Odoo désactivée sur le Deal rapide",
+      });
+      return Response.json({ document, room: bundle.room });
+    }
 
     const requestedDate = String(body?.signedAt || "").trim();
     const parsed = requestedDate ? new Date(requestedDate) : new Date();
