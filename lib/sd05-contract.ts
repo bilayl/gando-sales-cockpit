@@ -1,10 +1,26 @@
 import type { SD05Content, SD05TemplateId } from "@/lib/sd-stage-content";
+import rentalPage02 from "@/lib/sd05-rental-body/page-02";
+import rentalPage03 from "@/lib/sd05-rental-body/page-03";
+import rentalPage04 from "@/lib/sd05-rental-body/page-04";
+import rentalPage05 from "@/lib/sd05-rental-body/page-05";
+import rentalPage06 from "@/lib/sd05-rental-body/page-06";
+import rentalPage07 from "@/lib/sd05-rental-body/page-07";
+import rentalPage08 from "@/lib/sd05-rental-body/page-08";
+import rentalPage09 from "@/lib/sd05-rental-body/page-09";
+import rentalPage10 from "@/lib/sd05-rental-body/page-10";
+import rentalPage11 from "@/lib/sd05-rental-body/page-11";
+import rentalPage12 from "@/lib/sd05-rental-body/page-12";
 
 export const SD05_SIGNATURE_CONSENT =
   "Je reconnais avoir lu le contrat dans son intégralité, je confirme mon identité et mon pouvoir de représenter l'organisation indiquée, et j'accepte de signer électroniquement ce document. Je comprends que mon nom, mon adresse email, la date et l'heure, les informations techniques de connexion, mon mode de signature, mes paraphes et l'empreinte du document seront conservés comme éléments de preuve.";
 
 export const SD05_TEMPLATE_VERSION = "GANDO-SD05-2026-08";
 export const SD05_PARTNERSHIP_TEMPLATE_VERSION = "GANDO-SD05-PARTNER-2026-08";
+export const RENTAL_TEMPLATE_BODY = [
+  rentalPage02, rentalPage03, rentalPage04, rentalPage05, rentalPage06, rentalPage07,
+  rentalPage08, rentalPage09, rentalPage10, rentalPage11, rentalPage12,
+].join("\n\n[[PAGE_BREAK]]\n\n");
+
 export const SD05_DEFAULT_FOOTER =
   "CONFIDENTIALITÉ — Ce document (ainsi que toutes les pièces jointes et éléments de preuve) est confidentiel. Toute publication, utilisation ou diffusion, même partielle, doit être autorisée préalablement. Si vous n'êtes pas destinataire de ce document, merci d'en avertir immédiatement Gando à contact@gando.app. GANDO SOLUTIONS · SAS au capital de 1 000,00 euros · 3 chemin de la porte verte, 77144 Montévrain · RCS Meaux 943 391 201.";
 
@@ -221,13 +237,26 @@ function cleanList(value: unknown, maxItems = 80) {
 }
 
 function baseTemplate(companyName: string, template: SD05TemplateId): Pick<SD05Content,
-  "contractUrl" | "signatureUrl" | "signatureProvider" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
+  "contractUrl" | "signatureUrl" | "signatureProvider" | "rentalTemplate" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
   "footerConfidentialityText" | "emailIntroText" | "allowTypedSignature" | "allowDrawnSignature" | "requireInitialsEachPage" | "contractTemplate"
 > {
   return {
     contractUrl: "",
     signatureUrl: "",
     signatureProvider: "gando",
+    rentalTemplate: {
+      legalName: companyName,
+      legalForm: "SAS",
+      shareCapital: "",
+      siren: "",
+      vatNumber: "",
+      registeredOffice: "",
+      contactEmail: "",
+      activityRegion: "",
+      gandoRate: "2,70",
+      partnerRate: "0,70",
+      totalRate: "3,40",
+    },
     contractStatus: "draft",
     contractTemplate: template,
     footerConfidentialityText: SD05_DEFAULT_FOOTER,
@@ -273,6 +302,38 @@ export function createGandoSD05Template(companyName = "Client"): SD05Content {
   };
 }
 
+export function createGandoRentalTemplate(companyName = "Loueur"): SD05Content {
+  const template = createGandoSD05Template(companyName);
+  const now = new Date();
+  const validity = new Date(now);
+  validity.setDate(validity.getDate() + 7);
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  return {
+    ...template,
+    contractTitle: `Contrat Gando × ${companyName}`,
+    contractReference: `SD05-${dd}${mm}-${String(Date.now()).slice(-4)}`,
+    effectiveDate: now.toISOString().slice(0, 10),
+    goLiveDate: now.toISOString().slice(0, 10),
+    signatureDeadline: validity.toISOString().slice(0, 10),
+    contractTemplate: "rental_exact",
+    contractSummary: RENTAL_TEMPLATE_BODY,
+    signatureProvider: "odoo",
+    rentalTemplate: {
+      ...template.rentalTemplate,
+      legalName: companyName,
+    },
+    legalItems: [
+      { topic: "Frais de sécurisation Gando", status: "approved", owner: "Gando", notes: "2,70 % HT du montant de la Caution Gando activée." },
+      { topic: "Tarification totale client", status: "approved", owner: companyName, notes: "3,40 % HT du montant de chaque Caution activée (2,70 % HT Gando + 0,70 % HT partenaire)." },
+      { topic: `Marge ${companyName}`, status: "approved", owner: companyName, notes: "0,70 % HT du montant de chaque Caution activée, sans seuil ni palier." },
+      { topic: "Plafond de Caution", status: "approved", owner: "Gando", notes: "2 500 € par Caution Éligible." },
+      { topic: "Durée", status: "approved", owner: "Gando", notes: "Soixante (60) jours maximum." },
+      { topic: "Frais d'encaissement", status: "approved", owner: "Loueur", notes: "3,5 % du montant encaissé + 2 € HT." },
+    ],
+  };
+}
+
 export function createGandoPartnershipTemplate(companyName = "Partenaire"): SD05Content {
   return {
     ...baseTemplate(companyName, "legal_convention"),
@@ -304,8 +365,9 @@ export function createGandoPartnershipTemplate(companyName = "Partenaire"): SD05
 export function normalizeSD05NativeContent(value: unknown): SD05Content {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const contractStatus: SD05Content["contractStatus"] = source.contractStatus === "internal_review" || source.contractStatus === "client_review" || source.contractStatus === "ready_to_sign" || source.contractStatus === "signed" ? source.contractStatus : "draft";
-  const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : "gando_standard";
+  const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : source.contractTemplate === "rental_exact" ? "rental_exact" : "gando_standard";
   const signatureProvider = source.signatureProvider === "odoo" ? "odoo" : "gando";
+  const rentalSource = source.rentalTemplate && typeof source.rentalTemplate === "object" ? source.rentalTemplate as Record<string, unknown> : {};
   return {
     contractTitle: clean(source.contractTitle, 500),
     contractReference: clean(source.contractReference, 300),
@@ -313,6 +375,19 @@ export function normalizeSD05NativeContent(value: unknown): SD05Content {
     contractUrl: clean(source.contractUrl, 2_000),
     signatureUrl: clean(source.signatureUrl, 2_000),
     signatureProvider,
+    rentalTemplate: {
+      legalName: clean(rentalSource.legalName, 300),
+      legalForm: clean(rentalSource.legalForm, 120),
+      shareCapital: clean(rentalSource.shareCapital, 120),
+      siren: clean(rentalSource.siren, 120),
+      vatNumber: clean(rentalSource.vatNumber, 120),
+      registeredOffice: clean(rentalSource.registeredOffice, 800),
+      contactEmail: clean(rentalSource.contactEmail, 320),
+      activityRegion: clean(rentalSource.activityRegion, 300),
+      gandoRate: clean(rentalSource.gandoRate, 30) || "2,70",
+      partnerRate: clean(rentalSource.partnerRate, 30) || "0,70",
+      totalRate: clean(rentalSource.totalRate, 30) || "3,40",
+    },
     contractStatus,
     contractSummary: clean(source.contractSummary, 60_000),
     contractTemplate,
