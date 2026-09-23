@@ -130,10 +130,11 @@ export function CompanyFirstProspectionView() {
   const visibleLists = useMemo(() => orderVisibleCompanySegments(lists, segmentPreferences), [lists, segmentPreferences]);
 
   useEffect(() => {
+    if (segmentsQuery.isPending || !segmentsQuery.data) return;
     if (segmentId && !visibleLists.some(item => item.listId === segmentId)) {
       void setSegmentId("");
     }
-  }, [segmentId, setSegmentId, visibleLists]);
+  }, [segmentId, segmentsQuery.data, segmentsQuery.isPending, setSegmentId, visibleLists]);
 
   const ownerNames = useMemo(() => Object.fromEntries(owners.map(item => [
     item.id,
