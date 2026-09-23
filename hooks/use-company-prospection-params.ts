@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   parseAsArrayOf,
   parseAsString,
@@ -11,6 +12,7 @@ import type { SdrWorkFilter } from "@/components/sdr-work-queue";
 
 const workFilters = ["ACTIONABLE", "OPPORTUNITY", "SNOOZED", "EXCLUDED", "ALL"] as const;
 const views = ["table", "board"] as const;
+const SEGMENT_STORAGE_KEY = "gando-prospection-segment";
 
 const parsers = {
   q: parseAsString.withDefault(""),
@@ -49,6 +51,18 @@ export function useCompanyProspectionParams() {
     clearOnDefault: true,
   });
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (params.segment) {
+      window.localStorage.setItem(SEGMENT_STORAGE_KEY, params.segment);
+      return;
+    }
+
+    const savedSegment = window.localStorage.getItem(SEGMENT_STORAGE_KEY);
+    if (savedSegment) void setParams({ segment: savedSegment });
+  }, [params.segment, setParams]);
+
   const filters: CompanyFilters = {};
   for (const key of FILTER_KEYS) {
     const values = params[key];
@@ -74,7 +88,13 @@ export function useCompanyProspectionParams() {
     query: params.q,
     setQuery: (q: string) => setParams({ q: q || null }),
     segmentId: params.segment,
-    setSegmentId: (segment: string) => setParams({ segment: segment || null }),
+    setSegmentId: (segment: string) => {
+      if (typeof window !== "undefined") {
+        if (segment) window.localStorage.setItem(SEGMENT_STORAGE_KEY, segment);
+        else window.localStorage.removeItem(SEGMENT_STORAGE_KEY);
+      }
+      return setParams({ segment: segment || null });
+    },
     workFilter: params.work as SdrWorkFilter,
     setWorkFilter: (work: SdrWorkFilter) => setParams({ work }),
     view: params.view,

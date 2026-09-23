@@ -155,8 +155,8 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
 
   return (
     <>
-      <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain border-t border-border minari-scrollbar">
-        <div className="grid min-w-0 grid-cols-1 items-start gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      <div className="min-h-0 flex-1 touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain border-t border-border minari-scrollbar">
+        <div className="flex h-full w-max min-w-full items-start gap-3 p-4">
           {COMPANY_PIPELINE.map(column => {
             const cards = groups.get(column.value) || [];
             const isOver = dragOver === column.value;
@@ -171,7 +171,7 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                   const company = companies.find(item => item.id === dragId);
                   if (company) move(company, column.value);
                 }}
-                className={`flex h-[420px] min-w-0 flex-col rounded-xl border ${isOver ? "border-primary bg-accent/50" : terminal ? "border-border bg-muted/15" : "border-border bg-muted/30"}`}
+                className={`flex h-full min-h-[420px] w-[310px] shrink-0 flex-col rounded-xl border ${isOver ? "border-primary bg-accent/50" : terminal ? "border-border bg-muted/15" : "border-border bg-muted/30"}`}
               >
                 <header className="flex items-center gap-2 px-3 py-3">
                   {column.value === "WON" ? <Trophy size={14} className="text-emerald-500" /> : column.value === "LOST" ? <XCircle size={14} className="text-rose-500" /> : column.value === "LATER" ? <Clock3 size={14} className="text-amber-500" /> : column.value === "DEMO_SCHEDULED" ? <CalendarClock size={14} className="text-primary" /> : <span className="h-2 w-2 rounded-full bg-primary" />}

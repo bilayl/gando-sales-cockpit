@@ -11,6 +11,8 @@ import {
   ListFilter,
   ListTodo,
   Mail,
+  PanelLeftClose,
+  PanelLeftOpen,
   PhoneCall,
   Search,
 } from "lucide-react";
@@ -26,6 +28,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { CrmGlobalSearch } from "@/components/crm-global-search";
 import {
@@ -97,6 +100,7 @@ export function AppSidebar({
   role?: CockpitRole;
 }) {
   const pathname = usePathname();
+  const { state: sidebarState, toggleSidebar } = useSidebar();
 
   const primary: NavItem[] = [
     { href: "/today", label: "Accueil", icon: Home },
@@ -144,6 +148,19 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter className="px-3 pb-3">
+        <SidebarMenu className="mb-1">
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              type="button"
+              onClick={toggleSidebar}
+              tooltip={sidebarState === "expanded" ? "Réduire la sidebar" : "Déployer la sidebar"}
+              className="h-9 rounded-lg px-2.5 text-[12px] text-sidebar-foreground/60 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+            >
+              {sidebarState === "expanded" ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+              <span>{sidebarState === "expanded" ? "Réduire" : "Déployer"}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <CockpitSidebarUser email={email} role={role} />
       </SidebarFooter>
       <SidebarRail />
