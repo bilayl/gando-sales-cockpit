@@ -9,11 +9,19 @@ export type LaterFollowupPayload = {
   reminderAt: string;
   note: string;
   createTask: boolean;
+  createCalendarEvent: boolean;
 };
 
 function addMonths(months: number) {
   const date = new Date();
   date.setMonth(date.getMonth() + months);
+  date.setHours(9, 0, 0, 0);
+  return date;
+}
+
+function addDays(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
   date.setHours(9, 0, 0, 0);
   return date;
 }
@@ -29,23 +37,33 @@ export function CompanyLaterFollowupDialog({
   saving = false,
   onOpenChange,
   onConfirm,
+  title = "Planifier une relance",
+  description,
+  presetMode = "long",
+  subjectLabel,
 }: {
   open: boolean;
   companyName?: string;
   saving?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (payload: LaterFollowupPayload) => Promise<void> | void;
+  title?: string;
+  description?: string;
+  presetMode?: "short" | "long";
+  subjectLabel?: string;
 }) {
   const [reminderAt, setReminderAt] = useState(() => localDateTimeValue(addMonths(3)));
   const [note, setNote] = useState("");
   const [createTask, setCreateTask] = useState(true);
+  const [createCalendarEvent, setCreateCalendarEvent] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setReminderAt(localDateTimeValue(addMonths(3)));
+    setReminderAt(localDateTimeValue(presetMode === "short" ? addDays(1) : addMonths(3)));
     setNote("");
     setCreateTask(true);
+    setCreateCalendarEvent(true);
     setError("");
   }, [open]);
 
@@ -62,6 +80,7 @@ export function CompanyLaterFollowupDialog({
       reminderAt: parsed.toISOString(),
       note: note.trim(),
       createTask,
+      createCalendarEvent,
     });
   }
 
@@ -75,9 +94,9 @@ export function CompanyLaterFollowupDialog({
       <div className="w-full max-w-lg rounded-2xl border border-border bg-popover p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="font-display text-lg font-bold">Planifier une relance ultérieure</h3>
+            <h3 className="font-display text-lg font-bold">{title}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {companyName || "Cette entreprise"} sort de la file active jusqu’à la date choisie.
+              {description || `${subjectLabel || companyName || "Ce prospect"} sera rappelé à la date choisie.`}
             </p>
           </div>
           <Button variant="ghost" size="icon" disabled={saving} onClick={() => onOpenChange(false)} aria-label="Fermer">
@@ -86,16 +105,26 @@ export function CompanyLaterFollowupDialog({
         </div>
 
         <div className="mt-5 grid grid-cols-3 gap-2">
-          {[1, 3, 6].map(months => (
+          {(presetMode === "short"
+            ? [
+                { label: "Demain", date: addDays(1) },
+                { label: "+ 3 jours", date: addDays(3) },
+                { label: "+ 7 jours", date: addDays(7) },
+              ]
+            : [
+                { label: "+ 1 mois", date: addMonths(1) },
+                { label: "+ 3 mois", date: addMonths(3) },
+                { label: "+ 6 mois", date: addMonths(6) },
+              ]).map(preset => (
             <Button
-              key={months}
+              key={preset.label}
               type="button"
               variant="outline"
               size="sm"
               disabled={saving}
-              onClick={() => setReminderAt(localDateTimeValue(addMonths(months)))}
+              onClick={() => setReminderAt(localDateTimeValue(preset.date))}
             >
-              + {months} mois
+              {preset.label}
             </Button>
           ))}
         </div>
@@ -142,6 +171,25 @@ export function CompanyLaterFollowupDialog({
             </span>
             <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
               Une tâche de rappel sera créée à la même date, avec la note comme contexte si elle est renseignée.
+            </span>
+          </span>
+        </label>
+
+        <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-muted/30 p-3">
+          <input
+            type="checkbox"
+            checked={createCalendarEvent}
+            onChange={event => setCreateCalendarEvent(event.target.checked)}
+            disabled={saving}
+            className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+          />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 text-sm font-semibold">
+              <CalendarClock size={14} />
+              Ajouter au calendrier Gando
+            </span>
+            <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+              Un créneau de rappel sera ajouté au calendrier partagé sales@gando.app lorsqu’il est connecté.
             </span>
           </span>
         </label>
