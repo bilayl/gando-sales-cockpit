@@ -76,6 +76,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const document = bundle.documents.find(item => item.code === "SD05");
     if (!document) throw Object.assign(new Error("SD05 introuvable."), { status: 404 });
     const content = normalizeSD05NativeContent(document.content);
+    if (content.signatureProvider === "odoo") throw Object.assign(new Error("Ce contrat utilise Odoo Signature. Utilisez le lien Odoo configuré dans SD05."), { status: 409 });
     if (!content.contractTitle.trim()) throw Object.assign(new Error("Ajoutez un titre au contrat."), { status: 400 });
     if (content.contractSummary.trim().length < 300) throw Object.assign(new Error("Le texte du contrat est incomplet."), { status: 400 });
     if (!content.allowTypedSignature && !content.allowDrawnSignature) throw Object.assign(new Error("Activez au moins un mode de signature."), { status: 400 });

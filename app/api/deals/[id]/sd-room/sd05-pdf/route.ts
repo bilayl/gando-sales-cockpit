@@ -25,10 +25,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .eq("status", "signed")
       .order("signed_at", { ascending: false });
     if (error) throw error;
-    if (!rows?.length) throw Object.assign(new Error("Le PDF est disponible uniquement lorsqu'une signature valide existe."), { status: 409 });
-
     const latestBySigner = new Map<string, (typeof rows)[number]>();
-    for (const row of rows) {
+    for (const row of rows || []) {
       const key = String(row.signer_email || row.signer_name || "").trim().toLowerCase();
       if (key && !latestBySigner.has(key)) latestBySigner.set(key, row);
     }
@@ -50,7 +48,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return new Response(new Uint8Array(pdf), {
       headers: {
         "content-type": "application/pdf",
-        "content-disposition": `attachment; filename="${safe}.pdf"`,
+        "content-disposition": `inline; filename="${safe}.pdf"`,
         "cache-control": "no-store",
       },
     });
