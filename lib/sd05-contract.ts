@@ -221,11 +221,12 @@ function cleanList(value: unknown, maxItems = 80) {
 }
 
 function baseTemplate(companyName: string, template: SD05TemplateId): Pick<SD05Content,
-  "contractUrl" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
+  "contractUrl" | "signatureProvider" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
   "footerConfidentialityText" | "emailIntroText" | "allowTypedSignature" | "allowDrawnSignature" | "requireInitialsEachPage" | "contractTemplate"
 > {
   return {
     contractUrl: "",
+    signatureProvider: "gando",
     contractStatus: "draft",
     contractTemplate: template,
     footerConfidentialityText: SD05_DEFAULT_FOOTER,
@@ -303,11 +304,13 @@ export function normalizeSD05NativeContent(value: unknown): SD05Content {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const contractStatus: SD05Content["contractStatus"] = source.contractStatus === "internal_review" || source.contractStatus === "client_review" || source.contractStatus === "ready_to_sign" || source.contractStatus === "signed" ? source.contractStatus : "draft";
   const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : "gando_standard";
+  const signatureProvider = source.signatureProvider === "odoo" ? "odoo" : "gando";
   return {
     contractTitle: clean(source.contractTitle, 500),
     contractReference: clean(source.contractReference, 300),
     contractVersion: clean(source.contractVersion, 100),
     contractUrl: clean(source.contractUrl, 2_000),
+    signatureProvider,
     contractStatus,
     contractSummary: clean(source.contractSummary, 60_000),
     contractTemplate,
