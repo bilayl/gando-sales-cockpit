@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { apiError } from "@/lib/hubspot";
 import { getSDRoomBundle, saveSDDocument } from "@/lib/sd-room";
 import { requireSDInternalAccess } from "@/lib/sd-room-access";
-import { createGandoRentalTemplate } from "@/lib/sd05-contract";
+import { createGandoPartnershipTemplate, createGandoRentalTemplate, createGandoSD05Template } from "@/lib/sd05-contract";
 import { createEmptySD05, type SD05Content } from "@/lib/sd-stage-content";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -111,32 +111,45 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const current = currentContent(bundle);
 
     if (body?.action === "generate_template") {
-      const base = current.contractTemplate === "rental_exact"
+      const companyName = bundle.room.company_name || bundle.room.title || "Loueur";
+      const requestedTemplate = body?.templateId === "legal_convention" || body?.templateId === "gando_standard" || body?.templateId === "rental_exact"
+        ? body.templateId as SD05Content["contractTemplate"]
+        : "rental_exact";
+      const sameTemplate = current.contractTemplate === requestedTemplate && Boolean(current.contractTitle && current.contractSummary);
+      const base = sameTemplate
         ? current
-        : createGandoRentalTemplate(bundle.room.company_name || bundle.room.title || "Loueur");
+        : requestedTemplate === "legal_convention"
+          ? createGandoPartnershipTemplate(companyName)
+          : requestedTemplate === "gando_standard"
+            ? createGandoSD05Template(companyName)
+            : createGandoRentalTemplate(companyName);
+
       const incoming = body?.rentalTemplate && typeof body.rentalTemplate === "object" ? body.rentalTemplate as Record<string, unknown> : {};
+      const previousRental = current.rentalTemplate || createEmptySD05().rentalTemplate;
       const rentalTemplate: SD05Content["rentalTemplate"] = {
         ...base.rentalTemplate,
-        legalName: String(incoming.legalName ?? base.rentalTemplate.legalName).trim().slice(0, 300),
-        legalForm: String(incoming.legalForm ?? base.rentalTemplate.legalForm).trim().slice(0, 120),
-        shareCapital: String(incoming.shareCapital ?? base.rentalTemplate.shareCapital).trim().slice(0, 120),
-        siren: String(incoming.siren ?? base.rentalTemplate.siren).trim().slice(0, 120),
-        vatNumber: String(incoming.vatNumber ?? base.rentalTemplate.vatNumber).trim().slice(0, 120),
-        registeredOffice: String(incoming.registeredOffice ?? base.rentalTemplate.registeredOffice).trim().slice(0, 800),
-        contactEmail: String(incoming.contactEmail ?? base.rentalTemplate.contactEmail).trim().slice(0, 320),
-        activityRegion: String(incoming.activityRegion ?? base.rentalTemplate.activityRegion).trim().slice(0, 300),
-        gandoRate: String(incoming.gandoRate ?? base.rentalTemplate.gandoRate).trim().slice(0, 30) || "2,70",
-        partnerRate: String(incoming.partnerRate ?? base.rentalTemplate.partnerRate).trim().slice(0, 30) || "0,70",
-        totalRate: String(incoming.totalRate ?? base.rentalTemplate.totalRate).trim().slice(0, 30) || "3,40",
+        legalName: String(incoming.legalName ?? previousRental.legalName ?? base.rentalTemplate.legalName).trim().slice(0, 300),
+        legalForm: String(incoming.legalForm ?? previousRental.legalForm ?? base.rentalTemplate.legalForm).trim().slice(0, 120),
+        shareCapital: String(incoming.shareCapital ?? previousRental.shareCapital ?? base.rentalTemplate.shareCapital).trim().slice(0, 120),
+        siren: String(incoming.siren ?? previousRental.siren ?? base.rentalTemplate.siren).trim().slice(0, 120),
+        vatNumber: String(incoming.vatNumber ?? previousRental.vatNumber ?? base.rentalTemplate.vatNumber).trim().slice(0, 120),
+        registeredOffice: String(incoming.registeredOffice ?? previousRental.registeredOffice ?? base.rentalTemplate.registeredOffice).trim().slice(0, 800),
+        contactEmail: String(incoming.contactEmail ?? previousRental.contactEmail ?? base.rentalTemplate.contactEmail).trim().slice(0, 320),
+        activityRegion: String(incoming.activityRegion ?? previousRental.activityRegion ?? base.rentalTemplate.activityRegion).trim().slice(0, 300),
+        gandoRate: String(incoming.gandoRate ?? previousRental.gandoRate ?? base.rentalTemplate.gandoRate).trim().slice(0, 30) || "2,70",
+        partnerRate: String(incoming.partnerRate ?? previousRental.partnerRate ?? base.rentalTemplate.partnerRate).trim().slice(0, 30) || "0,70",
+        totalRate: String(incoming.totalRate ?? previousRental.totalRate ?? base.rentalTemplate.totalRate).trim().slice(0, 30) || "3,40",
       };
+      const switchingTemplate = current.contractTemplate !== requestedTemplate;
       const content: SD05Content = {
         ...base,
         contractUrl: "",
+        signatureUrl: switchingTemplate ? "" : current.signatureUrl,
         signatureProvider: "odoo",
         rentalTemplate,
-        goLiveDate: String(body?.goLiveDate || base.goLiveDate).trim().slice(0, 40),
-        signatureDeadline: String(body?.signatureDeadline || base.signatureDeadline).trim().slice(0, 40),
-        contractStatus: base.contractStatus === "signed" ? "signed" : (base.signatureUrl ? "ready_to_sign" : "client_review"),
+        goLiveDate: String(body?.goLiveDate || current.goLiveDate || base.goLiveDate).trim().slice(0, 40),
+        signatureDeadline: String(body?.signatureDeadline || current.signatureDeadline || base.signatureDeadline).trim().slice(0, 40),
+        contractStatus: switchingTemplate ? "client_review" : (base.contractStatus === "signed" ? "signed" : (current.signatureUrl ? "ready_to_sign" : "client_review")),
       };
       const document = await saveSDDocument({
         roomId: bundle.room.id,
@@ -145,7 +158,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         sourceMode: "manual",
         updatedByEmail: userEmail,
         status: content.contractStatus === "signed" ? "validated" : "published",
-        changeSummary: current.contractTemplate === "rental_exact" ? "Modèle SD05 loueur mis à jour" : "Modèle SD05 loueur généré",
+        changeSummary: switchingTemplate ? `Modèle SD05 changé vers ${requestedTemplate}` : "Modèle SD05 mis à jour",
       });
       const now = new Date().toISOString();
       const { data: room, error: roomError } = await getSupabaseAdmin()
@@ -158,7 +171,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return Response.json({ document, room });
     }
 
-    const hasContract = Boolean(current.contractUrl || current.contractTemplate === "rental_exact");
+    const hasGeneratedContract = Boolean(current.contractTitle && current.contractSummary && !current.contractUrl);
+    const hasContract = Boolean(current.contractUrl || hasGeneratedContract);
     if (!hasContract) throw Object.assign(new Error("Ajoutez ou générez d’abord le contrat."), { status: 409 });
 
     if (body?.action === "configure_signature") {
