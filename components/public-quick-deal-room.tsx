@@ -83,7 +83,7 @@ export function PublicQuickDealRoom({ token }: { token: string }) {
   const contractContent = useMemo(() => ({ contractTitle: "Contrat", contractUrl: "", signatureUrl: "", signatureProvider: "gando", contractStatus: "draft", ...((contract?.content || {}) as Partial<SD05Content>) }) as SD05Content, [contract]);
   const agreed = proposal?.status === "validated";
   const contractSigned = contract?.status === "validated" || contractContent.contractStatus === "signed";
-  const generatedContract = contractContent.contractTemplate === "rental_exact" && Boolean(contractContent.contractSummary);
+  const generatedContract = contractContent.contractTemplate === "rental_exact";
   const hasContract = Boolean(contractContent.contractUrl || generatedContract);
   const publicContractHref = generatedContract
     ? `/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(data?.visitorEmail || email)}`
