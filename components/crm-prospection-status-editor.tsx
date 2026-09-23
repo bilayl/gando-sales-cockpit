@@ -29,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export type CrmRecordKind = "contact" | "company";
 export type CrmStatusOption = { value: string; label: string };
@@ -115,6 +116,8 @@ export function CRMProspectionStatusEditor({
     try {
       await onSave(draft);
       setOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Impossible d’enregistrer le statut");
     } finally {
       setSaving(false);
     }
