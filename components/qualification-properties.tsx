@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Briefcase, Check, FileText, Globe, Loader2, MapPin, Pencil, PhoneCall, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
 import { CompanyLaterFollowupDialog, type LaterFollowupPayload } from "@/components/company-later-followup-dialog";
+import { CRMProspectionStatusEditor } from "@/components/crm-prospection-status-editor";
 
 type CRMProperties = Record<string, string | null | undefined>;
 type Kind = "contact" | "company";
@@ -327,13 +328,28 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {specs.map(spec => {
           const definition = definitions[spec.property];
+          const currentValue = String(valueFor(spec, kind, self, fallback) || "");
+
+          if (spec.key === "prospection") {
+            return (
+              <CRMProspectionStatusEditor
+                key={spec.key}
+                kind={kind}
+                value={currentValue}
+                options={definition?.options || []}
+                disabled={!selfId}
+                onSave={value => saveField(spec, value)}
+              />
+            );
+          }
+
           return (
             <EditablePropertyCard
               key={spec.key}
               spec={spec}
               definition={definition}
               type={resolveType(kind, spec, definition)}
-              value={String(valueFor(spec, kind, self, fallback) || "")}
+              value={currentValue}
               disabled={!selfId || metadataLoading || Boolean(metadataError)}
               onSave={value => saveField(spec, value)}
             />
