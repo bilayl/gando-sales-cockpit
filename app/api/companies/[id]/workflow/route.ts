@@ -3,6 +3,7 @@ import { hubspotJson } from "@/lib/hubspot";
 import { ensureCompanyQualificationProperties } from "@/lib/hubspot/qualification-schema";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createCompanyReminderTask } from "@/lib/hubspot/tasks";
+import { createGoogleCalendarEvent, isGoogleConfigured } from "@/lib/google";
 
 type WorkflowAction =
   | "NEW"
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const reminderAt = parseReminder(body.reminderAt);
     const reason = String(body.reason || "").trim();
     const createTask = body.createTask === true;
+    const createCalendarEvent = body.createCalendarEvent === true;
     const createNote = body.createNote === true && Boolean(reason);
     if (action === "LATER") {
       if (!reminderAt) return NextResponse.json({ error: "Une date de reprise est obligatoire pour Ultérieur" }, { status: 400 });
@@ -192,6 +194,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     let task: any = null;
     let note: any = null;
+    let calendar: { created: boolean; event?: any; error?: string; calendarId?: string } = { created: false };
 
     if (reminderAt && createTask && (action === "LATER" || action === "FOLLOW_UP")) {
       task = await createCompanyReminderTask(
@@ -206,6 +209,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         reminderAt,
         reason,
       );
+    }
+
+    if (reminderAt && createCalendarEvent && (action === "LATER" || action === "FOLLOW_UP")) {
+      if (!isGoogleConfigured()) {
+        calendar = { created: false, error: "Google Calendar n’est pas configuré." };
+      } else {
+        try {
+          const calendarId = process.env.GOOGLE_SHARED_CALENDAR_ID
+            || process.env.GOOGLE_CALENDAR_ID
+            || "sales@gando.app";
+          const companyName = company.properties?.name || company.properties?.domain || "Entreprise";
+          const event = await createGoogleCalendarEvent({
+            calendarId,
+            summary: `Rappeler — ${companyName}`,
+            description: [
+              "Relance créée depuis Gando Sales Cockpit.",
+              reason ? `Contexte : ${reason}` : "",
+              `Entreprise HubSpot : ${id}`,
+            ].filter(Boolean).join("\n"),
+            start: reminderAt.toISOString(),
+            end: new Date(reminderAt.getTime() + 30 * 60_000).toISOString(),
+          });
+          calendar = { created: true, event, calendarId };
+        } catch (error) {
+          calendar = {
+            created: false,
+            error: error instanceof Error ? error.message : "Impossible de créer l’événement calendrier.",
+          };
+        }
+      }
     }
 
     if (createNote && reason) {
@@ -228,6 +261,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       contact: null,
       task,
       note,
+      calendar,
       workflow: {
         action,
         reminderAt: reminderAt?.toISOString() || null,
