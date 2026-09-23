@@ -125,9 +125,41 @@ function SD04Document({ content, language }: { content: SD04Content; language: R
 
 function SD05Document({ content, token, visitorEmail, language, status }: { content: SD05Content; token: string; visitorEmail: string; language: RoomLanguage; status: string }) {
   const signed = content.contractStatus === "signed" || status === "validated";
-  return <Section title={content.contractTitle || tr(language, "Contrat", "Contract")} kicker="SD05"><div className="flex flex-col gap-4"><span className="w-fit rounded-full bg-[#f3f0ff] px-3 py-1.5 text-[12px] font-semibold text-[#5c50ae]">{signed ? tr(language, "Signé", "Signed") : content.contractStatus === "ready_to_sign" ? tr(language, "Prêt à signer", "Ready to sign") : tr(language, "En préparation", "In preparation")}</span>{content.contractSummary ? <p>{content.contractSummary}</p> : null}<div className="flex flex-wrap gap-2">{content.contractUrl ? <a href={content.contractUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#202a2f] px-5 text-[13px] font-semibold text-white"><FileSignature className="h-4 w-4" />{tr(language, "Ouvrir le contrat", "Open contract")}</a> : null}{status === "validated" ? <a href={`/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(visitorEmail)}`} className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#ccd2d5] bg-white px-5 text-[13px] font-semibold text-[#202a2f]"><Download className="h-4 w-4" />PDF</a> : null}</div></div></Section>;
-}
+  const usesOdoo = content.signatureProvider === "odoo" && /^https?:\/\//i.test(content.contractUrl || "");
+  const canViewPdf = status === "published" || status === "validated";
+  const pdfHref = `/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(visitorEmail)}`;
+  const statusText = signed
+    ? tr(language, "Signé", "Signed")
+    : usesOdoo
+      ? tr(language, "À signer", "To sign")
+      : content.contractStatus === "ready_to_sign"
+        ? tr(language, "Prêt à signer", "Ready to sign")
+        : tr(language, "En préparation", "In preparation");
 
+  return <Section title={content.contractTitle || tr(language, "Contrat", "Contract")} kicker="SD05">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-fit rounded-full bg-[#f3f0ff] px-3 py-1.5 text-[12px] font-semibold text-[#5c50ae]">{statusText}</span>
+        {usesOdoo ? <span className="w-fit rounded-full border border-[#d9dde0] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#5e686d]">Odoo Signature</span> : null}
+      </div>
+      <div className="rounded-[16px] border border-[#dfe3e5] bg-[#fafbfb] p-5">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[#6558c8] shadow-sm"><FileText className="h-5 w-5" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-semibold text-[#202a2f]">{content.contractReference || tr(language, "Contrat Gando", "Gando contract")}</div>
+            <div className="mt-1 text-[12px] text-[#778086]">{content.contractVersion ? `${tr(language, "Version", "Version")} ${content.contractVersion}` : tr(language, "Document contractuel", "Contract document")}</div>
+          </div>
+        </div>
+        <p className="mt-4 text-[13px] leading-6 text-[#5c666b]">{tr(language, "Consultez le PDF préparé par Gando avant de poursuivre vers la signature.", "Review the PDF prepared by Gando before proceeding to signature.")}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {canViewPdf ? <a href={pdfHref} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#ccd2d5] bg-white px-5 text-[13px] font-semibold text-[#202a2f]"><Download className="h-4 w-4" />{tr(language, "Voir le contrat", "View contract")}</a> : null}
+          {usesOdoo && !signed ? <a href={content.contractUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#202a2f] px-5 text-[13px] font-semibold text-white"><FileSignature className="h-4 w-4" />{tr(language, "Signer le contrat", "Sign contract")}<ArrowUpRight className="h-4 w-4" /></a> : null}
+        </div>
+      </div>
+      {usesOdoo && !signed ? <p className="text-[12px] leading-5 text-[#778086]">{tr(language, "La signature est réalisée dans Odoo Signature. Une fois terminée, vous pourrez revenir dans cette Dealroom.", "The signature is completed in Odoo Sign. Once finished, you can return to this Dealroom.")}</p> : null}
+    </div>
+  </Section>;
+}
 function DocumentBody({ document, token, visitorEmail, firstName, lastName, companyName, language, onMetricConfirmed }: {
   document: PublicDocument;
   token: string;
