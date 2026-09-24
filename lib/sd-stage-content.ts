@@ -92,6 +92,7 @@ export type SD05Content = {
   rentalTemplate: SD05RentalTemplateData;
   contractStatus: "draft" | "internal_review" | "client_review" | "ready_to_sign" | "signed";
   contractSummary: string;
+  contractHtml: string;
   contractTemplate: SD05TemplateId;
   footerConfidentialityText: string;
   emailIntroText: string;
@@ -184,6 +185,7 @@ export function createEmptySD05(): SD05Content {
     },
     contractStatus: "draft",
     contractSummary: "",
+    contractHtml: "",
     contractTemplate: "gando_standard",
     footerConfidentialityText: "",
     emailIntroText: "",
@@ -320,6 +322,7 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       },
       contractStatus,
       contractSummary: text(source.contractSummary),
+      contractHtml: text(source.contractHtml, 120000),
       contractTemplate,
       footerConfidentialityText: text(source.footerConfidentialityText, 3000),
       emailIntroText: text(source.emailIntroText, 2000),
