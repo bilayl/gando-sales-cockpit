@@ -34,6 +34,10 @@ function parsePricing(value: string): SD04Content["pricing"] {
   }).filter(row => row.item);
 }
 
+function euro(value: number) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(value || 0);
+}
+
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return <label className="block"><span className="text-xs font-bold">{label}</span>{hint ? <span className="ml-2 text-[11px] text-muted-foreground">{hint}</span> : null}<div className="mt-2">{children}</div></label>;
 }
@@ -74,6 +78,10 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
   const published = document?.status === "published" || agreed;
 
   const ready = useMemo(() => Boolean(value.deckTitle.trim() && value.executiveMessage.trim() && (value.solution.length || value.pricing.length || value.commercialTerms.length)), [value]);
+  const revenueExample = value.partnerRevenueExample || createEmptySD04().partnerRevenueExample;
+  const revenuePerDeposit = revenueExample.averageDeposit * (revenueExample.partnerMarginRate / 100);
+  const monthlyRevenue = revenuePerDeposit * revenueExample.monthlyActivations;
+  const annualRevenue = monthlyRevenue * 12;
 
   const set = <K extends keyof SD04Content>(key: K, next: SD04Content[K]) => setValue(current => ({ ...current, [key]: next }));
 
@@ -102,6 +110,12 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         "Gain de temps opérationnel pour les équipes",
         "Revenu additionnel possible sur chaque caution",
       ],
+      partnerRevenueExample: {
+        enabled: current.partnerRevenueExample?.enabled !== false,
+        averageDeposit: current.partnerRevenueExample?.averageDeposit || 1000,
+        monthlyActivations: current.partnerRevenueExample?.monthlyActivations || 30,
+        partnerMarginRate: current.partnerRevenueExample?.partnerMarginRate || 0.7,
+      },
       callToAction: current.callToAction || "Êtes-vous en accord avec cette proposition pour passer au contrat ?",
     }));
     toast.success("Modèle de propal généré — complète les éléments entre crochets");
@@ -177,6 +191,32 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       </div>
       <div className="p-5 sm:p-6"><SDQuickProposalBranding dealId={dealId} /></div>
     </section>
+
+    <Card className="overflow-hidden p-0">
+      <div className="border-b border-border bg-primary/[0.035] px-5 py-4 sm:px-6">
+        <div className="text-[10px] font-black uppercase tracking-[0.14em] text-primary">Impact financier partenaire</div>
+        <h2 className="mt-1 text-lg font-black tracking-[-0.025em]">Exemple de revenu pour ${companyName}</h2>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">Ce calcul est présenté comme un exemple dans la propal. Modifie les hypothèses selon le volume réel du loueur.</p>
+      </div>
+      <div className="p-5 sm:p-6">
+        <div className="grid gap-4 md:grid-cols-4">
+          <label><span className="text-xs font-bold">Afficher dans la propal</span><select className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm" value={revenueExample.enabled ? "yes" : "no"} onChange={event => set("partnerRevenueExample", { ...revenueExample, enabled: event.target.value === "yes" })}><option value="yes">Oui</option><option value="no">Non</option></select></label>
+          <label><span className="text-xs font-bold">Caution moyenne (€)</span><Input className="mt-2" type="number" min="0" step="50" value={revenueExample.averageDeposit} onChange={event => set("partnerRevenueExample", { ...revenueExample, averageDeposit: Math.max(0, Number(event.target.value) || 0) })} /></label>
+          <label><span className="text-xs font-bold">Cautions activées / mois</span><Input className="mt-2" type="number" min="0" step="1" value={revenueExample.monthlyActivations} onChange={event => set("partnerRevenueExample", { ...revenueExample, monthlyActivations: Math.max(0, Number(event.target.value) || 0) })} /></label>
+          <label><span className="text-xs font-bold">Marge loueur (%)</span><Input className="mt-2" type="number" min="0" max="100" step="0.1" value={revenueExample.partnerMarginRate} onChange={event => set("partnerRevenueExample", { ...revenueExample, partnerMarginRate: Math.max(0, Number(event.target.value) || 0) })} /></label>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border bg-muted/20 p-4"><div className="text-[10px] font-black uppercase tracking-[0.1em] text-muted-foreground">Par caution activée</div><div className="mt-2 text-2xl font-black tracking-[-0.04em]">{euro(revenuePerDeposit)}</div><div className="mt-1 text-xs text-muted-foreground">{euro(revenueExample.averageDeposit)} × {revenueExample.partnerMarginRate.toLocaleString("fr-FR")} %</div></div>
+          <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4"><div className="text-[10px] font-black uppercase tracking-[0.1em] text-primary">Revenu estimé / mois</div><div className="mt-2 text-2xl font-black tracking-[-0.04em] text-primary">{euro(monthlyRevenue)}</div><div className="mt-1 text-xs text-muted-foreground">{revenueExample.monthlyActivations.toLocaleString("fr-FR")} cautions activées</div></div>
+          <div className="rounded-xl border border-border bg-muted/20 p-4"><div className="text-[10px] font-black uppercase tracking-[0.1em] text-muted-foreground">Projection annuelle</div><div className="mt-2 text-2xl font-black tracking-[-0.04em]">{euro(annualRevenue)}</div><div className="mt-1 text-xs text-muted-foreground">si le même volume est maintenu 12 mois</div></div>
+        </div>
+
+        <div className="mt-4 rounded-xl bg-muted/30 px-4 py-3 text-xs leading-5 text-muted-foreground">
+          Exemple : avec une caution moyenne de <strong className="text-foreground">{euro(revenueExample.averageDeposit)}</strong>, une marge de <strong className="text-foreground">{revenueExample.partnerMarginRate.toLocaleString("fr-FR")} %</strong> représente <strong className="text-foreground">{euro(revenuePerDeposit)}</strong> par caution. À <strong className="text-foreground">{revenueExample.monthlyActivations.toLocaleString("fr-FR")} cautions/mois</strong>, cela représente environ <strong className="text-foreground">{euro(monthlyRevenue)}/mois</strong>, soit <strong className="text-foreground">{euro(annualRevenue)}/an</strong>.
+        </div>
+      </div>
+    </Card>
 
     <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
       <Card className="space-y-5 p-5 lg:p-6">
