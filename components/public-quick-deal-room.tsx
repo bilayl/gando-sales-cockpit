@@ -85,9 +85,11 @@ export function PublicQuickDealRoom({ token }: { token: string }) {
   const contractSigned = contract?.status === "validated" || contractContent.contractStatus === "signed";
   const generatedContract = Boolean(!contractContent.contractUrl && contractContent.contractTitle && contractContent.contractSummary);
   const hasContract = Boolean(contractContent.contractUrl || generatedContract);
-  const publicContractHref = generatedContract
-    ? `/api/public/deal-room/${encodeURIComponent(token)}/quick-contract-pdf`
-    : contractContent.contractUrl;
+  const publicContractHref = contractSigned && contractContent.signedDocumentUrl
+    ? contractContent.signedDocumentUrl
+    : generatedContract
+      ? `/api/public/deal-room/${encodeURIComponent(token)}/quick-contract-pdf`
+      : contractContent.contractUrl;
   const signatureReady = contractContent.signatureProvider === "documenso" && contractContent.signatureState === "sent" && /^https?:\/\//i.test(contractContent.signatureUrl || "");
 
   async function agree() {
