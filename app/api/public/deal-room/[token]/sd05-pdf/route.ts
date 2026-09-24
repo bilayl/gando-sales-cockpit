@@ -1,6 +1,7 @@
 import { apiError } from "@/lib/hubspot";
 import { normalizeSD05NativeContent } from "@/lib/sd05-contract";
 import { buildBrandedSD05Pdf, type SD05PdfSignature } from "@/lib/sd05-pdf";
+import { renderVisualContractPdf } from "@/lib/contract-render-pdf";
 import { getPublicSDRoom } from "@/lib/sd-room";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -41,7 +42,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       initials: row.initials && typeof row.initials === "object" ? row.initials as Record<string, string> : null,
     }));
 
-    const pdf = buildBrandedSD05Pdf({ content, companyName: bundle.room.companyName, signatures });
+    const pdf = content.contractHtml && content.signatureProvider === "documenso"
+      ? await renderVisualContractPdf({ content, companyName: bundle.room.companyName })
+      : buildBrandedSD05Pdf({ content, companyName: bundle.room.companyName, signatures });
     const safe = String(content.contractReference || "SD05-signe").replace(/[^a-zA-Z0-9_-]+/g, "-");
     return new Response(new Uint8Array(pdf), {
       headers: {
