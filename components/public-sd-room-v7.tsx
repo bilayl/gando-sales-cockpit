@@ -127,7 +127,7 @@ function SD05Document({ content, token, visitorEmail, language, status }: { cont
   const signed = content.contractStatus === "signed" || status === "validated";
   const signatureReady = content.signatureProvider === "documenso" && content.signatureState === "sent" && /^https?:\/\//i.test(content.signatureUrl || "");
   const canViewPdf = status === "published" || status === "validated";
-  const pdfHref = `/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(visitorEmail)}`;
+  const pdfHref = signed && content.signedDocumentUrl ? content.signedDocumentUrl : `/api/public/deal-room/${encodeURIComponent(token)}/sd05-pdf?email=${encodeURIComponent(visitorEmail)}`;
   const statusText = signed
     ? tr(language, "Signé", "Signed")
     : signatureReady
