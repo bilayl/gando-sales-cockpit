@@ -44,6 +44,7 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
   const [contractHtml, setContractHtml] = useState("");
   const [documensoConfigured, setDocumensoConfigured] = useState(false);
   const [wordConversionConfigured, setWordConversionConfigured] = useState(false);
+  const [visualPdfConfigured, setVisualPdfConfigured] = useState(false);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [rentalDraft, setRentalDraft] = useState(createEmptySD05().rentalTemplate);
   const [goLiveDate, setGoLiveDate] = useState("");
@@ -64,6 +65,7 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
       if (configResponse.ok) {
         setDocumensoConfigured(Boolean(config.configured));
         setWordConversionConfigured(Boolean(config.wordConversionConfigured));
+        setVisualPdfConfigured(Boolean(config.visualPdfConfigured));
         setWebhookConfigured(Boolean(config.webhookConfigured));
       }
       const quickContract = (payload.documents || []).find((item: SDDocumentRecord) => item.code === "SD05");
@@ -268,6 +270,7 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
         <label><span className="text-xs font-bold">Titre du contrat</span><Input className="mt-2" value={contractTitle} onChange={event => setContractTitle(event.target.value)} disabled={signed || signatureInProgress} /></label>
         <label><span className="text-xs font-bold">Référence</span><Input className="mt-2" value={contractReference} onChange={event => setContractReference(event.target.value)} disabled={signed || signatureInProgress} /></label>
       </div>
+      {!visualPdfConfigured ? <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs leading-5 text-amber-800"><strong>Édition visuelle active.</strong> Pour que le PDF final conserve exactement la mise en forme de cet éditeur, configure <code>GOTENBERG_URL</code>. Sans cela, le cockpit utilise temporairement son ancien moteur PDF.</div> : null}
       <div className="mt-5">
         <ContractVisualEditor
           value={contractHtml}
