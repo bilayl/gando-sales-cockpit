@@ -57,6 +57,12 @@ export type SD04Content = {
   pricing: Array<{ item: string; model: string; price: string; notes: string }>;
   assumptions: string[];
   businessCase: Array<{ metric: string; baseline: string; target: string; value: string }>;
+  partnerRevenueExample: {
+    enabled: boolean;
+    averageDeposit: number;
+    monthlyActivations: number;
+    partnerMarginRate: number;
+  };
   commercialTerms: string[];
   procurementSteps: string[];
   validityDate: string;
@@ -153,6 +159,12 @@ export function createEmptySD04(): SD04Content {
     pricing: [],
     assumptions: [],
     businessCase: [],
+    partnerRevenueExample: {
+      enabled: true,
+      averageDeposit: 1000,
+      monthlyActivations: 30,
+      partnerMarginRate: 0.7,
+    },
     commercialTerms: [],
     procurementSteps: [],
     validityDate: "",
@@ -286,6 +298,21 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
         return { metric: text(row.metric, 500), baseline: text(row.baseline, 300), target: text(row.target, 300), value: text(row.value, 500) };
       }).filter(item => item.metric) : [],
+      partnerRevenueExample: (() => {
+        const example = source.partnerRevenueExample && typeof source.partnerRevenueExample === "object"
+          ? source.partnerRevenueExample as Record<string, unknown>
+          : {};
+        const number = (value: unknown, fallback: number, min: number, max: number) => {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+        };
+        return {
+          enabled: example.enabled !== false,
+          averageDeposit: number(example.averageDeposit, 1000, 0, 1000000),
+          monthlyActivations: number(example.monthlyActivations, 30, 0, 1000000),
+          partnerMarginRate: number(example.partnerMarginRate, 0.7, 0, 100),
+        };
+      })(),
       commercialTerms: stringList(source.commercialTerms),
       procurementSteps: stringList(source.procurementSteps),
       validityDate: text(source.validityDate, 40),

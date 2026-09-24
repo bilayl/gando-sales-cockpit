@@ -34,6 +34,10 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+function euro(value: number) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(value || 0);
+}
+
 function List({ items }: { items: string[] }) {
   if (!items.length) return null;
   return <ul className="space-y-2.5">{items.map((item, index) => <li key={`${index}-${item}`} className="flex gap-3 text-[15px] leading-6 text-[#465157]"><span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#7166c7]" /><span>{item}</span></li>)}</ul>;
@@ -91,6 +95,10 @@ export function PublicQuickDealRoom({ token }: { token: string }) {
       ? `/api/public/deal-room/${encodeURIComponent(token)}/quick-contract-pdf`
       : contractContent.contractUrl;
   const signatureReady = contractContent.signatureProvider === "documenso" && contractContent.signatureState === "sent" && /^https?:\/\//i.test(contractContent.signatureUrl || "");
+  const revenueExample = proposalContent.partnerRevenueExample || { enabled: false, averageDeposit: 0, monthlyActivations: 0, partnerMarginRate: 0 };
+  const revenuePerDeposit = revenueExample.averageDeposit * (revenueExample.partnerMarginRate / 100);
+  const monthlyRevenue = revenuePerDeposit * revenueExample.monthlyActivations;
+  const annualRevenue = monthlyRevenue * 12;
 
   async function agree() {
     if (!data || !proposal || proposal.status !== "published") return;
@@ -125,6 +133,18 @@ export function PublicQuickDealRoom({ token }: { token: string }) {
     <div className="mx-auto max-w-[980px] px-5 py-9 sm:px-7 sm:py-12">
       <section className="rounded-[20px] border border-[#e0e4e6] bg-white p-6 sm:p-8">
         {proposalContent.pricing.length ? <div><div className="text-xs font-bold uppercase tracking-[0.1em] text-[#687277]">Tarification</div><p className="mt-2 max-w-2xl text-sm leading-6 text-[#687277]">Les éléments clés sont présentés immédiatement, comme dans une propal commerciale : tarif, marge éventuelle et conditions principales.</p><div className="mt-5"><PricingCards pricing={proposalContent.pricing} /></div></div> : null}
+        {revenueExample.enabled && revenueExample.averageDeposit > 0 && revenueExample.monthlyActivations > 0 && revenueExample.partnerMarginRate > 0 ? <div className={proposalContent.pricing.length ? "mt-7 border-t border-[#eceeef] pt-6" : ""}>
+          <div className="text-xs font-bold uppercase tracking-[0.1em] text-[#687277]">Exemple de revenu partenaire</div>
+          <div className="mt-2 max-w-2xl text-sm leading-6 text-[#687277]">Une illustration concrète de ce que la marge partenaire peut représenter. Cette projection dépend du volume réel de cautions activées.</div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[16px] border border-[#e0e4e6] bg-[#f8f9f9] p-4"><div className="text-[10px] font-bold uppercase tracking-[0.11em] text-[#687277]">Par caution</div><div className="mt-2 text-[27px] font-semibold tracking-[-0.035em] text-[#211f32]">{euro(revenuePerDeposit)}</div><div className="mt-1 text-xs text-[#687277]">{euro(revenueExample.averageDeposit)} × {revenueExample.partnerMarginRate.toLocaleString("fr-FR")} %</div></div>
+            <div className="rounded-[16px] border border-[#dedcf0] bg-[#f8f7ff] p-4"><div className="text-[10px] font-bold uppercase tracking-[0.11em] text-[#7166c7]">Revenu estimé / mois</div><div className="mt-2 text-[27px] font-semibold tracking-[-0.035em] text-[#6257b8]">{euro(monthlyRevenue)}</div><div className="mt-1 text-xs text-[#687277]">{revenueExample.monthlyActivations.toLocaleString("fr-FR")} cautions activées / mois</div></div>
+            <div className="rounded-[16px] border border-[#e0e4e6] bg-[#f8f9f9] p-4"><div className="text-[10px] font-bold uppercase tracking-[0.11em] text-[#687277]">Projection annuelle</div><div className="mt-2 text-[27px] font-semibold tracking-[-0.035em] text-[#211f32]">{euro(annualRevenue)}</div><div className="mt-1 text-xs text-[#687277]">à volume mensuel constant</div></div>
+          </div>
+          <div className="mt-4 rounded-xl bg-[#f8f9f9] px-4 py-3 text-sm leading-6 text-[#59646a]">
+            Exemple : avec une caution moyenne de <strong className="text-[#1c2529]">{euro(revenueExample.averageDeposit)}</strong> et une marge partenaire de <strong className="text-[#1c2529]">{revenueExample.partnerMarginRate.toLocaleString("fr-FR")} %</strong>, chaque caution activée génère <strong className="text-[#1c2529]">{euro(revenuePerDeposit)}</strong>. À <strong className="text-[#1c2529]">{revenueExample.monthlyActivations.toLocaleString("fr-FR")} cautions/mois</strong>, cela représente environ <strong className="text-[#6257b8]">{euro(monthlyRevenue)}/mois</strong>.
+          </div>
+        </div> : null}
         {proposalContent.solution.length ? <div className={proposalContent.pricing.length ? "mt-7 border-t border-[#eceeef] pt-6" : ""}><div className="text-xs font-bold uppercase tracking-[0.1em] text-[#687277]">Ce que comprend l’offre</div><div className="mt-4"><List items={proposalContent.solution} /></div></div> : null}
         {proposalContent.commercialTerms.length ? <div className="mt-7 border-t border-[#eceeef] pt-6"><div className="text-xs font-bold uppercase tracking-[0.1em] text-[#687277]">Conditions commerciales</div><div className="mt-4"><List items={proposalContent.commercialTerms} /></div></div> : null}
         {proposalContent.proofPoints.length ? <div className="mt-7 border-t border-[#eceeef] pt-6"><div className="text-xs font-bold uppercase tracking-[0.1em] text-[#687277]">Pourquoi Gando</div><div className="mt-4"><List items={proposalContent.proofPoints} /></div></div> : null}
