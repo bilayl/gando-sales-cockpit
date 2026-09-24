@@ -51,6 +51,10 @@ async function documensoFetch(path: string, init: RequestInit = {}) {
   return response;
 }
 
+function toArrayBuffer(bytes: Uint8Array) {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 function sourceExtension(url: string) {
   try {
     const pathname = new URL(url).pathname.toLowerCase();
@@ -66,7 +70,7 @@ async function convertWithGotenberg(buffer: Uint8Array, filename: string) {
     throw Object.assign(new Error("Le document Word doit être converti en PDF avant signature. Configurez GOTENBERG_URL pour automatiser la conversion DOC/DOCX → PDF."), { status: 409 });
   }
   const form = new FormData();
-  form.append("files", new Blob([buffer]), filename);
+  form.append("files", new Blob([toArrayBuffer(buffer)]), filename);
   form.append("exportFormFields", "false");
   const response = await fetch(`${gotenberg}/forms/libreoffice/convert`, { method: "POST", body: form, cache: "no-store" });
   if (!response.ok) throw Object.assign(new Error(`Conversion Word → PDF impossible (${response.status}).`), { status: 502 });
@@ -139,7 +143,7 @@ export async function createDocumensoSignature(input: {
 
   const form = new FormData();
   form.append("payload", JSON.stringify(payload));
-  form.append("files", new Blob([pdf], { type: "application/pdf" }), `${content.contractReference || "contrat-gando"}.pdf`);
+  form.append("files", new Blob([toArrayBuffer(pdf)], { type: "application/pdf" }), `${content.contractReference || "contrat-gando"}.pdf`);
 
   const createResponse = await documensoFetch("/envelope/create", { method: "POST", body: form });
   const created = await createResponse.json() as DocumensoEnvelope;
