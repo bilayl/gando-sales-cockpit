@@ -237,13 +237,16 @@ function cleanList(value: unknown, maxItems = 80) {
 }
 
 function baseTemplate(companyName: string, template: SD05TemplateId): Pick<SD05Content,
-  "contractUrl" | "signatureUrl" | "signatureProvider" | "rentalTemplate" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
+  "contractUrl" | "signatureUrl" | "signatureProvider" | "signatureEnvelopeId" | "signatureState" | "signedDocumentUrl" | "rentalTemplate" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
   "footerConfidentialityText" | "emailIntroText" | "allowTypedSignature" | "allowDrawnSignature" | "requireInitialsEachPage" | "contractTemplate"
 > {
   return {
     contractUrl: "",
     signatureUrl: "",
     signatureProvider: "gando",
+    signatureEnvelopeId: "",
+    signatureState: "not_configured",
+    signedDocumentUrl: "",
     rentalTemplate: {
       legalName: companyName,
       legalForm: "SAS",
@@ -318,7 +321,7 @@ export function createGandoRentalTemplate(companyName = "Loueur"): SD05Content {
     signatureDeadline: validity.toISOString().slice(0, 10),
     contractTemplate: "rental_exact",
     contractSummary: RENTAL_TEMPLATE_BODY,
-    signatureProvider: "odoo",
+    signatureProvider: "documenso",
     rentalTemplate: {
       ...template.rentalTemplate,
       legalName: companyName,
@@ -366,7 +369,7 @@ export function normalizeSD05NativeContent(value: unknown): SD05Content {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const contractStatus: SD05Content["contractStatus"] = source.contractStatus === "internal_review" || source.contractStatus === "client_review" || source.contractStatus === "ready_to_sign" || source.contractStatus === "signed" ? source.contractStatus : "draft";
   const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : source.contractTemplate === "rental_exact" ? "rental_exact" : "gando_standard";
-  const signatureProvider = source.signatureProvider === "odoo" ? "odoo" : "gando";
+  const signatureProvider = source.signatureProvider === "documenso" ? "documenso" : "gando";
   const rentalSource = source.rentalTemplate && typeof source.rentalTemplate === "object" ? source.rentalTemplate as Record<string, unknown> : {};
   return {
     contractTitle: clean(source.contractTitle, 500),
@@ -375,6 +378,9 @@ export function normalizeSD05NativeContent(value: unknown): SD05Content {
     contractUrl: clean(source.contractUrl, 2_000),
     signatureUrl: clean(source.signatureUrl, 2_000),
     signatureProvider,
+    signatureEnvelopeId: clean(source.signatureEnvelopeId, 300),
+    signatureState: source.signatureState === "draft" || source.signatureState === "sent" || source.signatureState === "signed" || source.signatureState === "rejected" || source.signatureState === "cancelled" || source.signatureState === "error" ? source.signatureState : "not_configured",
+    signedDocumentUrl: clean(source.signedDocumentUrl, 2_000),
     rentalTemplate: {
       legalName: clean(rentalSource.legalName, 300),
       legalForm: clean(rentalSource.legalForm, 120),

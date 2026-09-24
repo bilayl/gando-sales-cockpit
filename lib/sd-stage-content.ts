@@ -63,7 +63,7 @@ export type SD04Content = {
 };
 
 export type SD05TemplateId = "gando_standard" | "legal_convention" | "rental_exact";
-export type SD05SignatureProvider = "gando" | "odoo";
+export type SD05SignatureProvider = "gando" | "documenso";
 
 export type SD05RentalTemplateData = {
   legalName: string;
@@ -86,6 +86,9 @@ export type SD05Content = {
   contractUrl: string;
   signatureUrl: string;
   signatureProvider: SD05SignatureProvider;
+  signatureEnvelopeId: string;
+  signatureState: "not_configured" | "draft" | "sent" | "signed" | "rejected" | "cancelled" | "error";
+  signedDocumentUrl: string;
   rentalTemplate: SD05RentalTemplateData;
   contractStatus: "draft" | "internal_review" | "client_review" | "ready_to_sign" | "signed";
   contractSummary: string;
@@ -163,6 +166,9 @@ export function createEmptySD05(): SD05Content {
     contractUrl: "",
     signatureUrl: "",
     signatureProvider: "gando",
+    signatureEnvelopeId: "",
+    signatureState: "not_configured",
+    signedDocumentUrl: "",
     rentalTemplate: {
       legalName: "",
       legalForm: "SAS",
@@ -287,7 +293,7 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
   if (code === "SD05") {
     const contractStatus: SD05Content["contractStatus"] = source.contractStatus === "internal_review" || source.contractStatus === "client_review" || source.contractStatus === "ready_to_sign" || source.contractStatus === "signed" ? source.contractStatus : "draft";
     const contractTemplate: SD05TemplateId = source.contractTemplate === "legal_convention" ? "legal_convention" : source.contractTemplate === "rental_exact" ? "rental_exact" : "gando_standard";
-    const signatureProvider: SD05SignatureProvider = source.signatureProvider === "odoo" ? "odoo" : "gando";
+    const signatureProvider: SD05SignatureProvider = source.signatureProvider === "documenso" ? "documenso" : "gando";
     const rentalSource = source.rentalTemplate && typeof source.rentalTemplate === "object" ? source.rentalTemplate as Record<string, unknown> : {};
     const result: SD05Content = {
       contractTitle: text(source.contractTitle, 500),
@@ -296,6 +302,9 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       contractUrl: text(source.contractUrl, 2000),
       signatureUrl: text(source.signatureUrl, 2000),
       signatureProvider,
+      signatureEnvelopeId: text(source.signatureEnvelopeId, 300),
+      signatureState: source.signatureState === "draft" || source.signatureState === "sent" || source.signatureState === "signed" || source.signatureState === "rejected" || source.signatureState === "cancelled" || source.signatureState === "error" ? source.signatureState : "not_configured",
+      signedDocumentUrl: text(source.signedDocumentUrl, 2000),
       rentalTemplate: {
         legalName: text(rentalSource.legalName, 300),
         legalForm: text(rentalSource.legalForm, 120),

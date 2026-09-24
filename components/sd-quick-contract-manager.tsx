@@ -34,9 +34,15 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
   const [data, setData] = useState<RoomResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
-  const [signedAt, setSignedAt] = useState("");
-  const [signedByEmail, setSignedByEmail] = useState("");
-  const [signatureUrl, setSignatureUrl] = useState("");
+  const [signerName, setSignerName] = useState("");
+  const [signerEmail, setSignerEmail] = useState("");
+  const [signerRole, setSignerRole] = useState("");
+  const [contractTitle, setContractTitle] = useState("");
+  const [contractReference, setContractReference] = useState("");
+  const [contractSummary, setContractSummary] = useState("");
+  const [documensoConfigured, setDocumensoConfigured] = useState(false);
+  const [wordConversionConfigured, setWordConversionConfigured] = useState(false);
+  const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [rentalDraft, setRentalDraft] = useState(createEmptySD05().rentalTemplate);
   const [goLiveDate, setGoLiveDate] = useState("");
   const [signatureDeadline, setSignatureDeadline] = useState("");
@@ -46,15 +52,27 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, { cache: "no-store" });
-      const payload = await response.json();
+      const [response, configResponse] = await Promise.all([
+        fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, { cache: "no-store" }),
+        fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/documenso-sign`, { cache: "no-store" }),
+      ]);
+      const [payload, config] = await Promise.all([response.json(), configResponse.json()]);
       if (!response.ok) throw new Error(payload.message || payload.error || "Chargement impossible");
       setData(payload);
+      if (configResponse.ok) {
+        setDocumensoConfigured(Boolean(config.configured));
+        setWordConversionConfigured(Boolean(config.wordConversionConfigured));
+        setWebhookConfigured(Boolean(config.webhookConfigured));
+      }
       const quickContract = (payload.documents || []).find((item: SDDocumentRecord) => item.code === "SD05");
       const quickContent = (quickContract?.content || {}) as Partial<SD05Content>;
-      setSignedAt(localDateTime(payload.room?.contract_signed_at || null));
-      setSignedByEmail(payload.room?.contract_signed_by_email || "");
-      setSignatureUrl(String(quickContent.signatureUrl || ""));
+      const clientSigner = Array.isArray(quickContent.signatories) ? quickContent.signatories.find(item => item.organization !== "GANDO SOLUTIONS") : undefined;
+      setSignerName(String(clientSigner?.name || ""));
+      setSignerEmail(String(clientSigner?.email || ""));
+      setSignerRole(String(clientSigner?.role || ""));
+      setContractTitle(String(quickContent.contractTitle || ""));
+      setContractReference(String(quickContent.contractReference || ""));
+      setContractSummary(String(quickContent.contractSummary || ""));
       setRentalDraft({ ...createEmptySD05().rentalTemplate, ...(quickContent.rentalTemplate || {}) });
       setGoLiveDate(String(quickContent.goLiveDate || ""));
       setSignatureDeadline(String(quickContent.signatureDeadline || ""));
@@ -73,7 +91,9 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
   const signed = value.contractStatus === "signed" || document?.status === "validated";
   const generated = Boolean(!value.contractUrl && value.contractTitle && value.contractSummary);
   const hasContract = Boolean(value.contractUrl || generated);
-  const odooReady = value.signatureProvider === "odoo" && /^https?:\/\//i.test(value.signatureUrl || "");
+  const signatureInProgress = value.signatureProvider === "documenso" && value.signatureState === "sent";
+  const signatureReady = signatureInProgress && /^https?:\/\//i.test(value.signatureUrl || "");
+  const sourceIsWord = /\.(docx?|DOCX?)(?:[?#]|$)/.test(value.contractUrl || "");
 
   async function upload(file: File) {
     setWorking(true);
@@ -115,41 +135,41 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
     }
   }
 
-  async function saveSignatureSettings() {
+  async function sendForSignature() {
     if (!hasContract) return toast.error("Ajoute ou génère d’abord le contrat.");
-    const cleanUrl = signatureUrl.trim();
-    if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) return toast.error("Ajoute un lien Odoo Signature valide.");
+    if (signerName.trim().length < 2) return toast.error("Renseigne le nom du signataire.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail.trim())) return toast.error("Renseigne un email de signataire valide.");
     setWorking(true);
     try {
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/quick-contract`, {
-        method: "PATCH",
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/documenso-sign`, {
+        method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "configure_signature", signatureUrl: cleanUrl }),
+        body: JSON.stringify({ signerName: signerName.trim(), signerEmail: signerEmail.trim(), signerRole: signerRole.trim() }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.message || payload.error || "Mise à jour impossible");
-      toast.success(cleanUrl ? "Odoo Signature activé" : "Lien de signature retiré");
+      if (!response.ok) throw new Error(payload.message || payload.error || "Envoi en signature impossible");
+      toast.success("Contrat envoyé automatiquement en signature");
       onChanged?.();
       await load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Mise à jour impossible");
+      toast.error(error instanceof Error ? error.message : "Envoi en signature impossible");
     } finally {
       setWorking(false);
     }
   }
 
-  async function markSigned() {
-    if (!hasContract) return toast.error("Ajoute ou génère d’abord le contrat.");
+  async function saveContractContent() {
+    if (!generated) return;
     setWorking(true);
     try {
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/quick-contract`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ signedAt: signedAt || undefined, signedByEmail: signedByEmail.trim() || undefined }),
+        body: JSON.stringify({ action: "update_contract_content", contractTitle, contractReference, contractSummary }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Mise à jour impossible");
-      toast.success("Contrat marqué comme signé");
+      toast.success("Contenu du contrat mis à jour");
       onChanged?.();
       await load();
     } catch (error) {
@@ -180,7 +200,7 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
 
   return <div className="page-shell min-h-screen p-5 lg:p-7"><div className="mx-auto max-w-[1000px] space-y-5">
     <Card className="p-5 lg:p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="text-[11px] font-black uppercase tracking-[0.14em] text-primary">Deal rapide · Étape 2</div><h1 className="mt-1 text-2xl font-black tracking-[-0.03em]">Contrat</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Choisis le modèle de contrat, ajuste les informations du loueur puis prépare la signature. Tu peux changer de modèle à tout moment avant la signature.</p></div>{signed ? <Badge variant="outline" className="border-emerald-500/25 bg-emerald-500/10 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Signé</Badge> : generated ? <Badge variant="outline" className="border-primary/25 bg-primary/5 text-primary">{templateName(value.contractTemplate)}</Badge> : value.contractUrl ? <Badge variant="outline">Contrat ajouté</Badge> : <Badge variant="outline">À préparer</Badge>}</div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="text-[11px] font-black uppercase tracking-[0.14em] text-primary">Deal rapide · Étape 2</div><h1 className="mt-1 text-2xl font-black tracking-[-0.03em]">Contrat</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">Choisis le modèle, modifie les informations ou le texte du contrat, puis envoie-le en signature. La Dealroom suit automatiquement son statut.</p></div>{signed ? <Badge variant="outline" className="border-emerald-500/25 bg-emerald-500/10 text-emerald-600"><CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Signé</Badge> : generated ? <Badge variant="outline" className="border-primary/25 bg-primary/5 text-primary">{templateName(value.contractTemplate)}</Badge> : value.contractUrl ? <Badge variant="outline">Contrat ajouté</Badge> : <Badge variant="outline">À préparer</Badge>}</div>
     </Card>
 
     <input ref={inputRef} type="file" accept=".doc,.docx,.pdf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void upload(file); }} />
@@ -190,13 +210,13 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         {TEMPLATE_OPTIONS.map(option => {
           const active = generated ? value.contractTemplate === option.id : templateChoice === option.id;
-          return <button key={option.id} type="button" disabled={working || signed} onClick={() => void generateTemplate(option.id)} className={active ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left transition hover:border-primary/40 hover:bg-muted/30"}>
+          return <button key={option.id} type="button" disabled={working || signed || signatureInProgress} onClick={() => void generateTemplate(option.id)} className={active ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left transition hover:border-primary/40 hover:bg-muted/30"}>
             <div className="flex items-center gap-2 text-sm font-black"><Sparkles className="h-4 w-4 text-primary" />{option.name}</div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">{option.description}</p>
           </button>;
         })}
       </div>
-      {generated && value.signatureUrl ? <p className="mt-4 text-xs leading-5 text-amber-700">Changer de modèle retire automatiquement l’ancien lien Odoo afin d’éviter de faire signer une ancienne version du contrat.</p> : null}
+      {generated && value.signatureUrl ? <p className="mt-4 text-xs leading-5 text-amber-700">Changer de modèle avant l’envoi réinitialise automatiquement la future demande de signature.</p> : null}
     </Card> : null}
 
     {!hasContract ? <Card className="p-5 lg:p-6">
@@ -210,10 +230,10 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
         <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><FileText className="h-5 w-5" /></div>
         <div className="min-w-0 flex-1"><div className="truncate font-black">{value.contractTitle || "Contrat Gando"}</div><div className="mt-1 text-xs text-muted-foreground">{templateName(value.contractTemplate)} · généré par le cockpit</div></div>
         <Button variant="outline" asChild><a href={`/api/deals/${encodeURIComponent(dealId)}/sd-room/sd05-pdf`} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Aperçu PDF</a></Button>
-        <Button variant="outline" onClick={() => inputRef.current?.click()} disabled={working}>Importer à la place</Button>
-        <Button variant="ghost" onClick={() => void remove()} disabled={working}><Trash2 className="mr-2 h-4 w-4" />Retirer</Button>
+        <Button variant="outline" onClick={() => inputRef.current?.click()} disabled={working || signatureInProgress}>Importer à la place</Button>
+        <Button variant="ghost" onClick={() => void remove()} disabled={working || signatureInProgress}><Trash2 className="mr-2 h-4 w-4" />Retirer</Button>
       </div>
-    </Card> : <Card className="p-5 lg:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><FileText className="h-5 w-5" /></div><div className="min-w-0 flex-1"><div className="truncate font-bold">{value.contractTitle || "Contrat"}</div><div className="mt-1 text-xs text-muted-foreground">Stocké directement dans ce deal</div></div><Button variant="outline" asChild><a href={value.contractUrl} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Ouvrir</a></Button><Button variant="outline" onClick={() => inputRef.current?.click()} disabled={working}>Remplacer</Button><Button variant="ghost" onClick={() => void remove()} disabled={working}><Trash2 className="mr-2 h-4 w-4" />Retirer</Button></div></Card>}
+    </Card> : <Card className="p-5 lg:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-center"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><FileText className="h-5 w-5" /></div><div className="min-w-0 flex-1"><div className="truncate font-bold">{value.contractTitle || "Contrat"}</div><div className="mt-1 text-xs text-muted-foreground">Stocké directement dans ce deal</div></div><Button variant="outline" asChild><a href={value.contractUrl} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Ouvrir</a></Button><Button variant="outline" onClick={() => inputRef.current?.click()} disabled={working || signatureInProgress}>Remplacer</Button><Button variant="ghost" onClick={() => void remove()} disabled={working || signatureInProgress}><Trash2 className="mr-2 h-4 w-4" />Retirer</Button></div></Card>}
 
     {generated ? <Card className="p-5 lg:p-6">
       <div><div className="text-sm font-black">Informations du contrat</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Ces champs alimentent directement la première page et les mentions du modèle SD05.</p></div>
@@ -232,22 +252,43 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
         <label><span className="text-xs font-bold">Tarif total client (%)</span><Input className="mt-2" value={rentalDraft.totalRate} onChange={e=>setRentalDraft(v=>({...v,totalRate:e.target.value}))} disabled={signed} /></label>
         <label><span className="text-xs font-bold">Date limite de signature</span><Input className="mt-2" type="date" value={signatureDeadline} onChange={e=>setSignatureDeadline(e.target.value)} disabled={signed} /></label>
       </div>
-      <div className="mt-5 flex justify-end"><Button onClick={() => void generateTemplate(value.contractTemplate)} disabled={working || signed}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Mettre à jour le contrat</Button></div>
+      <div className="mt-5 flex justify-end"><Button onClick={() => void generateTemplate(value.contractTemplate)} disabled={working || signed || signatureInProgress}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Mettre à jour le contrat</Button></div>
+    </Card> : null}
+
+    {generated ? <Card className="p-5 lg:p-6">
+      <details>
+        <summary className="cursor-pointer text-sm font-black">Modifier le contenu du modèle</summary>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">Le PDF est régénéré depuis ce contenu. Pour le modèle loueur 12 pages, conserve les séparateurs <code>[[PAGE_BREAK]]</code> si tu modifies le texte juridique.</p>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label><span className="text-xs font-bold">Titre du contrat</span><Input className="mt-2" value={contractTitle} onChange={event => setContractTitle(event.target.value)} disabled={signed || signatureInProgress} /></label>
+          <label><span className="text-xs font-bold">Référence</span><Input className="mt-2" value={contractReference} onChange={event => setContractReference(event.target.value)} disabled={signed || signatureInProgress} /></label>
+          <label className="sm:col-span-2"><span className="text-xs font-bold">Texte du contrat</span><textarea className="mt-2 min-h-[420px] w-full rounded-md border border-input bg-background px-3 py-3 font-mono text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring" value={contractSummary} onChange={event => setContractSummary(event.target.value)} disabled={signed || signatureInProgress} /></label>
+        </div>
+        <div className="mt-4 flex justify-end"><Button type="button" onClick={() => void saveContractContent()} disabled={working || signed || signatureInProgress}><Save className="mr-2 h-4 w-4" />Enregistrer les modifications</Button></div>
+      </details>
     </Card> : null}
 
     {hasContract ? <>
       <Card className="p-5 lg:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div><div className="flex items-center gap-2 text-sm font-black"><FileSignature className="h-4 w-4 text-primary" /> Faire signer avec Odoo</div><p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">Il n’y a rien à configurer comme « instance » dans Gando. Dans Odoo Signature, crée la demande avec ce PDF puis copie simplement le lien de signature obtenu.</p></div>
-          {odooReady ? <Badge variant="outline" className="border-emerald-500/25 bg-emerald-500/10 text-emerald-600">Odoo prêt</Badge> : <Badge variant="outline">À configurer</Badge>}
+          <div><div className="flex items-center gap-2 text-sm font-black"><FileSignature className="h-4 w-4 text-primary" /> Signature électronique automatisée</div><p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">Gando génère le PDF, l’envoie à Documenso et récupère automatiquement le statut ainsi que le PDF signé.</p></div>
+          {signed ? <Badge variant="outline" className="border-emerald-500/25 bg-emerald-500/10 text-emerald-600">Signé</Badge> : signatureInProgress ? <Badge variant="outline" className="border-blue-500/25 bg-blue-500/10 text-blue-600">Envoyé</Badge> : documensoConfigured ? <Badge variant="outline" className="border-emerald-500/25 bg-emerald-500/10 text-emerald-600">Documenso connecté</Badge> : <Badge variant="outline">Documenso à connecter</Badge>}
         </div>
-        <div className="mt-5">
-          <label><span className="text-xs font-bold">Lien de signature obtenu dans Odoo</span><div className="mt-2 flex flex-col gap-2 sm:flex-row"><Input type="url" value={signatureUrl} onChange={event => setSignatureUrl(event.target.value)} placeholder="Colle ici le lien copié depuis Odoo Signature" disabled={signed} />{/^https?:\/\//i.test(signatureUrl.trim()) ? <Button type="button" variant="outline" asChild><a href={signatureUrl.trim()} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Tester</a></Button> : null}<Button type="button" onClick={() => void saveSignatureSettings()} disabled={working || signed}><Save className="mr-2 h-4 w-4" />Enregistrer</Button></div></label>
+        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          <label><span className="text-xs font-bold">Nom du signataire</span><Input className="mt-2" value={signerName} onChange={event => setSignerName(event.target.value)} placeholder="Prénom Nom" disabled={signed || signatureInProgress} /></label>
+          <label><span className="text-xs font-bold">Email du signataire</span><Input className="mt-2" type="email" value={signerEmail} onChange={event => setSignerEmail(event.target.value)} placeholder="direction@client.fr" disabled={signed || signatureInProgress} /></label>
+          <label><span className="text-xs font-bold">Fonction</span><Input className="mt-2" value={signerRole} onChange={event => setSignerRole(event.target.value)} placeholder="Gérant, Président…" disabled={signed || signatureInProgress} /></label>
         </div>
-        <div className="mt-4 grid gap-2 rounded-xl border border-border bg-muted/20 p-4 text-xs leading-5 text-muted-foreground"><div><strong className="text-foreground">1.</strong> Ouvre l’aperçu PDF du contrat.</div><div><strong className="text-foreground">2.</strong> Dans Odoo Signature, importe ce PDF, ajoute les champs de signature puis utilise « Partager » ou « Envoyer ».</div><div><strong className="text-foreground">3.</strong> Copie le lien Odoo et colle-le ici. Le client verra ensuite « Signer le contrat » dans sa Dealroom.</div></div>
+        {!documensoConfigured ? <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs leading-5 text-amber-800"><strong>Configuration requise :</strong> ajouter la clé <code>DOCUMENSO_API_TOKEN</code> côté serveur. Aucun lien n’est à copier manuellement.</div> : null}
+        {sourceIsWord && !wordConversionConfigured ? <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs leading-5 text-amber-800">Ce fichier Word pourra être signé automatiquement dès que le convertisseur <code>GOTENBERG_URL</code> sera configuré. Les PDF et modèles Gando générés fonctionnent directement.</div> : null}
+        {documensoConfigured && !webhookConfigured ? <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs leading-5 text-amber-800">L’envoi fonctionne, mais configure <code>DOCUMENSO_WEBHOOK_SECRET</code> pour que le statut « Signé » et le PDF final remontent automatiquement.</div> : null}
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          {signatureReady ? <Button variant="outline" asChild><a href={value.signatureUrl} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Ouvrir le lien de signature</a></Button> : null}
+          {signed && value.signedDocumentUrl ? <Button variant="outline" asChild><a href={value.signedDocumentUrl} target="_blank" rel="noreferrer"><FileText className="mr-2 h-4 w-4" />PDF signé</a></Button> : null}
+          {!signed && !signatureInProgress ? <Button type="button" onClick={() => void sendForSignature()} disabled={working || !documensoConfigured || (sourceIsWord && !wordConversionConfigured)}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileSignature className="mr-2 h-4 w-4" />}Envoyer en signature</Button> : null}
+        </div>
+        {signatureInProgress ? <p className="mt-4 text-xs leading-5 text-muted-foreground">La demande a été envoyée. Documenso notifie le signataire et Gando mettra automatiquement cette Dealroom à jour à la fin de la signature.</p> : null}
       </Card>
-
-      <Card className="p-5 lg:p-6"><div className="text-sm font-black">Suivi de signature</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Pour le POC sans API Odoo, confirme ici la signature une fois qu’elle est terminée. Le deal sera alors figé comme signé.</p><div className="mt-5 grid gap-4 sm:grid-cols-2"><label><span className="text-xs font-bold">Date de signature</span><Input className="mt-2" type="datetime-local" value={signedAt} onChange={event => setSignedAt(event.target.value)} disabled={signed} /></label><label><span className="text-xs font-bold">Email du signataire <span className="font-normal text-muted-foreground">(optionnel)</span></span><Input className="mt-2" type="email" value={signedByEmail} onChange={event => setSignedByEmail(event.target.value)} placeholder="direction@client.fr" disabled={signed} /></label></div><div className="mt-5 flex justify-end"><Button onClick={() => void markSigned()} disabled={working || signed}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{signed ? "Contrat signé" : "Marquer comme signé"}</Button></div></Card>
     </> : null}
   </div></div>;
 }
