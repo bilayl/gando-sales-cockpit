@@ -73,6 +73,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       contractUrl: publicUrl.publicUrl,
       signatureUrl: "",
       signatureProvider: "gando",
+      signatureEnvelopeId: "",
+      signatureState: "not_configured",
+      signedDocumentUrl: "",
       contractStatus: "client_review",
     };
     const document = await saveSDDocument({
@@ -145,7 +148,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ...base,
         contractUrl: "",
         signatureUrl: switchingTemplate ? "" : current.signatureUrl,
-        signatureProvider: "odoo",
+        signatureProvider: "documenso",
+        signatureEnvelopeId: switchingTemplate ? "" : current.signatureEnvelopeId,
+        signatureState: switchingTemplate ? "not_configured" : current.signatureState,
+        signedDocumentUrl: switchingTemplate ? "" : current.signedDocumentUrl,
         rentalTemplate,
         goLiveDate: String(body?.goLiveDate || current.goLiveDate || base.goLiveDate).trim().slice(0, 40),
         signatureDeadline: String(body?.signatureDeadline || current.signatureDeadline || base.signatureDeadline).trim().slice(0, 40),
@@ -175,17 +181,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const hasContract = Boolean(current.contractUrl || hasGeneratedContract);
     if (!hasContract) throw Object.assign(new Error("Ajoutez ou générez d’abord le contrat."), { status: 409 });
 
-    if (body?.action === "configure_signature") {
-      const signatureUrl = String(body?.signatureUrl || "").trim().slice(0, 2_000);
-      const signatureProvider: SD05Content["signatureProvider"] = signatureUrl ? "odoo" : "gando";
-      if (signatureUrl && !/^https?:\/\//i.test(signatureUrl)) {
-        throw Object.assign(new Error("Ajoutez un lien Odoo Signature valide."), { status: 400 });
-      }
+    if (body?.action === "update_contract_content") {
+      const contractTitle = String(body?.contractTitle ?? current.contractTitle).trim().slice(0, 500);
+      const contractReference = String(body?.contractReference ?? current.contractReference).trim().slice(0, 300);
+      const contractSummary = String(body?.contractSummary ?? current.contractSummary).trim().slice(0, 60_000);
+      if (!contractTitle) throw Object.assign(new Error("Le titre du contrat est obligatoire."), { status: 400 });
+      if (!contractSummary) throw Object.assign(new Error("Le contenu du contrat ne peut pas être vide."), { status: 400 });
       const content: SD05Content = {
         ...current,
-        signatureProvider,
-        signatureUrl,
-        contractStatus: current.contractStatus === "signed" ? "signed" : (signatureUrl ? "ready_to_sign" : "client_review"),
+        contractTitle,
+        contractReference,
+        contractSummary,
+        signatureUrl: "",
+        signatureEnvelopeId: "",
+        signatureState: "not_configured",
+        signedDocumentUrl: "",
+        contractStatus: "client_review",
       };
       const document = await saveSDDocument({
         roomId: bundle.room.id,
@@ -193,8 +204,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         content,
         sourceMode: "manual",
         updatedByEmail: userEmail,
-        status: current.contractStatus === "signed" ? "validated" : "published",
-        changeSummary: signatureUrl ? "Odoo Signature configuré sur le Deal rapide" : "Signature Odoo désactivée sur le Deal rapide",
+        status: "published",
+        changeSummary: "Contenu du contrat modifié",
       });
       return Response.json({ document, room: bundle.room });
     }
