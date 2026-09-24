@@ -1,6 +1,6 @@
 import { apiError } from "@/lib/hubspot";
 import { normalizeSD05NativeContent } from "@/lib/sd05-contract";
-import { buildBrandedSD05Pdf } from "@/lib/sd05-pdf";
+import { renderVisualContractPdf } from "@/lib/contract-render-pdf";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     if (!document) throw Object.assign(new Error("Contrat indisponible."), { status: 404 });
 
     const content = normalizeSD05NativeContent(document.published_content || document.content);
-    const pdf = buildBrandedSD05Pdf({ content, companyName: room.company_name || content.rentalTemplate.legalName || "Loueur", signatures: [] });
+    const pdf = await renderVisualContractPdf({ content, companyName: room.company_name || content.rentalTemplate.legalName || "Loueur" });
     const safe = String(content.contractReference || "SD05-Gando").replace(/[^a-zA-Z0-9_-]+/g, "-");
     return new Response(new Uint8Array(pdf), {
       headers: {

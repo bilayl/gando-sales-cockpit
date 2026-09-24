@@ -19,6 +19,7 @@ export async function GET() {
       configured: Boolean(String(process.env.DOCUMENSO_API_TOKEN || "").trim()),
       baseUrl: String(process.env.DOCUMENSO_BASE_URL || "https://app.documenso.com/api/v2"),
       wordConversionConfigured: Boolean(String(process.env.GOTENBERG_URL || "").trim()),
+      visualPdfConfigured: Boolean(String(process.env.GOTENBERG_URL || "").trim()),
       webhookConfigured: Boolean(String(process.env.DOCUMENSO_WEBHOOK_SECRET || "").trim()),
     });
   } catch (error) {

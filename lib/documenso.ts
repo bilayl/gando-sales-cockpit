@@ -1,5 +1,5 @@
 import { contractPageCount } from "@/lib/sd05-contract";
-import { buildBrandedSD05Pdf } from "@/lib/sd05-pdf";
+import { renderVisualContractPdf } from "@/lib/contract-render-pdf";
 import type { SD05Content } from "@/lib/sd-stage-content";
 
 type DocumensoRecipient = {
@@ -80,7 +80,7 @@ async function convertWithGotenberg(buffer: Uint8Array, filename: string) {
 export async function resolveContractPdf(input: { content: SD05Content; companyName: string }) {
   const { content, companyName } = input;
   if (!content.contractUrl) {
-    return new Uint8Array(buildBrandedSD05Pdf({ content, companyName, signatures: [] }));
+    return renderVisualContractPdf({ content, companyName });
   }
 
   const source = await fetch(content.contractUrl, { cache: "no-store" });

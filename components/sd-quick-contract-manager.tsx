@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ContractVisualEditor } from "@/components/contract-visual-editor";
 import { createEmptySD05, type SD05Content, type SD05TemplateId } from "@/lib/sd-stage-content";
 import type { SDDocumentRecord, SDRoomRecord } from "@/lib/sd-room-types";
 
@@ -40,8 +41,10 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
   const [contractTitle, setContractTitle] = useState("");
   const [contractReference, setContractReference] = useState("");
   const [contractSummary, setContractSummary] = useState("");
+  const [contractHtml, setContractHtml] = useState("");
   const [documensoConfigured, setDocumensoConfigured] = useState(false);
   const [wordConversionConfigured, setWordConversionConfigured] = useState(false);
+  const [visualPdfConfigured, setVisualPdfConfigured] = useState(false);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [rentalDraft, setRentalDraft] = useState(createEmptySD05().rentalTemplate);
   const [goLiveDate, setGoLiveDate] = useState("");
@@ -62,6 +65,7 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
       if (configResponse.ok) {
         setDocumensoConfigured(Boolean(config.configured));
         setWordConversionConfigured(Boolean(config.wordConversionConfigured));
+        setVisualPdfConfigured(Boolean(config.visualPdfConfigured));
         setWebhookConfigured(Boolean(config.webhookConfigured));
       }
       const quickContract = (payload.documents || []).find((item: SDDocumentRecord) => item.code === "SD05");
@@ -73,6 +77,7 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
       setContractTitle(String(quickContent.contractTitle || ""));
       setContractReference(String(quickContent.contractReference || ""));
       setContractSummary(String(quickContent.contractSummary || ""));
+      setContractHtml(String(quickContent.contractHtml || ""));
       setRentalDraft({ ...createEmptySD05().rentalTemplate, ...(quickContent.rentalTemplate || {}) });
       setGoLiveDate(String(quickContent.goLiveDate || ""));
       setSignatureDeadline(String(quickContent.signatureDeadline || ""));
@@ -94,6 +99,7 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
   const signatureInProgress = value.signatureProvider === "documenso" && value.signatureState === "sent";
   const signatureReady = signatureInProgress && /^https?:\/\//i.test(value.signatureUrl || "");
   const sourceIsWord = /\.(docx?|DOCX?)(?:[?#]|$)/.test(value.contractUrl || "");
+  const editorContent: SD05Content = { ...value, contractTitle, contractReference, contractHtml, rentalTemplate: rentalDraft, goLiveDate, signatureDeadline };
 
   async function upload(file: File) {
     setWorking(true);
@@ -165,7 +171,7 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/quick-contract`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "update_contract_content", contractTitle, contractReference, contractSummary }),
+        body: JSON.stringify({ action: "update_contract_content", contractTitle, contractReference, contractHtml }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Mise à jour impossible");
@@ -256,16 +262,29 @@ export function SDQuickContractManager({ dealId, onChanged }: { dealId: string; 
     </Card> : null}
 
     {generated ? <Card className="p-5 lg:p-6">
-      <details>
-        <summary className="cursor-pointer text-sm font-black">Modifier le contenu du modèle</summary>
-        <p className="mt-2 text-xs leading-5 text-muted-foreground">Le PDF est régénéré depuis ce contenu. Pour le modèle loueur 12 pages, conserve les séparateurs <code>[[PAGE_BREAK]]</code> si tu modifies le texte juridique.</p>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <label><span className="text-xs font-bold">Titre du contrat</span><Input className="mt-2" value={contractTitle} onChange={event => setContractTitle(event.target.value)} disabled={signed || signatureInProgress} /></label>
-          <label><span className="text-xs font-bold">Référence</span><Input className="mt-2" value={contractReference} onChange={event => setContractReference(event.target.value)} disabled={signed || signatureInProgress} /></label>
-          <label className="sm:col-span-2"><span className="text-xs font-bold">Texte du contrat</span><textarea className="mt-2 min-h-[420px] w-full rounded-md border border-input bg-background px-3 py-3 font-mono text-xs leading-5 outline-none focus-visible:ring-2 focus-visible:ring-ring" value={contractSummary} onChange={event => setContractSummary(event.target.value)} disabled={signed || signatureInProgress} /></label>
-        </div>
-        <div className="mt-4 flex justify-end"><Button type="button" onClick={() => void saveContractContent()} disabled={working || signed || signatureInProgress}><Save className="mr-2 h-4 w-4" />Enregistrer les modifications</Button></div>
-      </details>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div><div className="text-sm font-black">Éditeur visuel du contrat</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Édite directement le document comme dans Word ou Google Docs. La page 1 du modèle loueur est alimentée par les champs ci-dessus ; les pages juridiques sont modifiables visuellement.</p></div>
+        <Badge variant="outline" className="w-fit">A4 · édition visuelle</Badge>
+      </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label><span className="text-xs font-bold">Titre du contrat</span><Input className="mt-2" value={contractTitle} onChange={event => setContractTitle(event.target.value)} disabled={signed || signatureInProgress} /></label>
+        <label><span className="text-xs font-bold">Référence</span><Input className="mt-2" value={contractReference} onChange={event => setContractReference(event.target.value)} disabled={signed || signatureInProgress} /></label>
+      </div>
+      {!visualPdfConfigured ? <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs leading-5 text-amber-800"><strong>Édition visuelle active.</strong> Pour que le PDF final conserve exactement la mise en forme de cet éditeur, configure <code>GOTENBERG_URL</code>. Sans cela, le cockpit utilise temporairement son ancien moteur PDF.</div> : null}
+      <div className="mt-5">
+        <ContractVisualEditor
+          value={contractHtml}
+          fallbackText={contractSummary || value.contractSummary}
+          content={editorContent}
+          companyName={data?.room?.company_name || rentalDraft.legalName || "Loueur"}
+          disabled={signed || signatureInProgress}
+          onChange={setContractHtml}
+        />
+      </div>
+      <div className="mt-5 flex items-center justify-between gap-3">
+        <p className="text-xs leading-5 text-muted-foreground">Toute modification réinitialise une éventuelle ancienne demande de signature afin que le client signe exactement cette version.</p>
+        <Button type="button" onClick={() => void saveContractContent()} disabled={working || signed || signatureInProgress}><Save className="mr-2 h-4 w-4" />Enregistrer le document</Button>
+      </div>
     </Card> : null}
 
     {hasContract ? <>
