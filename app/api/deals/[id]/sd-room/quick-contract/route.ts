@@ -185,7 +185,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (body?.action === "update_contract_content") {
       const contractTitle = String(body?.contractTitle ?? current.contractTitle).trim().slice(0, 500);
       const contractReference = String(body?.contractReference ?? current.contractReference).trim().slice(0, 300);
-      const contractHtml = sanitizeContractHtml(String(body?.contractHtml ?? current.contractHtml || ""));
+      const contractHtml = sanitizeContractHtml(String(body?.contractHtml ?? current.contractHtml ?? ""));
       const contractSummary = contractHtml ? contractHtmlToText(contractHtml) : String(current.contractSummary || "").trim().slice(0, 60_000);
       if (!contractTitle) throw Object.assign(new Error("Le titre du contrat est obligatoire."), { status: 400 });
       if (!contractSummary) throw Object.assign(new Error("Le contenu du contrat ne peut pas être vide."), { status: 400 });
