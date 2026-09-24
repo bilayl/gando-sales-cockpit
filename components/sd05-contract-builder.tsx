@@ -189,7 +189,7 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
       : templateId === "rental_exact"
         ? createGandoRentalTemplate(companyName)
         : createGandoSD05Template(companyName);
-    setValue(current => ({ ...template, contractReference: current.contractReference || template.contractReference, signatureDeadline: current.signatureDeadline || template.signatureDeadline, goLiveDate: current.goLiveDate || template.goLiveDate, effectiveDate: current.effectiveDate || template.effectiveDate, signatureProvider: templateId === "rental_exact" ? "odoo" : current.signatureProvider, contractUrl: current.contractUrl, signatureUrl: current.signatureUrl }));
+    setValue(current => ({ ...template, contractReference: current.contractReference || template.contractReference, signatureDeadline: current.signatureDeadline || template.signatureDeadline, goLiveDate: current.goLiveDate || template.goLiveDate, effectiveDate: current.effectiveDate || template.effectiveDate, signatureProvider: templateId === "rental_exact" ? "documenso" : current.signatureProvider, contractUrl: current.contractUrl, signatureUrl: current.signatureUrl }));
     toast.success(templateId === "legal_convention" ? "Modèle Convention juridique chargé." : templateId === "rental_exact" ? "Modèle SD05 Loueur chargé." : "Modèle Services Gando chargé.");
   }
 
@@ -228,7 +228,7 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
       <Card className="space-y-4 p-5">
         <div><h2 className="font-semibold">Moteur de signature</h2><p className="mt-1 text-xs text-muted-foreground">Le Dealroom prépare et affiche le contrat. Le moteur choisi prend uniquement en charge la signature.</p></div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <button type="button" disabled={locked} onClick={() => set("signatureProvider", "odoo")} className={usesDocumenso ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left hover:bg-muted/30"}>
+          <button type="button" disabled={locked} onClick={() => set("signatureProvider", "documenso")} className={usesDocumenso ? "rounded-xl border-2 border-primary bg-primary/5 p-4 text-left" : "rounded-xl border border-border p-4 text-left hover:bg-muted/30"}>
             <div className="flex items-center gap-2 text-sm font-semibold"><FileSignature className="h-4 w-4 text-primary" /> Documenso</div>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">Recommandé pour le POC : le PDF Gando est envoyé dans Documenso et le client signe depuis le lien Documenso.</p>
           </button>
@@ -240,7 +240,7 @@ export function SD05ContractBuilder({ dealId }: { dealId: string }) {
         {usesDocumenso ? <div className="rounded-xl border border-primary/20 bg-primary/[0.035] p-4">
           <Field label="Lien Documenso" hint="Dans Documenso : ouvrez le modèle, choisissez Partager, puis collez ici le lien public de signature.">
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Input disabled={locked} type="url" value={value.signatureUrl} onChange={event => set("signatureUrl", event.target.value)} placeholder="https://votre-instance.odoo.com/sign/..." />
+              <Input disabled={locked} type="url" value={value.signatureUrl} onChange={event => set("signatureUrl", event.target.value)} placeholder="https://app.documenso.com/sign/..." />
               {/^(https?:\/\/)/i.test(value.signatureUrl.trim()) ? <Button type="button" variant="outline" asChild><a href={value.signatureUrl.trim()} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" /> Tester</a></Button> : null}
             </div>
           </Field>
