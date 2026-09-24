@@ -237,7 +237,7 @@ function cleanList(value: unknown, maxItems = 80) {
 }
 
 function baseTemplate(companyName: string, template: SD05TemplateId): Pick<SD05Content,
-  "contractUrl" | "signatureUrl" | "signatureProvider" | "signatureEnvelopeId" | "signatureState" | "signedDocumentUrl" | "rentalTemplate" | "contractStatus" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
+  "contractUrl" | "signatureUrl" | "signatureProvider" | "signatureEnvelopeId" | "signatureState" | "signedDocumentUrl" | "rentalTemplate" | "contractStatus" | "contractHtml" | "effectiveDate" | "signatureDeadline" | "finalConditions" | "goLiveDate" | "handoverPlan" |
   "footerConfidentialityText" | "emailIntroText" | "allowTypedSignature" | "allowDrawnSignature" | "requireInitialsEachPage" | "contractTemplate"
 > {
   return {
@@ -261,6 +261,7 @@ function baseTemplate(companyName: string, template: SD05TemplateId): Pick<SD05C
       totalRate: "3,40",
     },
     contractStatus: "draft",
+    contractHtml: "",
     contractTemplate: template,
     footerConfidentialityText: SD05_DEFAULT_FOOTER,
     emailIntroText: `Vous êtes invité à consulter puis signer électroniquement le document préparé entre Gando et ${companyName}.`,
@@ -396,6 +397,7 @@ export function normalizeSD05NativeContent(value: unknown): SD05Content {
     },
     contractStatus,
     contractSummary: clean(source.contractSummary, 60_000),
+    contractHtml: clean(source.contractHtml, 120_000),
     contractTemplate,
     footerConfidentialityText: clean(source.footerConfidentialityText || SD05_DEFAULT_FOOTER, 3_000),
     emailIntroText: clean(source.emailIntroText, 2_000),
