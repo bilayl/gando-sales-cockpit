@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { KpiActualTrends } from "@/components/kpi-actual-trends";
 import { KpiEconomicsRisk } from "@/components/kpi-economics-risk";
+import { KpiProfitabilitySimulator } from "@/components/kpi-profitability-simulator";
 import { KpiPageShell } from "@/components/kpi/kpi-page-shell";
 import { getCockpitAccess } from "@/lib/cockpit-access";
 
@@ -17,6 +18,7 @@ export default async function KpiEconomicsPage() {
       title="Économie & risque"
       description="Rentabilité par caution, marge contributive, exposition au risque et évolution réelle des principaux indicateurs."
     >
+      <KpiProfitabilitySimulator />
       <KpiEconomicsRisk />
       <KpiActualTrends variant="economics" />
     </KpiPageShell>
