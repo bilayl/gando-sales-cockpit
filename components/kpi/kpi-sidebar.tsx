@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BadgeEuro,
   ChartSpline,
+  Calculator,
   Database,
   HandCoins,
   History,
@@ -36,6 +37,7 @@ const items = [
   { href: "/kpi", label: "Vue d’ensemble", icon: LayoutDashboard },
   { href: "/kpi/growth", label: "Croissance", icon: TrendingUp },
   { href: "/kpi/economics", label: "Économie & risque", icon: BadgeEuro },
+  { href: "/kpi/offer-analysis", label: "Analyse offre", icon: Calculator },
   { href: "/kpi/forecast", label: "Prévisions", icon: ChartSpline },
   { href: "/kpi/acquisition", label: "Acquisition", icon: Target },
   { href: "/kpi/cash", label: "Cash & coûts", icon: WalletCards },
