@@ -1,3 +1,4 @@
+import "./gando-docs-cockpit.css";
 import { redirect } from "next/navigation";
 import { DeveloperDocsEditor } from "@/components/developer-docs-editor";
 import { getCockpitAccess } from "@/lib/cockpit-access";
