@@ -1159,6 +1159,17 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
       ) : null}
 
       <div className={cn("min-h-0 flex-1", editorActive ? "mint-editor-shell" : "gando-docs-shell")}>
+        {editorActive && currentPage && connection ? (
+          <DeveloperEditorSidebar
+            pages={pages}
+            selectedId={currentPage.id}
+            workspaceLabel={connection.repo}
+            sourceLabel={connection.basePath}
+            onSelectPage={choosePage}
+            onNewPage={createPage}
+            onSettings={() => setConnectionOpen(true)}
+          />
+        ) : (
         <aside className="gando-docs-sidebar">
           <div className="gando-docs-sidebar-scroll">
             <div className="mb-3 flex items-center justify-between px-[10px]">
@@ -1215,8 +1226,9 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
             </button>
           </div>
         </aside>
+        )}
 
-        <main className="gando-docs-main min-h-0">
+        <main className={cn("gando-docs-main min-h-0", editorActive && "mint-editor-main")}>
           {!connection?.connected ? (
             <div className="mx-auto flex min-h-full max-w-3xl items-center justify-center px-6 py-12">
               <div className="w-full rounded-3xl border border-[#e6e6eb] bg-[#fcfcfd] p-8 text-center dark:border-border dark:bg-muted/10">
