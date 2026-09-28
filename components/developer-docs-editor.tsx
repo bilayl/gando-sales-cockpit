@@ -24,10 +24,13 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { DocsDescription, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import { DeveloperMdxPreview } from "@/components/developer-mdx-preview";
+import { DeveloperEditorSidebar } from "@/components/developer-editor-sidebar";
+import { DEVELOPER_SLASH_COMMANDS, DeveloperSlashMenu, type SlashCommandId } from "@/components/developer-slash-menu";
+import { GandoSidebarMark } from "@/components/cockpit-sidebar-shared";
 
 type DocStatus = "draft" | "published";
 type EditorMode = "edit" | "preview";
@@ -752,6 +755,10 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [slashStart, setSlashStart] = useState(0);
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
@@ -972,9 +979,108 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     });
   }
 
+  function handleEditorBodyChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    const value = event.target.value;
+    const caret = event.target.selectionStart;
+    updateCurrent({ body: value });
+
+    const beforeCaret = value.slice(0, caret);
+    const lineStart = beforeCaret.lastIndexOf("\n") + 1;
+    const slashIndex = beforeCaret.lastIndexOf("/");
+    const query = slashIndex >= 0 ? beforeCaret.slice(slashIndex + 1) : "";
+
+    const slashIsOnCurrentLine = slashIndex >= lineStart;
+    const onlyWhitespaceBeforeSlash = slashIsOnCurrentLine
+      && beforeCaret.slice(lineStart, slashIndex).trim().length === 0;
+    const queryIsValid = !/[\s/]/.test(query);
+
+    if (slashIsOnCurrentLine && onlyWhitespaceBeforeSlash && queryIsValid) {
+      setSlashOpen(true);
+      setSlashStart(slashIndex);
+      setSlashQuery(query);
+      setSlashSelectedIndex(0);
+    } else {
+      setSlashOpen(false);
+      setSlashQuery("");
+    }
+  }
+
+  function slashInsertion(id: SlashCommandId) {
+    const tick = String.fromCharCode(96);
+    const blocks: Record<SlashCommandId, string> = {
+      text: "",
+      h1: "# ",
+      h2: "## ",
+      h3: "### ",
+      h4: "#### ",
+      blockquote: "> ",
+      "unordered-list": "- ",
+      "ordered-list": "1. ",
+      table: "| Colonne 1 | Colonne 2 |\n| --- | --- |\n| Valeur | Valeur |",
+      code: `${tick}${tick}${tick}ts\n\n${tick}${tick}${tick}`,
+      callout: '<Callout title="Information">\n\nAjoutez votre contenu ici.\n\n</Callout>',
+      tabs: '<DocTabs items="Tab 1|Tab 2">\n<DocTab value="Tab 1">\n\nContenu du premier onglet.\n\n</DocTab>\n<DocTab value="Tab 2">\n\nContenu du second onglet.\n\n</DocTab>\n</DocTabs>',
+      steps: '<Steps>\n<Step>\n\n## Étape 1\n\nDécrivez cette étape.\n\n</Step>\n<Step>\n\n## Étape 2\n\nDécrivez cette étape.\n\n</Step>\n</Steps>',
+    };
+    return blocks[id];
+  }
+
+  function applySlashCommand(id: SlashCommandId) {
+    const textarea = textareaRef.current;
+    if (!textarea || !currentPage) return;
+
+    const end = textarea.selectionStart;
+    const insertion = slashInsertion(id);
+    const nextBody = `${currentPage.body.slice(0, slashStart)}${insertion}${currentPage.body.slice(end)}`;
+    updateCurrent({ body: nextBody });
+    setSlashOpen(false);
+    setSlashQuery("");
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursor = slashStart + insertion.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  }
+
+  const filteredSlashCommands = DEVELOPER_SLASH_COMMANDS.filter(command => {
+    const query = slashQuery.trim().toLowerCase();
+    return !query
+      || command.label.toLowerCase().includes(query)
+      || command.id.includes(query);
+  });
+
+  function handleEditorKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!slashOpen) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setSlashOpen(false);
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSlashSelectedIndex(index => filteredSlashCommands.length ? (index + 1) % filteredSlashCommands.length : 0);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSlashSelectedIndex(index => filteredSlashCommands.length ? (index - 1 + filteredSlashCommands.length) % filteredSlashCommands.length : 0);
+      return;
+    }
+
+    if (event.key === "Enter" && filteredSlashCommands.length) {
+      event.preventDefault();
+      applySlashCommand(filteredSlashCommands[Math.min(slashSelectedIndex, filteredSlashCommands.length - 1)].id);
+    }
+  }
+
   const connectionLabel = connection?.connected
     ? `${connection.owner}/${connection.repo}`
     : "Connecter GitHub";
+  const editorActive = mode === "edit" && canEdit && Boolean(connection?.connected) && Boolean(currentPage);
 
   return (
     <div className="gando-developer-root flex h-screen min-h-[680px] flex-col overflow-hidden">
@@ -986,11 +1092,13 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         onSaved={load}
       />
 
+      {!editorActive ? (
       <header className="gando-stripe-header">
-        <Link href="/developer" className="gando-stripe-brand" aria-label="Gando Documentation">
-          <span className="gando-docs-wordmark">
-            <img className="gando-docs-logo gando-docs-logo-light" src="/assets/gando-docs-light.svg" alt="Gando Docs" />
-            <img className="gando-docs-logo gando-docs-logo-dark" src="/assets/gando-docs-dark.svg" alt="Gando Docs" />
+        <Link href="/" className="gando-stripe-brand" aria-label="Retour au Cockpit Gando">
+          <GandoSidebarMark />
+          <span className="ml-2.5 grid leading-tight">
+            <span className="text-[15px] font-semibold tracking-[-0.025em] text-[#202435] dark:text-white">Gando</span>
+            <span className="text-[9px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Developers</span>
           </span>
         </Link>
 
@@ -1048,8 +1156,20 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
           ) : null}
         </div>
       </header>
+      ) : null}
 
-      <div className="gando-docs-shell min-h-0 flex-1">
+      <div className={cn("min-h-0 flex-1", editorActive ? "mint-editor-shell" : "gando-docs-shell")}>
+        {editorActive && currentPage && connection ? (
+          <DeveloperEditorSidebar
+            pages={pages}
+            selectedId={currentPage.id}
+            workspaceLabel={connection.repo}
+            sourceLabel={connection.basePath}
+            onSelectPage={choosePage}
+            onNewPage={createPage}
+            onSettings={() => setConnectionOpen(true)}
+          />
+        ) : (
         <aside className="gando-docs-sidebar">
           <div className="gando-docs-sidebar-scroll">
             <div className="mb-3 flex items-center justify-between px-[10px]">
@@ -1106,8 +1226,9 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
             </button>
           </div>
         </aside>
+        )}
 
-        <main className="gando-docs-main min-h-0">
+        <main className={cn("gando-docs-main min-h-0", editorActive && "mint-editor-main")}>
           {!connection?.connected ? (
             <div className="mx-auto flex min-h-full max-w-3xl items-center justify-center px-6 py-12">
               <div className="w-full rounded-3xl border border-[#e6e6eb] bg-[#fcfcfd] p-8 text-center dark:border-border dark:bg-muted/10">
@@ -1132,74 +1253,130 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
               </div>
             </div>
           ) : mode === "edit" && canEdit ? (
-            <div className="gando-docs-editor flex min-h-full flex-col">
-              <div className="gando-docs-editor-header shrink-0">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
-                    <Code2 className="h-3.5 w-3.5" />
-                    <span className="font-mono">{currentPage.path || `${connection.basePath}/${currentPage.slug}.mdx`}</span>
+            <div className="mint-editor-stage">
+              <header className="mint-editor-topbar">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="truncate font-medium text-foreground">{currentPage.title}</span>
+                    <span>·</span>
+                    <span className="truncate font-mono">{currentPage.path || `${connection.basePath}/${currentPage.slug}.mdx`}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {dirty ? <span className="text-[10px] text-amber-600">Modifications non enregistrées</span> : <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700"><Check className="h-3 w-3" /> Synchronisé</span>}
+                  <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                    {dirty ? (
+                      <span className="text-amber-600">Modifications non enregistrées</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-emerald-700">
+                        <Check className="h-3 w-3" /> Synchronisé
+                      </span>
+                    )}
                     <StatusBadge status={currentPage.status} />
                   </div>
                 </div>
 
-                <input
-                  value={currentPage.title}
-                  onChange={event => {
-                    const title = event.target.value;
-                    const previousAutoSlug = slugify(currentPage.title);
-                    updateCurrent({
-                      title,
-                      slug: !currentPage.slug || currentPage.slug === previousAutoSlug ? slugify(title) : currentPage.slug,
-                    });
-                  }}
-                  className="gando-docs-editor-title placeholder:text-[#bbbcc2]"
-                  placeholder="Titre de la page"
-                />
-                <input value={currentPage.description} onChange={event => updateCurrent({ description: event.target.value })} className="gando-docs-editor-description" placeholder="Description courte…" />
-
-                <div className="gando-docs-editor-fields">
-                  <label className="gando-docs-editor-field">
-                    <span className="mr-2">Slug</span>
-                    <input value={currentPage.slug} onChange={event => updateCurrent({ slug: slugify(event.target.value) })} className="min-w-0 flex-1 bg-transparent font-mono text-[10px] text-foreground outline-none" />
-                  </label>
-                  <label className="gando-docs-editor-field">
-                    <span className="mr-2">Section</span>
-                    <input value={currentPage.section} onChange={event => updateCurrent({ section: event.target.value })} className="min-w-0 flex-1 bg-transparent text-[10px] text-foreground outline-none" />
-                  </label>
-                  <label className="gando-docs-editor-field">
-                    <span className="mr-2">Ordre</span>
-                    <input type="number" min={0} value={currentPage.order} onChange={event => updateCurrent({ order: Number(event.target.value) || 0 })} className="w-full bg-transparent text-right text-[10px] text-foreground outline-none" />
-                  </label>
+                <div className="mint-editor-topbar-actions">
+                  <button type="button" className="mint-editor-topbar-button" onClick={() => setMode("preview")}>
+                    <Eye className="size-4" /> Preview
+                  </button>
+                  <button
+                    type="button"
+                    className="mint-editor-topbar-button"
+                    onClick={() => void savePage("draft")}
+                    disabled={saving || !dirty}
+                  >
+                    {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="mint-editor-publish-button"
+                    onClick={() => void savePage("published")}
+                    disabled={saving}
+                  >
+                    {saving ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                    Publish
+                  </button>
                 </div>
-              </div>
+              </header>
 
-              <div className="gando-docs-editor-toolbar shrink-0">
-                <button type="button" onClick={() => insertMarkdown("# ", "", "Titre")} className="rounded px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-muted">H1</button>
-                <button type="button" onClick={() => insertMarkdown("## ", "", "Sous-titre")} className="rounded px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-muted">H2</button>
-                <button type="button" onClick={() => insertMarkdown("### ", "", "Section")} className="rounded px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-muted">H3</button>
-                <div className="mx-1 h-4 w-px bg-border" />
-                <button type="button" onClick={() => insertMarkdown("**", "**", "gras")} className="rounded px-2 py-1 text-[11px] font-bold text-muted-foreground hover:bg-muted">B</button>
-                <button type="button" onClick={() => insertMarkdown("`", "`", "code")} className="rounded px-2 py-1 font-mono text-[10px] text-muted-foreground hover:bg-muted">&lt;/&gt;</button>
-                <button type="button" onClick={() => insertMarkdown("- ", "", "élément")} className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted">• Liste</button>
-                <button type="button" onClick={() => insertMarkdown("> ", "", "Information importante")} className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted">Citation</button>
-                <button type="button" onClick={() => void deletePage()} className="ml-auto rounded p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20" title="Supprimer la page"><Trash2 className="h-3.5 w-3.5" /></button>
-              </div>
+              <div className="mint-editor-canvas-scroll">
+                <div className="mint-editor-canvas">
+                  <div className="mint-editor-document-head">
+                    <input
+                      value={currentPage.title}
+                      onChange={event => {
+                        const title = event.target.value;
+                        const previousAutoSlug = slugify(currentPage.title);
+                        updateCurrent({
+                          title,
+                          slug: !currentPage.slug || currentPage.slug === previousAutoSlug ? slugify(title) : currentPage.slug,
+                        });
+                      }}
+                      className="mint-editor-title-input"
+                      placeholder="Titre de la page"
+                    />
+                    <input
+                      value={currentPage.description}
+                      onChange={event => updateCurrent({ description: event.target.value })}
+                      className="mint-editor-description-input"
+                      placeholder="Description courte…"
+                    />
 
-              <textarea
-                ref={textareaRef}
-                value={currentPage.body}
-                onChange={event => updateCurrent({ body: event.target.value })}
-                spellCheck
-                className="gando-docs-editor-textarea flex-1"
-                placeholder="Rédigez votre documentation…"
-              />
+                    <div className="mint-editor-meta-grid">
+                      <label>
+                        <span>Slug</span>
+                        <input value={currentPage.slug} onChange={event => updateCurrent({ slug: slugify(event.target.value) })} />
+                      </label>
+                      <label>
+                        <span>Section</span>
+                        <input value={currentPage.section} onChange={event => updateCurrent({ section: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>Ordre</span>
+                        <input type="number" min={0} value={currentPage.order} onChange={event => updateCurrent({ order: Number(event.target.value) || 0 })} />
+                      </label>
+                    </div>
+                  </div>
 
-              <div className="flex h-9 shrink-0 items-center justify-between border-t border-[#ececf0] px-5 text-[9px] text-muted-foreground dark:border-border lg:px-8">
-                <span>Dernière synchro · {formatRelativeDate(currentPage.updatedAt)}</span>
-                <span>{currentPage.body.length.toLocaleString("fr-FR")} caractères</span>
+                  <div className="mint-editor-formatbar">
+                    <button type="button" onClick={() => insertMarkdown("**", "**", "gras")}><strong>B</strong></button>
+                    <button type="button" onClick={() => insertMarkdown("_", "_", "italique")}><em>I</em></button>
+                    <button type="button" onClick={() => insertMarkdown("`", "`", "code")}><Code2 className="size-4" /></button>
+                    <span className="mint-editor-format-divider" />
+                    <button type="button" onClick={() => insertMarkdown("## ", "", "Sous-titre")}>H2</button>
+                    <button type="button" onClick={() => insertMarkdown("- ", "", "élément")}>• List</button>
+                    <button type="button" onClick={() => insertMarkdown("> ", "", "Information importante")}>Quote</button>
+                    <span className="ml-auto text-[11px] text-muted-foreground">Tapez <kbd>/</kbd> pour insérer un composant</span>
+                    <button type="button" onClick={() => void deletePage()} className="is-danger" title="Supprimer la page">
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+
+                  <div className="mint-editor-body-wrap">
+                    {slashOpen ? (
+                      <DeveloperSlashMenu
+                        query={slashQuery}
+                        selectedIndex={slashSelectedIndex}
+                        onSelectedIndexChange={setSlashSelectedIndex}
+                        onSelect={applySlashCommand}
+                      />
+                    ) : null}
+
+                    <textarea
+                      ref={textareaRef}
+                      value={currentPage.body}
+                      onChange={handleEditorBodyChange}
+                      onKeyDown={handleEditorKeyDown}
+                      spellCheck
+                      className="mint-editor-textarea"
+                      placeholder="Commencez à écrire… Tapez / pour ajouter un bloc"
+                    />
+                  </div>
+
+                  <div className="mint-editor-statusbar">
+                    <span>Dernière synchro · {formatRelativeDate(currentPage.updatedAt)}</span>
+                    <span>{currentPage.body.length.toLocaleString("fr-FR")} caractères</span>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
@@ -1242,31 +1419,33 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
           ) : null}
         </main>
 
-        <aside className="gando-docs-toc">
-          <div>
-            <div className="gando-docs-toc-title">Sur cette page</div>
-            <nav>
-              {toc.length ? toc.map(item => (
-                <a key={item.id} href={`#${item.id}`} className="block" data-depth={item.depth}>
-                  {item.title}
-                </a>
-              )) : <div className="text-[10px] leading-5 text-muted-foreground">Ajoutez des titres H2/H3 pour générer automatiquement la table des matières.</div>}
-            </nav>
+        {!editorActive ? (
+          <aside className="gando-docs-toc">
+            <div>
+              <div className="gando-docs-toc-title">Sur cette page</div>
+              <nav>
+                {toc.length ? toc.map(item => (
+                  <a key={item.id} href={`#${item.id}`} className="block" data-depth={item.depth}>
+                    {item.title}
+                  </a>
+                )) : <div className="text-[10px] leading-5 text-muted-foreground">Ajoutez des titres H2/H3 pour générer automatiquement la table des matières.</div>}
+              </nav>
 
-            <div className="gando-docs-source">
-              <div className="text-[12px] font-semibold text-[#878d9b]">Source</div>
-              <div className="gando-docs-source-card">
-                <div className="flex items-center gap-2 text-[10px] font-semibold"><Github className="h-3.5 w-3.5" /> {connection?.owner}/{connection?.repo}</div>
-                <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.branch}</div>
-                <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.basePath}</div>
-                <div className="mt-3 flex items-center gap-1.5 text-[9px]">
-                  <span className={cn("h-1.5 w-1.5 rounded-full", connection?.writable ? "bg-emerald-500" : "bg-amber-500")} />
-                  <span className="text-muted-foreground">{connection?.writable ? "Lecture + écriture" : "Lecture seule"}</span>
+              <div className="gando-docs-source">
+                <div className="text-[12px] font-semibold text-[#878d9b]">Source</div>
+                <div className="gando-docs-source-card">
+                  <div className="flex items-center gap-2 text-[10px] font-semibold"><Github className="h-3.5 w-3.5" /> {connection?.owner}/{connection?.repo}</div>
+                  <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.branch}</div>
+                  <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.basePath}</div>
+                  <div className="mt-3 flex items-center gap-1.5 text-[9px]">
+                    <span className={cn("h-1.5 w-1.5 rounded-full", connection?.writable ? "bg-emerald-500" : "bg-amber-500")} />
+                    <span className="text-muted-foreground">{connection?.writable ? "Lecture + écriture" : "Lecture seule"}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        ) : null}
       </div>
     </div>
   );
