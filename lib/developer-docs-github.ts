@@ -545,6 +545,145 @@ export async function deleteDeveloperDocPage(
   );
 }
 
+
+export type DeveloperDocsRepositoryOption = {
+  owner: string;
+  name: string;
+  fullName: string;
+  private: boolean;
+  defaultBranch: string;
+  writable: boolean;
+  updatedAt: string | null;
+  url: string;
+};
+
+type GithubRepositoryListItem = {
+  name?: string;
+  full_name?: string;
+  private?: boolean;
+  default_branch?: string;
+  html_url?: string;
+  updated_at?: string;
+  owner?: { login?: string };
+  permissions?: {
+    pull?: boolean;
+    push?: boolean;
+    admin?: boolean;
+    maintain?: boolean;
+  };
+};
+
+type GithubBranchListItem = {
+  name?: string;
+  protected?: boolean;
+};
+
+export async function listDeveloperDocsRepositories(
+  connection: DeveloperDocsConnection,
+  query = "",
+): Promise<DeveloperDocsRepositoryOption[]> {
+  if (!connection.token) {
+    throw new DeveloperDocsGithubError("Connectez GitHub avant de choisir un dépôt.", 409);
+  }
+
+  const repositories = await githubRequest<GithubRepositoryListItem[]>(
+    connection,
+    "/user/repos?per_page=100&sort=updated&direction=desc&affiliation=owner,collaborator,organization_member",
+  );
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return repositories
+    .filter(repo => repo.name && repo.owner?.login)
+    .map(repo => ({
+      owner: repo.owner?.login as string,
+      name: repo.name as string,
+      fullName: repo.full_name || `${repo.owner?.login}/${repo.name}`,
+      private: Boolean(repo.private),
+      defaultBranch: repo.default_branch || "main",
+      writable: Boolean(repo.permissions?.push || repo.permissions?.admin || repo.permissions?.maintain),
+      updatedAt: repo.updated_at || null,
+      url: repo.html_url || `https://github.com/${repo.owner?.login}/${repo.name}`,
+    }))
+    .filter(repo => !normalizedQuery || repo.fullName.toLowerCase().includes(normalizedQuery))
+    .sort((a, b) => {
+      if (a.writable !== b.writable) return a.writable ? -1 : 1;
+      const aDate = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+      const bDate = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+      return bDate - aDate;
+    });
+}
+
+export async function listDeveloperDocsRepositoryOptions(
+  connection: DeveloperDocsConnection,
+  input: { owner: string; repo: string; branch?: string },
+) {
+  if (!connection.token) {
+    throw new DeveloperDocsGithubError("Connectez GitHub avant de choisir un dépôt.", 409);
+  }
+
+  const owner = cleanRepoSegment(input.owner, "");
+  const repo = cleanRepoSegment(input.repo, "");
+  if (!owner || !repo) {
+    throw new DeveloperDocsGithubError("Sélectionnez un dépôt GitHub.", 400);
+  }
+
+  const repoConnection: DeveloperDocsConnection = {
+    ...connection,
+    owner,
+    repo,
+    branch: input.branch || connection.branch,
+  };
+
+  const repository = await githubRequest<GithubRepo>(
+    repoConnection,
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+  );
+  const branches = await githubRequest<GithubBranchListItem[]>(
+    repoConnection,
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`,
+  );
+
+  const branch = cleanBranch(
+    input.branch || repository.default_branch || branches[0]?.name || "main",
+    repository.default_branch || "main",
+  );
+
+  const tree = await githubRequest<GithubTreeResponse>(
+    { ...repoConnection, branch },
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+  );
+
+  const directories = (tree.tree || [])
+    .filter(item => item.type === "tree" && typeof item.path === "string")
+    .map(item => item.path as string)
+    .filter(path => path && path.split("/").length <= 5)
+    .sort((a, b) => {
+      const aDocs = /(^|\/)(docs?|documentation)(\/|$)/i.test(a);
+      const bDocs = /(^|\/)(docs?|documentation)(\/|$)/i.test(b);
+      if (aDocs !== bDocs) return aDocs ? -1 : 1;
+      return a.localeCompare(b);
+    })
+    .slice(0, 250);
+
+  return {
+    repository: {
+      owner,
+      name: repo,
+      fullName: `${owner}/${repo}`,
+      private: Boolean(repository.private),
+      defaultBranch: repository.default_branch || branch,
+      writable: Boolean(repository.permissions?.push || repository.permissions?.admin || repository.permissions?.maintain),
+      url: repository.html_url || `https://github.com/${owner}/${repo}`,
+    },
+    branches: branches
+      .filter(item => item.name)
+      .map(item => ({ name: item.name as string, protected: Boolean(item.protected) })),
+    directories,
+    selectedBranch: branch,
+  };
+}
+
 export function publicDeveloperDocsConnection(connection: DeveloperDocsConnection) {
   return {
     owner: connection.owner,
@@ -553,5 +692,9 @@ export function publicDeveloperDocsConnection(connection: DeveloperDocsConnectio
     basePath: connection.basePath,
     tokenSource: connection.tokenSource,
     hasToken: Boolean(connection.token),
+    oauthAvailable: Boolean(
+      process.env.GITHUB_DOCS_CLIENT_ID?.trim()
+      && process.env.GITHUB_DOCS_CLIENT_SECRET?.trim()
+    ),
   };
 }
