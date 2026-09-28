@@ -1,0 +1,470 @@
+/* Gando developer docs shell.
+ * Visual values are aligned with the developer portal already used in bilayl/gando-app.
+ */
+
+.gando-developer-root {
+  --gando-docs-bg: #fff;
+  --gando-docs-fg: #0a2540;
+  --gando-docs-muted: #697386;
+  --gando-docs-border: #dee2ea;
+  --gando-docs-soft: #f6f9fc;
+  --gando-docs-primary: #635bff;
+  --gando-docs-primary-strong: #633dff;
+  --gando-docs-sidebar: 292px;
+  --gando-docs-toc: 248px;
+  --gando-docs-header: 74px;
+  min-height: 100dvh;
+  background: var(--gando-docs-bg);
+  color: var(--gando-docs-fg);
+}
+
+.dark .gando-developer-root {
+  --gando-docs-bg: #0f172a;
+  --gando-docs-fg: #f1f5f9;
+  --gando-docs-muted: #94a3b8;
+  --gando-docs-border: #334155;
+  --gando-docs-soft: #1e293b;
+}
+
+.gando-docs-wordmark {
+  display: inline-flex;
+  align-items: center;
+}
+.gando-docs-logo { width: 164px; height: auto; display: block; }
+.gando-docs-logo-dark { display: none; }
+.dark .gando-docs-logo-light { display: none; }
+.dark .gando-docs-logo-dark { display: block; }
+
+.gando-stripe-header {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: grid;
+  height: var(--gando-docs-header);
+  padding: 0 24px;
+  grid-template-columns: minmax(170px, 1fr) minmax(280px, 340px) auto;
+  align-items: center;
+  gap: 20px;
+  border-top: 3px solid var(--gando-docs-primary);
+  border-bottom: 1px solid var(--gando-docs-border);
+  background: rgb(246 249 252 / 98%);
+  backdrop-filter: blur(16px) saturate(130%);
+}
+
+.dark .gando-stripe-header { background: rgb(15 23 42 / 98%); }
+
+.gando-stripe-brand {
+  display: inline-flex;
+  width: fit-content;
+  min-width: 0;
+  align-items: center;
+}
+
+.gando-stripe-search-wrap { position: relative; min-width: 0; }
+.gando-stripe-search {
+  width: 100%;
+  height: 42px;
+  padding: 0 42px 0 40px;
+  border: 1px solid #cad1db;
+  border-radius: 11px;
+  background: rgb(255 255 255 / 90%);
+  box-shadow: 0 1px 2px rgb(10 37 64 / 3%);
+  color: #2f344b;
+  font-size: 14px;
+  outline: none;
+}
+.gando-stripe-search:focus {
+  border-color: #aeb8c7;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgb(99 91 255 / 10%);
+}
+.dark .gando-stripe-search {
+  border-color: #334155;
+  background: #0f172a;
+  color: #cbd5e1;
+}
+.gando-stripe-search-icon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  color: #87909f;
+}
+.gando-stripe-search-kbd {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 24px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: #f6f9fc;
+  color: #495067;
+  font-size: 12px;
+}
+.dark .gando-stripe-search-kbd { background: #1e293b; color: #cbd5e1; }
+
+.gando-stripe-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.gando-stripe-action,
+.gando-stripe-action-primary,
+.gando-stripe-segment {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.gando-stripe-action {
+  padding: 0 12px;
+  border: 1px solid #cad1db;
+  background: rgb(255 255 255 / 90%);
+  color: #0a2540;
+}
+.gando-stripe-action:hover { border-color: #abb5c3; background: #fff; }
+.dark .gando-stripe-action { border-color: #334155; background: #0f172a; color: #e2e8f0; }
+
+.gando-stripe-action-primary {
+  padding: 0 14px;
+  border: 1px solid var(--gando-docs-primary);
+  background: var(--gando-docs-primary);
+  color: #fff;
+}
+.gando-stripe-action-primary:hover { background: #574ff0; }
+
+.gando-stripe-segment {
+  min-height: 40px;
+  padding: 3px;
+  border: 1px solid #cad1db;
+  background: #fff;
+}
+.dark .gando-stripe-segment { border-color: #334155; background: #0f172a; }
+.gando-stripe-segment button {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: #697386;
+  font-size: 12px;
+  font-weight: 600;
+}
+.gando-stripe-segment button[data-active="true"] {
+  background: #f6f9fc;
+  color: #0a2540;
+}
+.dark .gando-stripe-segment button[data-active="true"] {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.gando-docs-shell {
+  display: grid;
+  min-height: calc(100dvh - var(--gando-docs-header));
+  grid-template-columns: var(--gando-docs-sidebar) minmax(0, 1fr) var(--gando-docs-toc);
+  background: var(--gando-docs-bg);
+}
+
+.gando-docs-sidebar {
+  min-height: 0;
+  overflow: hidden;
+  background: var(--gando-docs-bg);
+}
+.gando-docs-sidebar-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px 18px 44px 22px;
+}
+.gando-docs-sidebar-section { margin: 26px 0 10px; padding: 0 10px; color: #878d9b; font-size: 15.5px; font-weight: 620; line-height: 22px; letter-spacing: -0.012em; }
+.gando-docs-sidebar-section:first-child { margin-top: 4px; }
+.dark .gando-docs-sidebar-section { color: #7e8b9e; }
+
+.gando-docs-sidebar-item {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  margin: 1px 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: #1d2129;
+  font-size: 14.5px;
+  font-weight: 540;
+  line-height: 21px;
+  letter-spacing: -0.01em;
+  text-align: left;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.gando-docs-sidebar-item:hover { background: #f8f9fb; color: #1e1843; }
+.gando-docs-sidebar-item[data-active="true"] { background: transparent; color: var(--gando-docs-primary-strong); font-weight: 620; }
+.dark .gando-docs-sidebar-item { color: #d8dee9; }
+.dark .gando-docs-sidebar-item:hover { background: #1e293b; color: #f8fafc; }
+.dark .gando-docs-sidebar-item[data-active="true"] { color: #a78bfa; }
+
+.gando-docs-sidebar-footer {
+  position: sticky;
+  bottom: 0;
+  padding: 10px 18px 14px 22px;
+  background: linear-gradient(to top, var(--gando-docs-bg) 82%, transparent);
+}
+.gando-docs-sidebar-footer button {
+  width: 100%;
+  min-height: 38px;
+  border-radius: 8px;
+  color: #677087;
+  font-size: 12.5px;
+}
+.gando-docs-sidebar-footer button:hover { background: var(--gando-docs-soft); color: var(--gando-docs-fg); }
+
+.gando-docs-main {
+  min-width: 0;
+  overflow-y: auto;
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
+  background: var(--gando-docs-bg);
+}
+
+.gando-docs-article {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 38px 48px 108px 52px;
+  color: var(--gando-docs-fg);
+}
+.gando-docs-breadcrumb {
+  margin: 0 0 26px;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 560;
+}
+.gando-docs-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.gando-docs-description {
+  max-width: 720px;
+  margin: 10px 0 28px;
+  color: var(--gando-docs-muted);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.gando-docs-article h1 {
+  max-width: 780px;
+  margin: 0 0 18px;
+  color: var(--gando-docs-fg);
+  font-size: clamp(2rem, 3vw, 2.45rem);
+  font-weight: 690;
+  letter-spacing: -0.037em;
+  line-height: 1.13;
+  text-wrap: balance;
+}
+.gando-docs-article h2 {
+  margin: 2.35em 0 .7em;
+  color: var(--gando-docs-fg);
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.35;
+}
+.gando-docs-article h3 {
+  margin: 1.9em 0 .55em;
+  color: var(--gando-docs-fg);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+.gando-docs-article p,
+.gando-docs-article li {
+  color: color-mix(in srgb, var(--gando-docs-fg) 82%, transparent);
+  font-size: 15px;
+  line-height: 1.72;
+}
+.gando-docs-article ul,
+.gando-docs-article ol { margin: 16px 0; }
+.gando-docs-article blockquote {
+  margin: 22px 0;
+  padding: 14px 16px;
+  border-left: 3px solid var(--gando-docs-primary);
+  border-radius: 0 8px 8px 0;
+  background: #f7f6ff;
+  color: #495067;
+}
+.dark .gando-docs-article blockquote { background: #182334; color: #cbd5e1; }
+.gando-docs-article pre {
+  margin: 20px 0 24px;
+  overflow-x: auto;
+  padding: 18px 20px;
+  border: 1px solid #2b3242;
+  border-radius: 10px;
+  background: #111827;
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.gando-docs-article code {
+  border-radius: 4px;
+  background: #f2f4f7;
+  padding: .13em .35em;
+  color: #5548d9;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: .88em;
+}
+.dark .gando-docs-article code { background: #1e293b; color: #c4b5fd; }
+.gando-docs-article pre code { padding: 0; background: transparent; color: inherit; }
+
+.gando-docs-toc {
+  position: sticky;
+  top: calc(var(--gando-docs-header) + 22px);
+  align-self: start;
+  width: var(--gando-docs-toc);
+  max-height: calc(100dvh - var(--gando-docs-header) - 42px);
+  overflow-y: auto;
+  padding: 46px 18px 24px 20px;
+}
+.gando-docs-toc-title {
+  margin: 0 0 22px;
+  color: #111827;
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+.dark .gando-docs-toc-title { color: #f8fafc; }
+.gando-docs-toc a {
+  display: block;
+  margin: 0;
+  padding: 8px 0 8px 16px;
+  border-left: 2px solid #e5e7eb;
+  color: #9297a4;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.gando-docs-toc a:hover { color: #4a43be; }
+.gando-docs-toc a[data-depth="3"] { padding-left: 28px; }
+.dark .gando-docs-toc a { border-left-color: #334155; color: #94a3b8; }
+
+.gando-docs-source {
+  margin-top: 30px;
+  padding-top: 18px;
+  border-top: 1px solid var(--gando-docs-border);
+}
+.gando-docs-source-card {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--gando-docs-border);
+  border-radius: 10px;
+  background: var(--gando-docs-bg);
+  color: var(--gando-docs-muted);
+  font-size: 11px;
+}
+
+.gando-docs-editor {
+  min-height: 100%;
+  background: var(--gando-docs-bg);
+}
+.gando-docs-editor-header {
+  padding: 34px 48px 22px 52px;
+  border-bottom: 1px solid var(--gando-docs-border);
+}
+.gando-docs-editor-title {
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  color: var(--gando-docs-fg);
+  font-size: 34px;
+  font-weight: 690;
+  letter-spacing: -0.037em;
+  outline: none;
+}
+.gando-docs-editor-description {
+  width: 100%;
+  margin-top: 6px;
+  background: transparent;
+  color: var(--gando-docs-muted);
+  font-size: 15px;
+  line-height: 1.55;
+  outline: none;
+}
+.gando-docs-editor-fields {
+  display: grid;
+  margin-top: 18px;
+  grid-template-columns: 1fr 1fr 90px;
+  gap: 8px;
+}
+.gando-docs-editor-field {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid var(--gando-docs-border);
+  border-radius: 8px;
+  background: var(--gando-docs-soft);
+  color: var(--gando-docs-muted);
+  font-size: 11px;
+}
+.gando-docs-editor-field input { min-width: 0; width: 100%; background: transparent; color: var(--gando-docs-fg); outline: none; }
+.gando-docs-editor-toolbar {
+  display: flex;
+  height: 44px;
+  align-items: center;
+  gap: 3px;
+  padding: 0 48px 0 52px;
+  border-bottom: 1px solid var(--gando-docs-border);
+}
+.gando-docs-editor-toolbar button { min-width: 30px; height: 28px; padding: 0 8px; border-radius: 6px; color: var(--gando-docs-muted); font-size: 11px; font-weight: 600; }
+.gando-docs-editor-toolbar button:hover { background: var(--gando-docs-soft); color: var(--gando-docs-fg); }
+.gando-docs-editor-textarea {
+  width: 100%;
+  min-height: 620px;
+  resize: none;
+  padding: 30px 48px 60px 52px;
+  background: var(--gando-docs-bg);
+  color: color-mix(in srgb, var(--gando-docs-fg) 88%, transparent);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.75;
+  outline: none;
+}
+
+@media (max-width: 1180px) {
+  .gando-stripe-header { grid-template-columns: minmax(150px,1fr) minmax(220px,280px) auto; gap: 12px; padding-inline: 18px; }
+  .gando-docs-shell { grid-template-columns: var(--gando-docs-sidebar) minmax(0,1fr); }
+  .gando-docs-toc { display: none; }
+}
+@media (max-width: 900px) {
+  .gando-stripe-header { grid-template-columns: auto minmax(190px,1fr) auto; padding-inline: 14px; }
+  .gando-stripe-action.repo-label { display: none; }
+}
+@media (max-width: 767px) {
+  .gando-developer-root { --gando-docs-header: 62px; }
+  .gando-stripe-header { height: 62px; grid-template-columns: minmax(0,1fr) auto; padding-inline: 14px; }
+  .gando-docs-logo { width: 136px; }
+  .gando-stripe-search-wrap { display: none; }
+  .gando-docs-shell { display: block; }
+  .gando-docs-sidebar { display: none; }
+  .gando-docs-article { padding: 28px 20px 72px; }
+  .gando-docs-editor-header { padding: 28px 20px 20px; }
+  .gando-docs-editor-toolbar { padding-inline: 20px; overflow-x: auto; }
+  .gando-docs-editor-textarea { padding: 24px 20px 48px; }
+  .gando-docs-editor-fields { grid-template-columns: 1fr; }
+}

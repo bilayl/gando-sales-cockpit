@@ -25,7 +25,6 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { GandoMark } from "@/components/gando-mark";
 import { cn } from "@/lib/utils";
 
 type DocStatus = "draft" | "published";
@@ -976,7 +975,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     : "Connecter GitHub";
 
   return (
-    <div className="flex h-screen min-h-[680px] flex-col overflow-hidden bg-[#fbfbfc] text-[#17181c] dark:bg-background dark:text-foreground">
+    <div className="gando-developer-root flex h-screen min-h-[680px] flex-col overflow-hidden">
       <ConnectionModal
         open={connectionOpen}
         connection={connection}
@@ -985,77 +984,74 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         onSaved={load}
       />
 
-      <header className="flex h-[62px] shrink-0 items-center gap-3 border-b border-[#e8e9ed] bg-white px-4 dark:border-border dark:bg-background">
-        <Link href="/" className="group flex shrink-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#735DF3]">
-          <GandoMark className="h-8 w-8 transition-transform group-hover:scale-[1.04]" />
-          <div className="hidden sm:block">
-            <div className="text-[13px] font-semibold tracking-[-0.02em]">Gando Developers</div>
-            <div className="text-[9px] text-muted-foreground">Documentation</div>
-          </div>
+      <header className="gando-stripe-header">
+        <Link href="/developer" className="gando-stripe-brand" aria-label="Gando Documentation">
+          <span className="gando-docs-wordmark">
+            <img className="gando-docs-logo gando-docs-logo-light" src="/assets/gando-docs-light.svg" alt="Gando Docs" />
+            <img className="gando-docs-logo gando-docs-logo-dark" src="/assets/gando-docs-dark.svg" alt="Gando Docs" />
+          </span>
         </Link>
 
-        <div className="mx-1 hidden h-5 w-px bg-[#e7e8eb] lg:block dark:bg-border" />
-
-        <div className="relative hidden min-w-[220px] max-w-[460px] flex-1 lg:block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#92959d]" />
+        <div className="gando-stripe-search-wrap">
+          <Search className="gando-stripe-search-icon" />
           <input
             value={search}
             onChange={event => setSearch(event.target.value)}
             placeholder="Rechercher dans la documentation…"
-            className="h-9 w-full rounded-xl border border-[#e1e2e6] bg-[#fafafd] pl-9 pr-14 text-[11px] outline-none transition focus:border-[#bbb5f3] focus:bg-white focus:ring-2 focus:ring-[#735DF3]/10 dark:border-border dark:bg-muted/30"
+            className="gando-stripe-search"
           />
-          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-[#dedfe4] bg-white px-1.5 py-0.5 text-[9px] text-[#8d9098] dark:border-border dark:bg-background">⌘ K</span>
+          <span className="gando-stripe-search-kbd">⌘K</span>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="gando-stripe-actions">
           <button
             type="button"
             onClick={() => setConnectionOpen(true)}
-            className={cn(
-              "hidden h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-medium transition sm:inline-flex",
-              connection?.connected
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300"
-                : "border-[#e2e3e7] bg-white text-[#60636b] hover:bg-[#f5f5f7] dark:border-border dark:bg-background dark:text-foreground",
-            )}
+            className="gando-stripe-action repo-label"
           >
-            <Github className="h-3.5 w-3.5" />
-            <span className="max-w-[150px] truncate">{connectionLabel}</span>
+            <Github className="h-4 w-4" />
+            <span className="max-w-[170px] truncate">{connectionLabel}</span>
           </button>
 
-          <div className="flex h-8 items-center rounded-lg border border-[#e2e3e7] bg-[#f7f7f9] p-0.5 dark:border-border dark:bg-muted/40">
-            <button type="button" onClick={() => setMode("preview")} className={cn("inline-flex h-6 items-center gap-1 rounded-md px-2 text-[10px] font-medium", mode === "preview" ? "bg-white shadow-sm dark:bg-background" : "text-muted-foreground")}>
-              <Eye className="h-3 w-3" /> Aperçu
+          <div className="gando-stripe-segment">
+            <button type="button" data-active={mode === "preview"} onClick={() => setMode("preview")}>
+              <Eye className="h-3.5 w-3.5" /> Aperçu
             </button>
-            <button type="button" onClick={() => setMode("edit")} disabled={!canEdit} className={cn("inline-flex h-6 items-center gap-1 rounded-md px-2 text-[10px] font-medium disabled:opacity-40", mode === "edit" ? "bg-white shadow-sm dark:bg-background" : "text-muted-foreground")}>
-              <Pencil className="h-3 w-3" /> Éditer
+            <button type="button" data-active={mode === "edit"} onClick={() => setMode("edit")} disabled={!canEdit}>
+              <Pencil className="h-3.5 w-3.5" /> Éditer
             </button>
           </div>
 
           {canEdit && currentPage ? (
             <>
-              <button type="button" onClick={() => void savePage("draft")} disabled={saving || !dirty} className="hidden h-8 items-center gap-1.5 rounded-lg border border-[#dedfe4] bg-white px-2.5 text-[10px] font-semibold transition hover:bg-[#f5f5f7] disabled:opacity-40 md:inline-flex dark:border-border dark:bg-background">
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Enregistrer
+              <button
+                type="button"
+                onClick={() => void savePage("draft")}
+                disabled={saving || !dirty}
+                className="gando-stripe-action hidden lg:inline-flex disabled:opacity-40"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Enregistrer
               </button>
-              <button type="button" onClick={() => void savePage("published")} disabled={saving} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#17181c] px-3 text-[10px] font-semibold text-white transition hover:bg-[#2b2d33] disabled:opacity-50 dark:bg-white dark:text-black">
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Publier
+              <button
+                type="button"
+                onClick={() => void savePage("published")}
+                disabled={saving}
+                className="gando-stripe-action-primary disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Publier
               </button>
             </>
           ) : null}
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 md:grid-cols-[244px_minmax(0,1fr)] xl:grid-cols-[244px_minmax(0,1fr)_220px]">
-        <aside className="hidden min-h-0 flex-col border-r border-[#e9eaed] bg-[#fafafd] dark:border-border dark:bg-muted/10 md:flex">
-          <div className="p-3 lg:hidden">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9699a1]" />
-              <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Rechercher" className="h-8 w-full rounded-lg border border-border bg-background pl-8 pr-2 text-[11px] outline-none" />
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-4">
-            <div className="mb-4 flex items-center justify-between px-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.09em] text-[#94969e]">Documentation</span>
+      <div className="gando-docs-shell min-h-0 flex-1">
+        <aside className="gando-docs-sidebar">
+          <div className="gando-docs-sidebar-scroll">
+            <div className="mb-3 flex items-center justify-between px-[10px]">
+              <span className="text-[12px] font-semibold text-[#878d9b]">Documentation</span>
               <button type="button" onClick={() => void load()} className="rounded-md p-1 text-[#9799a1] hover:bg-[#eeeeF2] dark:hover:bg-muted" title="Synchroniser avec GitHub">
                 <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
               </button>
@@ -1069,10 +1065,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
               <div className="space-y-5">
                 {sections.map(({ section, pages: sectionPages }) => (
                   <div key={section}>
-                    <div className="mb-1 flex items-center gap-1.5 px-2 text-[10px] font-medium text-[#878a92]">
-                      <ChevronDown className="h-3 w-3" />
-                      <span className="truncate">{section}</span>
-                    </div>
+                    <div className="gando-docs-sidebar-section">{section}</div>
                     <div className="space-y-0.5">
                       {sectionPages.map(page => {
                         const active = page.id === currentPage?.id;
@@ -1081,16 +1074,10 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
                             key={page.id}
                             type="button"
                             onClick={() => choosePage(page.id)}
-                            className={cn(
-                              "flex min-h-8 w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] transition",
-                              active
-                                ? "bg-[#ececf2] font-medium text-[#24252a] dark:bg-muted dark:text-foreground"
-                                : "text-[#62656d] hover:bg-[#f0f0f3] hover:text-[#24252a] dark:text-muted-foreground dark:hover:bg-muted",
-                            )}
+                            className="gando-docs-sidebar-item"
+                            data-active={active}
                           >
-                            {page.slug === "accueil" ? <BookOpen className="h-3.5 w-3.5 shrink-0" /> : <FileText className="h-3.5 w-3.5 shrink-0" />}
                             <span className="min-w-0 flex-1 truncate">{page.title}</span>
-                            {page.status === "published" ? <span className="h-1.5 w-1.5 rounded-full bg-[#55a970]" /> : null}
                           </button>
                         );
                       })}
@@ -1101,13 +1088,13 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
             )}
           </div>
 
-          <div className="space-y-2 border-t border-[#e6e7ea] p-2.5 dark:border-border">
+          <div className="gando-docs-sidebar-footer space-y-2">
             {canEdit ? (
-              <button type="button" onClick={createPage} className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-[#dedfe4] bg-white text-[11px] font-medium transition hover:bg-[#f4f4f6] dark:border-border dark:bg-background dark:hover:bg-muted">
+              <button type="button" onClick={createPage} className="flex items-center justify-center gap-1.5">
                 <Plus className="h-3.5 w-3.5" /> Nouvelle page
               </button>
             ) : null}
-            <button type="button" onClick={() => setConnectionOpen(true)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[10px] text-muted-foreground hover:bg-[#f1f1f4] dark:hover:bg-muted">
+            <button type="button" onClick={() => setConnectionOpen(true)} className="flex items-center gap-2 px-2 text-left">
               <GitBranch className="h-3.5 w-3.5" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium text-foreground">{connection?.owner || "bilayl"}/{connection?.repo || "gando-app"}</span>
@@ -1118,7 +1105,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
           </div>
         </aside>
 
-        <main className="min-h-0 overflow-y-auto bg-white dark:bg-background">
+        <main className="gando-docs-main min-h-0">
           {!connection?.connected ? (
             <div className="mx-auto flex min-h-full max-w-3xl items-center justify-center px-6 py-12">
               <div className="w-full rounded-3xl border border-[#e6e6eb] bg-[#fcfcfd] p-8 text-center dark:border-border dark:bg-muted/10">
@@ -1143,8 +1130,8 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
               </div>
             </div>
           ) : mode === "edit" && canEdit ? (
-            <div className="flex min-h-full flex-col">
-              <div className="shrink-0 border-b border-[#ececf0] px-5 py-4 dark:border-border lg:px-8">
+            <div className="gando-docs-editor flex min-h-full flex-col">
+              <div className="gando-docs-editor-header shrink-0">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
                     <Code2 className="h-3.5 w-3.5" />
@@ -1166,28 +1153,28 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
                       slug: !currentPage.slug || currentPage.slug === previousAutoSlug ? slugify(title) : currentPage.slug,
                     });
                   }}
-                  className="w-full bg-transparent text-[28px] font-semibold tracking-[-0.04em] outline-none placeholder:text-[#bbbcc2]"
+                  className="gando-docs-editor-title placeholder:text-[#bbbcc2]"
                   placeholder="Titre de la page"
                 />
-                <input value={currentPage.description} onChange={event => updateCurrent({ description: event.target.value })} className="mt-1 w-full bg-transparent text-[12px] leading-5 text-muted-foreground outline-none" placeholder="Description courte…" />
+                <input value={currentPage.description} onChange={event => updateCurrent({ description: event.target.value })} className="gando-docs-editor-description" placeholder="Description courte…" />
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_1fr_90px]">
-                  <label className="flex h-8 items-center rounded-lg border border-[#e5e5e9] bg-[#fafafd] px-2.5 text-[10px] text-muted-foreground dark:border-border dark:bg-muted/30">
+                <div className="gando-docs-editor-fields">
+                  <label className="gando-docs-editor-field">
                     <span className="mr-2">Slug</span>
                     <input value={currentPage.slug} onChange={event => updateCurrent({ slug: slugify(event.target.value) })} className="min-w-0 flex-1 bg-transparent font-mono text-[10px] text-foreground outline-none" />
                   </label>
-                  <label className="flex h-8 items-center rounded-lg border border-[#e5e5e9] bg-[#fafafd] px-2.5 text-[10px] text-muted-foreground dark:border-border dark:bg-muted/30">
+                  <label className="gando-docs-editor-field">
                     <span className="mr-2">Section</span>
                     <input value={currentPage.section} onChange={event => updateCurrent({ section: event.target.value })} className="min-w-0 flex-1 bg-transparent text-[10px] text-foreground outline-none" />
                   </label>
-                  <label className="flex h-8 items-center rounded-lg border border-[#e5e5e9] bg-[#fafafd] px-2.5 text-[10px] text-muted-foreground dark:border-border dark:bg-muted/30">
+                  <label className="gando-docs-editor-field">
                     <span className="mr-2">Ordre</span>
                     <input type="number" min={0} value={currentPage.order} onChange={event => updateCurrent({ order: Number(event.target.value) || 0 })} className="w-full bg-transparent text-right text-[10px] text-foreground outline-none" />
                   </label>
                 </div>
               </div>
 
-              <div className="flex h-10 shrink-0 items-center gap-1 border-b border-[#ececf0] px-5 dark:border-border lg:px-8">
+              <div className="gando-docs-editor-toolbar shrink-0">
                 <button type="button" onClick={() => insertMarkdown("# ", "", "Titre")} className="rounded px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-muted">H1</button>
                 <button type="button" onClick={() => insertMarkdown("## ", "", "Sous-titre")} className="rounded px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-muted">H2</button>
                 <button type="button" onClick={() => insertMarkdown("### ", "", "Section")} className="rounded px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-muted">H3</button>
@@ -1204,7 +1191,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
                 value={currentPage.body}
                 onChange={event => updateCurrent({ body: event.target.value })}
                 spellCheck
-                className="min-h-[520px] flex-1 resize-none bg-white px-5 py-6 font-mono text-[12px] leading-6 text-[#34363d] outline-none dark:bg-background dark:text-foreground lg:px-8"
+                className="gando-docs-editor-textarea flex-1"
                 placeholder="Rédigez votre documentation…"
               />
 
@@ -1214,16 +1201,16 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
               </div>
             </div>
           ) : (
-            <article className="mx-auto w-full max-w-[860px] px-6 pb-24 pt-10 lg:px-10 lg:pt-14">
-              <div className="mb-8 flex items-center gap-2 text-[10px] text-muted-foreground">
+            <article className="gando-docs-article">
+              <div className="gando-docs-breadcrumb flex items-center gap-2">
                 <span>Gando Developers</span><span>/</span><span>{currentPage.section}</span>
               </div>
               <div className="mb-8">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
+                <div className="gando-docs-meta">
                   <StatusBadge status={currentPage.status} />
                   {currentPage.path ? <span className="font-mono text-[9px] text-muted-foreground">{currentPage.path}</span> : null}
                 </div>
-                {currentPage.description ? <p className="max-w-2xl text-[15px] leading-7 text-muted-foreground">{currentPage.description}</p> : null}
+                {currentPage.description ? <p className="gando-docs-description">{currentPage.description}</p> : null}
               </div>
               <MarkdownPreview source={currentPage.body} />
 
@@ -1247,20 +1234,20 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
           ) : null}
         </main>
 
-        <aside className="hidden min-h-0 border-l border-[#e9eaed] bg-[#fcfcfd] xl:block dark:border-border dark:bg-muted/5">
-          <div className="sticky top-0 p-5">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.09em] text-[#8c8f97]">Sur cette page</div>
-            <nav className="mt-3 space-y-1">
+        <aside className="gando-docs-toc">
+          <div>
+            <div className="gando-docs-toc-title">Sur cette page</div>
+            <nav>
               {toc.length ? toc.map(item => (
-                <a key={item.id} href={`#${item.id}`} className={cn("block py-1 text-[10px] leading-4 text-muted-foreground transition hover:text-foreground", item.depth === 3 && "pl-3")}>
+                <a key={item.id} href={`#${item.id}`} className="block" data-depth={item.depth}>
                   {item.title}
                 </a>
               )) : <div className="text-[10px] leading-5 text-muted-foreground">Ajoutez des titres H2/H3 pour générer automatiquement la table des matières.</div>}
             </nav>
 
-            <div className="mt-7 border-t border-[#ececf0] pt-5 dark:border-border">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.09em] text-[#8c8f97]">Source</div>
-              <div className="mt-3 rounded-xl border border-[#e5e6ea] bg-white p-3 dark:border-border dark:bg-background">
+            <div className="gando-docs-source">
+              <div className="text-[12px] font-semibold text-[#878d9b]">Source</div>
+              <div className="gando-docs-source-card">
                 <div className="flex items-center gap-2 text-[10px] font-semibold"><Github className="h-3.5 w-3.5" /> {connection?.owner}/{connection?.repo}</div>
                 <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.branch}</div>
                 <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.basePath}</div>
