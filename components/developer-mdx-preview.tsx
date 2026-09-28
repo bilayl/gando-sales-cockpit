@@ -35,6 +35,15 @@ function GuideCode({ title, children }: { title?: string; children?: string }) {
   );
 }
 
+function DocTabs({ items, children }: { items: string; children: React.ReactNode }) {
+  const values = items.split("|").map(item => item.trim()).filter(Boolean);
+  return <Tabs items={values}>{children}</Tabs>;
+}
+
+function DocTab({ value, children }: { value: string; children: React.ReactNode }) {
+  return <Tab value={value}>{children}</Tab>;
+}
+
 const components = {
   ...defaultMdxComponents,
   Callout,
@@ -46,6 +55,8 @@ const components = {
   Step,
   ApiEndpoint,
   GuideCode,
+  DocTabs,
+  DocTab,
 };
 
 function withoutDuplicateTitle(source: string, title: string) {
