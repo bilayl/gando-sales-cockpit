@@ -7,6 +7,7 @@ import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import { Step, Steps } from "fumadocs-ui/components/steps";
 import { DocsBody } from "fumadocs-ui/layouts/docs/page";
+import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Loader2 } from "lucide-react";
 
 function ApiEndpoint({
@@ -35,6 +36,7 @@ function GuideCode({ title, children }: { title?: string; children?: string }) {
 }
 
 const components = {
+  ...defaultMdxComponents,
   Callout,
   CodeBlock,
   Pre,
