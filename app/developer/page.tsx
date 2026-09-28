@@ -8,5 +8,5 @@ export default async function DeveloperPage() {
   const access = await getCockpitAccess();
   if (!access) redirect("/login");
 
-  return <DeveloperDocsEditor />;
+  return <DeveloperDocsEditor canEdit={access.role === "admin"} />;
 }
