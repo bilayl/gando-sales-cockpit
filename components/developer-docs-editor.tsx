@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { DocsDescription, DocsTitle } from "fumadocs-ui/layouts/docs/page";
+import { DeveloperMdxPreview } from "@/components/developer-mdx-preview";
 
 type DocStatus = "draft" | "published";
 type EditorMode = "edit" | "preview";
@@ -1205,14 +1207,20 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
               <div className="gando-docs-breadcrumb flex items-center gap-2">
                 <span>Gando Developers</span><span>/</span><span>{currentPage.section}</span>
               </div>
-              <div className="mb-8">
-                <div className="gando-docs-meta">
-                  <StatusBadge status={currentPage.status} />
-                  {currentPage.path ? <span className="font-mono text-[9px] text-muted-foreground">{currentPage.path}</span> : null}
-                </div>
-                {currentPage.description ? <p className="gando-docs-description">{currentPage.description}</p> : null}
+
+              <div className="gando-docs-meta">
+                <StatusBadge status={currentPage.status} />
+                {currentPage.path ? <span className="font-mono text-[9px] text-muted-foreground">{currentPage.path}</span> : null}
               </div>
-              <MarkdownPreview source={currentPage.body} />
+
+              <DocsTitle>{currentPage.title}</DocsTitle>
+              {currentPage.description ? (
+                <DocsDescription className="gando-docs-description">
+                  {currentPage.description}
+                </DocsDescription>
+              ) : null}
+
+              <DeveloperMdxPreview source={currentPage.body} title={currentPage.title} />
 
               <div className="mt-14 flex flex-wrap items-center justify-between gap-3 border-t border-[#ececf0] pt-5 dark:border-border">
                 <span className="text-[10px] text-muted-foreground">Dernière mise à jour · {formatRelativeDate(currentPage.updatedAt)}</span>
