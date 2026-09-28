@@ -1253,74 +1253,130 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
               </div>
             </div>
           ) : mode === "edit" && canEdit ? (
-            <div className="gando-docs-editor flex min-h-full flex-col">
-              <div className="gando-docs-editor-header shrink-0">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
-                    <Code2 className="h-3.5 w-3.5" />
-                    <span className="font-mono">{currentPage.path || `${connection.basePath}/${currentPage.slug}.mdx`}</span>
+            <div className="mint-editor-stage">
+              <header className="mint-editor-topbar">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="truncate font-medium text-foreground">{currentPage.title}</span>
+                    <span>·</span>
+                    <span className="truncate font-mono">{currentPage.path || `${connection.basePath}/${currentPage.slug}.mdx`}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {dirty ? <span className="text-[10px] text-amber-600">Modifications non enregistrées</span> : <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700"><Check className="h-3 w-3" /> Synchronisé</span>}
+                  <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                    {dirty ? (
+                      <span className="text-amber-600">Modifications non enregistrées</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-emerald-700">
+                        <Check className="h-3 w-3" /> Synchronisé
+                      </span>
+                    )}
                     <StatusBadge status={currentPage.status} />
                   </div>
                 </div>
 
-                <input
-                  value={currentPage.title}
-                  onChange={event => {
-                    const title = event.target.value;
-                    const previousAutoSlug = slugify(currentPage.title);
-                    updateCurrent({
-                      title,
-                      slug: !currentPage.slug || currentPage.slug === previousAutoSlug ? slugify(title) : currentPage.slug,
-                    });
-                  }}
-                  className="gando-docs-editor-title placeholder:text-[#bbbcc2]"
-                  placeholder="Titre de la page"
-                />
-                <input value={currentPage.description} onChange={event => updateCurrent({ description: event.target.value })} className="gando-docs-editor-description" placeholder="Description courte…" />
-
-                <div className="gando-docs-editor-fields">
-                  <label className="gando-docs-editor-field">
-                    <span className="mr-2">Slug</span>
-                    <input value={currentPage.slug} onChange={event => updateCurrent({ slug: slugify(event.target.value) })} className="min-w-0 flex-1 bg-transparent font-mono text-[10px] text-foreground outline-none" />
-                  </label>
-                  <label className="gando-docs-editor-field">
-                    <span className="mr-2">Section</span>
-                    <input value={currentPage.section} onChange={event => updateCurrent({ section: event.target.value })} className="min-w-0 flex-1 bg-transparent text-[10px] text-foreground outline-none" />
-                  </label>
-                  <label className="gando-docs-editor-field">
-                    <span className="mr-2">Ordre</span>
-                    <input type="number" min={0} value={currentPage.order} onChange={event => updateCurrent({ order: Number(event.target.value) || 0 })} className="w-full bg-transparent text-right text-[10px] text-foreground outline-none" />
-                  </label>
+                <div className="mint-editor-topbar-actions">
+                  <button type="button" className="mint-editor-topbar-button" onClick={() => setMode("preview")}>
+                    <Eye className="size-4" /> Preview
+                  </button>
+                  <button
+                    type="button"
+                    className="mint-editor-topbar-button"
+                    onClick={() => void savePage("draft")}
+                    disabled={saving || !dirty}
+                  >
+                    {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="mint-editor-publish-button"
+                    onClick={() => void savePage("published")}
+                    disabled={saving}
+                  >
+                    {saving ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                    Publish
+                  </button>
                 </div>
-              </div>
+              </header>
 
-              <div className="gando-docs-editor-toolbar shrink-0">
-                <button type="button" onClick={() => insertMarkdown("# ", "", "Titre")} className="rounded px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-muted">H1</button>
-                <button type="button" onClick={() => insertMarkdown("## ", "", "Sous-titre")} className="rounded px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-muted">H2</button>
-                <button type="button" onClick={() => insertMarkdown("### ", "", "Section")} className="rounded px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:bg-muted">H3</button>
-                <div className="mx-1 h-4 w-px bg-border" />
-                <button type="button" onClick={() => insertMarkdown("**", "**", "gras")} className="rounded px-2 py-1 text-[11px] font-bold text-muted-foreground hover:bg-muted">B</button>
-                <button type="button" onClick={() => insertMarkdown("`", "`", "code")} className="rounded px-2 py-1 font-mono text-[10px] text-muted-foreground hover:bg-muted">&lt;/&gt;</button>
-                <button type="button" onClick={() => insertMarkdown("- ", "", "élément")} className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted">• Liste</button>
-                <button type="button" onClick={() => insertMarkdown("> ", "", "Information importante")} className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted">Citation</button>
-                <button type="button" onClick={() => void deletePage()} className="ml-auto rounded p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20" title="Supprimer la page"><Trash2 className="h-3.5 w-3.5" /></button>
-              </div>
+              <div className="mint-editor-canvas-scroll">
+                <div className="mint-editor-canvas">
+                  <div className="mint-editor-document-head">
+                    <input
+                      value={currentPage.title}
+                      onChange={event => {
+                        const title = event.target.value;
+                        const previousAutoSlug = slugify(currentPage.title);
+                        updateCurrent({
+                          title,
+                          slug: !currentPage.slug || currentPage.slug === previousAutoSlug ? slugify(title) : currentPage.slug,
+                        });
+                      }}
+                      className="mint-editor-title-input"
+                      placeholder="Titre de la page"
+                    />
+                    <input
+                      value={currentPage.description}
+                      onChange={event => updateCurrent({ description: event.target.value })}
+                      className="mint-editor-description-input"
+                      placeholder="Description courte…"
+                    />
 
-              <textarea
-                ref={textareaRef}
-                value={currentPage.body}
-                onChange={event => updateCurrent({ body: event.target.value })}
-                spellCheck
-                className="gando-docs-editor-textarea flex-1"
-                placeholder="Rédigez votre documentation…"
-              />
+                    <div className="mint-editor-meta-grid">
+                      <label>
+                        <span>Slug</span>
+                        <input value={currentPage.slug} onChange={event => updateCurrent({ slug: slugify(event.target.value) })} />
+                      </label>
+                      <label>
+                        <span>Section</span>
+                        <input value={currentPage.section} onChange={event => updateCurrent({ section: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>Ordre</span>
+                        <input type="number" min={0} value={currentPage.order} onChange={event => updateCurrent({ order: Number(event.target.value) || 0 })} />
+                      </label>
+                    </div>
+                  </div>
 
-              <div className="flex h-9 shrink-0 items-center justify-between border-t border-[#ececf0] px-5 text-[9px] text-muted-foreground dark:border-border lg:px-8">
-                <span>Dernière synchro · {formatRelativeDate(currentPage.updatedAt)}</span>
-                <span>{currentPage.body.length.toLocaleString("fr-FR")} caractères</span>
+                  <div className="mint-editor-formatbar">
+                    <button type="button" onClick={() => insertMarkdown("**", "**", "gras")}><strong>B</strong></button>
+                    <button type="button" onClick={() => insertMarkdown("_", "_", "italique")}><em>I</em></button>
+                    <button type="button" onClick={() => insertMarkdown("`", "`", "code")}><Code2 className="size-4" /></button>
+                    <span className="mint-editor-format-divider" />
+                    <button type="button" onClick={() => insertMarkdown("## ", "", "Sous-titre")}>H2</button>
+                    <button type="button" onClick={() => insertMarkdown("- ", "", "élément")}>• List</button>
+                    <button type="button" onClick={() => insertMarkdown("> ", "", "Information importante")}>Quote</button>
+                    <span className="ml-auto text-[11px] text-muted-foreground">Tapez <kbd>/</kbd> pour insérer un composant</span>
+                    <button type="button" onClick={() => void deletePage()} className="is-danger" title="Supprimer la page">
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+
+                  <div className="mint-editor-body-wrap">
+                    {slashOpen ? (
+                      <DeveloperSlashMenu
+                        query={slashQuery}
+                        selectedIndex={slashSelectedIndex}
+                        onSelectedIndexChange={setSlashSelectedIndex}
+                        onSelect={applySlashCommand}
+                      />
+                    ) : null}
+
+                    <textarea
+                      ref={textareaRef}
+                      value={currentPage.body}
+                      onChange={handleEditorBodyChange}
+                      onKeyDown={handleEditorKeyDown}
+                      spellCheck
+                      className="mint-editor-textarea"
+                      placeholder="Commencez à écrire… Tapez / pour ajouter un bloc"
+                    />
+                  </div>
+
+                  <div className="mint-editor-statusbar">
+                    <span>Dernière synchro · {formatRelativeDate(currentPage.updatedAt)}</span>
+                    <span>{currentPage.body.length.toLocaleString("fr-FR")} caractères</span>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
