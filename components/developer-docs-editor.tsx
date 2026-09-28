@@ -1092,11 +1092,13 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         onSaved={load}
       />
 
+      {!editorActive ? (
       <header className="gando-stripe-header">
-        <Link href="/developer" className="gando-stripe-brand" aria-label="Gando Documentation">
-          <span className="gando-docs-wordmark">
-            <img className="gando-docs-logo gando-docs-logo-light" src="/assets/gando-docs-light.svg" alt="Gando Docs" />
-            <img className="gando-docs-logo gando-docs-logo-dark" src="/assets/gando-docs-dark.svg" alt="Gando Docs" />
+        <Link href="/" className="gando-stripe-brand" aria-label="Retour au Cockpit Gando">
+          <GandoSidebarMark />
+          <span className="ml-2.5 grid leading-tight">
+            <span className="text-[15px] font-semibold tracking-[-0.025em] text-[#202435] dark:text-white">Gando</span>
+            <span className="text-[9px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Developers</span>
           </span>
         </Link>
 
@@ -1154,8 +1156,9 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
           ) : null}
         </div>
       </header>
+      ) : null}
 
-      <div className="gando-docs-shell min-h-0 flex-1">
+      <div className={cn("min-h-0 flex-1", editorActive ? "mint-editor-shell" : "gando-docs-shell")}>
         <aside className="gando-docs-sidebar">
           <div className="gando-docs-sidebar-scroll">
             <div className="mb-3 flex items-center justify-between px-[10px]">
