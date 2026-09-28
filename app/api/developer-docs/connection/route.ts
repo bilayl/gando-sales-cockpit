@@ -6,6 +6,7 @@ import {
   getDeveloperDocsConnection,
   normalizeDeveloperDocsConnection,
   publicDeveloperDocsConnection,
+  listDeveloperDocsRepositories,
   saveDeveloperDocsConnection,
   testDeveloperDocsConnection,
 } from "@/lib/developer-docs-github";
@@ -33,7 +34,7 @@ export async function GET() {
           connected: false,
           writable: false,
           repoUrl: `https://github.com/${connection.owner}/${connection.repo}`,
-          reason: "Token GitHub à configurer pour accéder au dépôt privé.",
+          reason: "Connectez GitHub pour choisir le repository de documentation.",
         },
         canConfigure: access.role === "admin",
       });
@@ -89,9 +90,26 @@ export async function POST(request: NextRequest) {
 
     if (!candidate.token) {
       return NextResponse.json(
-        { error: "Ajoutez un token GitHub avec accès en lecture/écriture au dépôt gando-app." },
+        { error: "Connectez GitHub ou ajoutez un token avec accès aux repositories à utiliser." },
         { status: 400 },
       );
+    }
+
+    if (body?.authenticateOnly === true) {
+      await listDeveloperDocsRepositories(candidate);
+      const saved = await saveDeveloperDocsConnection({
+        ...normalized,
+        token: suppliedToken || undefined,
+      });
+      return NextResponse.json({
+        connection: {
+          ...publicDeveloperDocsConnection(saved),
+          connected: false,
+          writable: false,
+          repoUrl: `https://github.com/${saved.owner}/${saved.repo}`,
+          reason: "GitHub connecté. Choisissez maintenant le repository de documentation.",
+        },
+      });
     }
 
     const status = await testDeveloperDocsConnection(candidate);

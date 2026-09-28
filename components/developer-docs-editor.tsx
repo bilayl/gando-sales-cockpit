@@ -59,6 +59,33 @@ type DocsConnection = {
   branchProtected?: boolean;
   repoUrl: string;
   reason?: string | null;
+  oauthAvailable?: boolean;
+};
+
+type RepositoryOption = {
+  owner: string;
+  name: string;
+  fullName: string;
+  private: boolean;
+  defaultBranch: string;
+  writable: boolean;
+  updatedAt: string | null;
+  url: string;
+};
+
+type RepositoryOptions = {
+  repository: {
+    owner: string;
+    name: string;
+    fullName: string;
+    private: boolean;
+    defaultBranch: string;
+    writable: boolean;
+    url: string;
+  };
+  branches: Array<{ name: string; protected: boolean }>;
+  directories: string[];
+  selectedBranch: string;
 };
 
 type ConnectionResponse = {
@@ -289,27 +316,115 @@ function ConnectionModal({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [owner, setOwner] = useState(connection?.owner || "bilayl");
-  const [repo, setRepo] = useState(connection?.repo || "gando-app");
-  const [branch, setBranch] = useState(connection?.branch || "master");
+  const [repositories, setRepositories] = useState<RepositoryOption[]>([]);
+  const [repositorySearch, setRepositorySearch] = useState("");
+  const [owner, setOwner] = useState(connection?.owner || "");
+  const [repo, setRepo] = useState(connection?.repo || "");
+  const [branch, setBranch] = useState(connection?.branch || "");
   const [basePath, setBasePath] = useState(connection?.basePath || "docs/developer-portal");
+  const [branches, setBranches] = useState<Array<{ name: string; protected: boolean }>>([]);
+  const [directories, setDirectories] = useState<string[]>([]);
   const [token, setToken] = useState("");
+  const [loadingRepositories, setLoadingRepositories] = useState(false);
+  const [loadingOptions, setLoadingOptions] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const githubAuthenticated = Boolean(connection?.hasToken);
+
+  const loadRepositories = useCallback(async (query = "") => {
+    if (!connection?.hasToken) return;
+    setLoadingRepositories(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/developer-docs/repositories?q=${encodeURIComponent(query)}`, { cache: "no-store" });
+      const body = await response.json().catch(() => ({})) as { repositories?: RepositoryOption[]; error?: string };
+      if (!response.ok) throw new Error(body.error || "Impossible de charger les dépôts GitHub.");
+      setRepositories(Array.isArray(body.repositories) ? body.repositories : []);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossible de charger les dépôts GitHub.");
+    } finally {
+      setLoadingRepositories(false);
+    }
+  }, [connection?.hasToken]);
+
+  const loadRepositoryOptions = useCallback(async (nextOwner: string, nextRepo: string, nextBranch?: string) => {
+    if (!nextOwner || !nextRepo) return;
+    setLoadingOptions(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ owner: nextOwner, repo: nextRepo });
+      if (nextBranch) params.set("branch", nextBranch);
+      const response = await fetch(`/api/developer-docs/repository-options?${params.toString()}`, { cache: "no-store" });
+      const body = await response.json().catch(() => ({})) as Partial<RepositoryOptions> & { error?: string };
+      if (!response.ok || !body.repository) throw new Error(body.error || "Impossible de charger le dépôt GitHub.");
+
+      const nextBranches = Array.isArray(body.branches) ? body.branches : [];
+      const nextDirectories = Array.isArray(body.directories) ? body.directories : [];
+      const selected = body.selectedBranch || body.repository.defaultBranch || nextBranches[0]?.name || "main";
+
+      setOwner(body.repository.owner);
+      setRepo(body.repository.name);
+      setBranch(selected);
+      setBranches(nextBranches);
+      setDirectories(nextDirectories);
+
+      const currentPathExists = nextDirectories.includes(basePath);
+      if (!currentPathExists) {
+        const suggested = nextDirectories.find(path => /(^|\/)(docs?|documentation)(\/|$)/i.test(path))
+          || nextDirectories.find(path => /docs?/i.test(path))
+          || "docs";
+        setBasePath(suggested);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossible de charger le dépôt GitHub.");
+    } finally {
+      setLoadingOptions(false);
+    }
+  }, [basePath]);
+
   useEffect(() => {
     if (!open) return;
-    setOwner(connection?.owner || "bilayl");
-    setRepo(connection?.repo || "gando-app");
-    setBranch(connection?.branch || "master");
+    setOwner(connection?.owner || "");
+    setRepo(connection?.repo || "");
+    setBranch(connection?.branch || "");
     setBasePath(connection?.basePath || "docs/developer-portal");
     setToken("");
+    setRepositorySearch("");
     setError("");
-  }, [open, connection]);
+
+    if (connection?.hasToken) {
+      void loadRepositories();
+      if (connection.owner && connection.repo) {
+        void loadRepositoryOptions(connection.owner, connection.repo, connection.branch);
+      }
+    }
+  }, [open, connection, loadRepositories, loadRepositoryOptions]);
+
+  useEffect(() => {
+    if (!open || !connection?.hasToken) return;
+    const timeout = window.setTimeout(() => {
+      void loadRepositories(repositorySearch);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [repositorySearch, open, connection?.hasToken, loadRepositories]);
 
   if (!open) return null;
 
   async function save() {
+    if (!owner || !repo) {
+      setError("Choisissez d’abord un repository.");
+      return;
+    }
+    if (!branch) {
+      setError("Choisissez une branche.");
+      return;
+    }
+    if (!basePath.trim()) {
+      setError("Choisissez le dossier qui contiendra la documentation.");
+      return;
+    }
+
     setSaving(true);
     setError("");
     try {
@@ -329,17 +444,73 @@ function ConnectionModal({
     }
   }
 
+  async function connectWithToken() {
+    if (!token.trim()) {
+      setError("Ajoutez un token GitHub.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const fallbackOwner = owner || connection?.owner || "bilayl";
+      const fallbackRepo = repo || connection?.repo || "gando-app";
+      const fallbackBranch = branch || connection?.branch || "master";
+      const response = await fetch("/api/developer-docs/connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          owner: fallbackOwner,
+          repo: fallbackRepo,
+          branch: fallbackBranch,
+          basePath: basePath || "docs/developer-portal",
+          token,
+          authenticateOnly: true,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Connexion GitHub impossible.");
+      await onSaved();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Connexion GitHub impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function disconnect() {
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/developer-docs/connection", { method: "DELETE" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Déconnexion impossible.");
+      }
+      setRepositories([]);
+      setBranches([]);
+      setDirectories([]);
+      await onSaved();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Déconnexion impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const selectedRepository = repositories.find(item => item.owner === owner && item.name === repo);
+
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-black/30 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-[560px] overflow-hidden rounded-2xl border border-[#e3e4e8] bg-white shadow-2xl dark:border-border dark:bg-background">
-        <div className="flex items-start justify-between gap-4 border-b border-[#ececf0] px-5 py-4 dark:border-border">
+      <div className="flex max-h-[88vh] w-full max-w-[760px] flex-col overflow-hidden rounded-2xl border border-[#e3e4e8] bg-white shadow-2xl dark:border-border dark:bg-background">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[#ececf0] px-5 py-4 dark:border-border">
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold">
               <Github className="h-4 w-4" />
-              Connexion de la documentation
+              Connecteur GitHub
             </div>
-            <p className="mt-1 max-w-md text-[11px] leading-5 text-muted-foreground">
-              Les pages sont lues et écrites directement dans GitHub. Le token n’est jamais renvoyé au navigateur après enregistrement.
+            <p className="mt-1 max-w-xl text-[11px] leading-5 text-muted-foreground">
+              Connectez un compte GitHub, choisissez le repository, la branche et le dossier à utiliser comme source de la documentation. Aucun repository n’est imposé.
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted">
@@ -347,63 +518,217 @@ function ConnectionModal({
           </button>
         </div>
 
-        <div className="space-y-4 p-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Propriétaire</span>
-              <input value={owner} onChange={event => setOwner(event.target.value)} disabled={!canConfigure} className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-[#735DF3]/20" />
-            </label>
-            <label className="space-y-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Dépôt</span>
-              <input value={repo} onChange={event => setRepo(event.target.value)} disabled={!canConfigure} className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-[#735DF3]/20" />
-            </label>
-            <label className="space-y-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Branche</span>
-              <input value={branch} onChange={event => setBranch(event.target.value)} disabled={!canConfigure} className="h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-xs outline-none focus:ring-2 focus:ring-[#735DF3]/20" />
-            </label>
-            <label className="space-y-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Dossier docs</span>
-              <input value={basePath} onChange={event => setBasePath(event.target.value)} disabled={!canConfigure} className="h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-xs outline-none focus:ring-2 focus:ring-[#735DF3]/20" />
-            </label>
-          </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {!githubAuthenticated ? (
+            <div className="mx-auto max-w-lg py-4">
+              <div className="rounded-2xl border border-[#e5e6ea] bg-[#fafafd] p-5 text-center dark:border-border dark:bg-muted/10">
+                <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-[#17181c] text-white dark:bg-white dark:text-black">
+                  <Github className="h-5 w-5" />
+                </div>
+                <div className="mt-4 text-sm font-semibold">Connecter GitHub</div>
+                <p className="mx-auto mt-1 max-w-sm text-[11px] leading-5 text-muted-foreground">
+                  Une fois connecté, le Cockpit affichera automatiquement les repositories auxquels ce compte a accès.
+                </p>
 
-          {connection?.tokenSource === "server" ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-[11px] text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-200">
-              <div className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> Token partagé configuré côté serveur</div>
-              <div className="mt-1 opacity-80">La variable <code>GITHUB_DOCS_TOKEN</code> est utilisée pour l’équipe.</div>
+                {connection?.oauthAvailable ? (
+                  <a
+                    href="/api/developer-docs/github/start"
+                    className="mt-4 inline-flex h-9 items-center gap-2 rounded-xl bg-[#17181c] px-4 text-xs font-semibold text-white transition hover:bg-[#2b2d33] dark:bg-white dark:text-black"
+                  >
+                    <Github className="h-4 w-4" />
+                    Continuer avec GitHub
+                  </a>
+                ) : null}
+
+                <div className="my-5 flex items-center gap-3 text-[9px] uppercase tracking-[0.09em] text-muted-foreground">
+                  <span className="h-px flex-1 bg-border" />
+                  {connection?.oauthAvailable ? "ou connexion avancée" : "connexion"}
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+
+                <label className="block space-y-1.5 text-left">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Token GitHub</span>
+                  <input
+                    value={token}
+                    onChange={event => setToken(event.target.value)}
+                    type="password"
+                    disabled={!canConfigure}
+                    placeholder="github_pat_…"
+                    className="h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-xs outline-none focus:ring-2 focus:ring-[#735DF3]/20"
+                  />
+                  <span className="block text-[10px] leading-5 text-muted-foreground">
+                    Alternative pour une connexion interne : token avec accès aux repositories concernés.
+                  </span>
+                </label>
+                {canConfigure ? (
+                  <button
+                    type="button"
+                    onClick={connectWithToken}
+                    disabled={saving}
+                    className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-border bg-white text-xs font-semibold transition hover:bg-muted disabled:opacity-60 dark:bg-background"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <GitBranch className="h-4 w-4" />}
+                    Connecter avec ce token
+                  </button>
+                ) : null}
+              </div>
+              {error ? <div className="mt-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">{error}</div> : null}
             </div>
           ) : (
-            <label className="space-y-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Token GitHub finement ciblé</span>
-              <input
-                value={token}
-                onChange={event => setToken(event.target.value)}
-                type="password"
-                disabled={!canConfigure}
-                placeholder={connection?.hasToken ? "Token déjà enregistré — laissez vide pour le conserver" : "github_pat_…"}
-                className="h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-xs outline-none focus:ring-2 focus:ring-[#735DF3]/20"
-              />
-              <span className="block text-[10px] leading-5 text-muted-foreground">
-                Donnez uniquement l’accès au dépôt <strong>{owner}/{repo}</strong> avec Contents en lecture/écriture. Le token est chiffré avec la session Cockpit.
-              </span>
-            </label>
-          )}
+            <div className="grid gap-5 lg:grid-cols-[1fr_0.92fr]">
+              <section>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">1 · Repository</div>
+                    <div className="mt-0.5 text-xs font-semibold">Choisir la source</div>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <Check className="h-3 w-3" /> GitHub connecté
+                  </span>
+                </div>
 
-          {error ? <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">{error}</div> : null}
+                <div className="relative mb-2">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    value={repositorySearch}
+                    onChange={event => setRepositorySearch(event.target.value)}
+                    placeholder="Rechercher un repository…"
+                    className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-3 text-xs outline-none focus:ring-2 focus:ring-[#735DF3]/20"
+                  />
+                </div>
+
+                <div className="max-h-[340px] space-y-1 overflow-y-auto rounded-xl border border-border bg-[#fafafd] p-1.5 dark:bg-muted/10">
+                  {loadingRepositories ? (
+                    <div className="flex h-24 items-center justify-center text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                  ) : repositories.length ? repositories.map(item => {
+                    const active = item.owner === owner && item.name === repo;
+                    return (
+                      <button
+                        key={item.fullName}
+                        type="button"
+                        onClick={() => {
+                          setOwner(item.owner);
+                          setRepo(item.name);
+                          setBranch(item.defaultBranch);
+                          void loadRepositoryOptions(item.owner, item.name, item.defaultBranch);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition",
+                          active
+                            ? "border-[#bcb5f5] bg-[#f4f2ff] dark:border-[#6255dd] dark:bg-[#6255dd]/10"
+                            : "border-transparent hover:border-border hover:bg-white dark:hover:bg-background",
+                        )}
+                      >
+                        <Github className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[11px] font-semibold">{item.fullName}</span>
+                          <span className="mt-0.5 block text-[9px] text-muted-foreground">
+                            {item.private ? "Privé" : "Public"} · {item.defaultBranch}
+                          </span>
+                        </span>
+                        <span className={cn("h-2 w-2 rounded-full", item.writable ? "bg-emerald-500" : "bg-amber-500")} title={item.writable ? "Lecture + écriture" : "Lecture seule"} />
+                      </button>
+                    );
+                  }) : (
+                    <div className="px-3 py-8 text-center text-[11px] text-muted-foreground">Aucun repository trouvé.</div>
+                  )}
+                </div>
+              </section>
+
+              <section>
+                <div className="mb-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">2 · Emplacement</div>
+                  <div className="mt-0.5 text-xs font-semibold">Branche et dossier</div>
+                </div>
+
+                {owner && repo ? (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-border bg-[#fafafd] p-3 dark:bg-muted/10">
+                      <div className="flex items-start gap-2">
+                        <Github className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[11px] font-semibold">{owner}/{repo}</div>
+                          <div className="mt-0.5 text-[9px] text-muted-foreground">
+                            {selectedRepository?.private ? "Repository privé" : "Repository"} · {selectedRepository?.writable === false ? "lecture seule" : "écriture autorisée"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <label className="block space-y-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Branche</span>
+                      <div className="relative">
+                        {loadingOptions ? <Loader2 className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" /> : null}
+                        <select
+                          value={branch}
+                          onChange={event => {
+                            const nextBranch = event.target.value;
+                            setBranch(nextBranch);
+                            void loadRepositoryOptions(owner, repo, nextBranch);
+                          }}
+                          disabled={loadingOptions}
+                          className="h-9 w-full rounded-lg border border-border bg-background px-3 pr-8 text-xs outline-none focus:ring-2 focus:ring-[#735DF3]/20"
+                        >
+                          {branches.length ? branches.map(item => (
+                            <option key={item.name} value={item.name}>{item.name}{item.protected ? " · protégée" : ""}</option>
+                          )) : <option value={branch}>{branch || "main"}</option>}
+                        </select>
+                      </div>
+                    </label>
+
+                    <label className="block space-y-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Dossier de documentation</span>
+                      <input
+                        value={basePath}
+                        onChange={event => setBasePath(event.target.value)}
+                        list="developer-docs-directory-options"
+                        placeholder="docs/developer-portal"
+                        className="h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-xs outline-none focus:ring-2 focus:ring-[#735DF3]/20"
+                      />
+                      <datalist id="developer-docs-directory-options">
+                        {directories.map(path => <option key={path} value={path} />)}
+                      </datalist>
+                      <span className="block text-[9px] leading-4 text-muted-foreground">
+                        Vous pouvez choisir un dossier existant ou saisir un nouveau chemin. Il sera créé à la première page enregistrée.
+                      </span>
+                    </label>
+
+                    <div className="rounded-xl border border-[#e6e6eb] bg-white p-3 text-[10px] dark:border-border dark:bg-background">
+                      <div className="text-muted-foreground">Source sélectionnée</div>
+                      <div className="mt-1 break-all font-mono font-medium">{owner}/{repo}@{branch}/{basePath}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-[11px] text-muted-foreground">
+                    Sélectionnez un repository à gauche.
+                  </div>
+                )}
+              </section>
+
+              {error ? <div className="lg:col-span-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">{error}</div> : null}
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-[#ececf0] bg-[#fafafd] px-5 py-3 dark:border-border dark:bg-muted/20">
-          <div className="text-[10px] text-muted-foreground">
-            Source : <span className="font-mono">{owner}/{repo}@{branch}/{basePath}</span>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[#ececf0] bg-[#fafafd] px-5 py-3 dark:border-border dark:bg-muted/20">
+          <div className="min-w-0 text-[10px] text-muted-foreground">
+            {githubAuthenticated
+              ? <>GitHub connecté · <span className="font-mono">{owner && repo ? `${owner}/${repo}` : "aucun repo sélectionné"}</span></>
+              : "Connectez GitHub pour afficher vos repositories."}
           </div>
           <div className="flex items-center gap-2">
+            {githubAuthenticated && canConfigure ? (
+              <button type="button" onClick={disconnect} disabled={saving} className="h-8 rounded-lg px-3 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+                Déconnecter
+              </button>
+            ) : null}
             <button type="button" onClick={onClose} className="h-8 rounded-lg border border-border bg-background px-3 text-[11px] font-medium hover:bg-muted">
-              Annuler
+              Fermer
             </button>
-            {canConfigure ? (
-              <button type="button" onClick={save} disabled={saving} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#17181c] px-3 text-[11px] font-semibold text-white hover:bg-[#2b2d33] disabled:opacity-60 dark:bg-white dark:text-black">
+            {githubAuthenticated && canConfigure ? (
+              <button type="button" onClick={save} disabled={saving || !owner || !repo || !branch || !basePath.trim()} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#17181c] px-3 text-[11px] font-semibold text-white hover:bg-[#2b2d33] disabled:opacity-50 dark:bg-white dark:text-black">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <GitBranch className="h-3.5 w-3.5" />}
-                Tester & connecter
+                Utiliser ce repository
               </button>
             ) : null}
           </div>
@@ -464,6 +789,30 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const github = params.get("github");
+    if (!github) return;
+
+    if (github === "connected") {
+      setConnectionOpen(true);
+      setMessage("GitHub est connecté. Choisissez maintenant le repository à utiliser.");
+    } else if (github === "oauth_missing") {
+      setError("Le connecteur OAuth GitHub doit être configuré côté serveur.");
+      setConnectionOpen(true);
+    } else if (github === "state_error") {
+      setError("La connexion GitHub a expiré. Relancez la connexion.");
+      setConnectionOpen(true);
+    } else {
+      setError("La connexion GitHub n’a pas pu être finalisée.");
+      setConnectionOpen(true);
+    }
+
+    params.delete("github");
+    const next = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
+  }, []);
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
