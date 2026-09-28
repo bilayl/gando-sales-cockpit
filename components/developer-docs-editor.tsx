@@ -791,6 +791,30 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
   }, [load]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const github = params.get("github");
+    if (!github) return;
+
+    if (github === "connected") {
+      setConnectionOpen(true);
+      setMessage("GitHub est connecté. Choisissez maintenant le repository à utiliser.");
+    } else if (github === "oauth_missing") {
+      setError("Le connecteur OAuth GitHub doit être configuré côté serveur.");
+      setConnectionOpen(true);
+    } else if (github === "state_error") {
+      setError("La connexion GitHub a expiré. Relancez la connexion.");
+      setConnectionOpen(true);
+    } else {
+      setError("La connexion GitHub n’a pas pu être finalisée.");
+      setConnectionOpen(true);
+    }
+
+    params.delete("github");
+    const next = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${next ? `?${next}` : ""}`);
+  }, []);
+
+  useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirty) return;
       event.preventDefault();
