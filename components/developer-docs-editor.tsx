@@ -24,7 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { DocsDescription, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import { DeveloperMdxPreview } from "@/components/developer-mdx-preview";
@@ -979,7 +979,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     });
   }
 
-  function handleEditorBodyChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
+  function handleEditorBodyChange(event: ChangeEvent<HTMLTextAreaElement>) {
     const value = event.target.value;
     const caret = event.target.selectionStart;
     updateCurrent({ body: value });
@@ -1050,7 +1050,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
       || command.id.includes(query);
   });
 
-  function handleEditorKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function handleEditorKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (!slashOpen) return;
 
     if (event.key === "Escape") {
@@ -1080,6 +1080,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
   const connectionLabel = connection?.connected
     ? `${connection.owner}/${connection.repo}`
     : "Connecter GitHub";
+  const editorActive = mode === "edit" && canEdit && Boolean(connection?.connected) && Boolean(currentPage);
 
   return (
     <div className="gando-developer-root flex h-screen min-h-[680px] flex-col overflow-hidden">
