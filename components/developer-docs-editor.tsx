@@ -28,6 +28,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { cn } from "@/lib/utils";
 import { DocsDescription, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import { DeveloperMdxPreview } from "@/components/developer-mdx-preview";
+import { DeveloperEditorSidebar } from "@/components/developer-editor-sidebar";
+import { DEVELOPER_SLASH_COMMANDS, DeveloperSlashMenu, type SlashCommandId } from "@/components/developer-slash-menu";
+import { GandoSidebarMark } from "@/components/cockpit-sidebar-shared";
 
 type DocStatus = "draft" | "published";
 type EditorMode = "edit" | "preview";
@@ -752,6 +755,10 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [slashStart, setSlashStart] = useState(0);
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
@@ -970,6 +977,104 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
       const cursor = start + before.length + selected.length + after.length;
       textarea.setSelectionRange(cursor, cursor);
     });
+  }
+
+  function handleEditorBodyChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = event.target.value;
+    const caret = event.target.selectionStart;
+    updateCurrent({ body: value });
+
+    const beforeCaret = value.slice(0, caret);
+    const lineStart = beforeCaret.lastIndexOf("\n") + 1;
+    const slashIndex = beforeCaret.lastIndexOf("/");
+    const query = slashIndex >= 0 ? beforeCaret.slice(slashIndex + 1) : "";
+
+    const slashIsOnCurrentLine = slashIndex >= lineStart;
+    const onlyWhitespaceBeforeSlash = slashIsOnCurrentLine
+      && beforeCaret.slice(lineStart, slashIndex).trim().length === 0;
+    const queryIsValid = !/[\s/]/.test(query);
+
+    if (slashIsOnCurrentLine && onlyWhitespaceBeforeSlash && queryIsValid) {
+      setSlashOpen(true);
+      setSlashStart(slashIndex);
+      setSlashQuery(query);
+      setSlashSelectedIndex(0);
+    } else {
+      setSlashOpen(false);
+      setSlashQuery("");
+    }
+  }
+
+  function slashInsertion(id: SlashCommandId) {
+    const tick = String.fromCharCode(96);
+    const blocks: Record<SlashCommandId, string> = {
+      text: "",
+      h1: "# ",
+      h2: "## ",
+      h3: "### ",
+      h4: "#### ",
+      blockquote: "> ",
+      "unordered-list": "- ",
+      "ordered-list": "1. ",
+      table: "| Colonne 1 | Colonne 2 |\n| --- | --- |\n| Valeur | Valeur |",
+      code: `${tick}${tick}${tick}ts\n\n${tick}${tick}${tick}`,
+      callout: '<Callout title="Information">\n\nAjoutez votre contenu ici.\n\n</Callout>',
+      tabs: '<DocTabs items="Tab 1|Tab 2">\n<DocTab value="Tab 1">\n\nContenu du premier onglet.\n\n</DocTab>\n<DocTab value="Tab 2">\n\nContenu du second onglet.\n\n</DocTab>\n</DocTabs>',
+      steps: '<Steps>\n<Step>\n\n## Étape 1\n\nDécrivez cette étape.\n\n</Step>\n<Step>\n\n## Étape 2\n\nDécrivez cette étape.\n\n</Step>\n</Steps>',
+    };
+    return blocks[id];
+  }
+
+  function applySlashCommand(id: SlashCommandId) {
+    const textarea = textareaRef.current;
+    if (!textarea || !currentPage) return;
+
+    const end = textarea.selectionStart;
+    const insertion = slashInsertion(id);
+    const nextBody = `${currentPage.body.slice(0, slashStart)}${insertion}${currentPage.body.slice(end)}`;
+    updateCurrent({ body: nextBody });
+    setSlashOpen(false);
+    setSlashQuery("");
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursor = slashStart + insertion.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  }
+
+  const filteredSlashCommands = DEVELOPER_SLASH_COMMANDS.filter(command => {
+    const query = slashQuery.trim().toLowerCase();
+    return !query
+      || command.label.toLowerCase().includes(query)
+      || command.id.includes(query);
+  });
+
+  function handleEditorKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (!slashOpen) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setSlashOpen(false);
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSlashSelectedIndex(index => filteredSlashCommands.length ? (index + 1) % filteredSlashCommands.length : 0);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSlashSelectedIndex(index => filteredSlashCommands.length ? (index - 1 + filteredSlashCommands.length) % filteredSlashCommands.length : 0);
+      return;
+    }
+
+    if (event.key === "Enter" && filteredSlashCommands.length) {
+      event.preventDefault();
+      applySlashCommand(filteredSlashCommands[Math.min(slashSelectedIndex, filteredSlashCommands.length - 1)].id);
+    }
   }
 
   const connectionLabel = connection?.connected
