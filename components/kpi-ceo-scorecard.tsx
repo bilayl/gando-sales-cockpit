@@ -71,7 +71,7 @@ export function KpiCeoScorecard() {
       icon: <UsersRound className="h-3.5 w-3.5" />,
     },
     {
-      label: "Marge contributive",
+      label: "Marge contributive réelle",
       value: data.contribution.perCautionCents == null ? "À fiabiliser" : euroCents(data.contribution.perCautionCents),
       hint: `${euroCents(data.contribution.measuredContributionCents)} ce mois · avant PSP + perte nette`,
       icon: <WalletCards className="h-3.5 w-3.5" />,
@@ -88,7 +88,7 @@ export function KpiCeoScorecard() {
     ["Cautions cumulées", integer(data.cautions.total)],
     ["Volume garanti cumulé", euroCents(data.cautions.totalTdvCents, 0)],
     ["Revenu brut cumulé", euroCents(data.contribution.totalGrossRevenueCents)],
-    ["Marge mesurée cumulée", euroCents(data.contribution.totalMeasuredContributionCents)],
+    ["Marge contributive réelle cumulée", euroCents(data.contribution.totalMeasuredContributionCents)],
   ];
 
   return (

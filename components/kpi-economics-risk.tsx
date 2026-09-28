@@ -103,7 +103,7 @@ export function KpiEconomicsRisk() {
     { label: "Gross Revenue", value: scorecard.contribution.grossRevenueCents, detail: `${euroCents(scorecard.contribution.grossRevenuePerCautionCents)} / caution` },
     { label: "− Assurance", value: -scorecard.contribution.insuranceCostCents, detail: `${percentBps(scorecard.guarantee.insuranceRateBps)} du volume assuré` },
     { label: "− Partenaires", value: -scorecard.contribution.partnerCostCents, detail: `${euroCents(scorecard.contribution.partnerCostPerCautionCents)} / caution` },
-    { label: "= Contribution mesurée", value: scorecard.contribution.measuredContributionCents, detail: `${euroCents(scorecard.contribution.perCautionCents)} / caution` },
+    { label: "= Marge contributive réelle", value: scorecard.contribution.measuredContributionCents, detail: `${euroCents(scorecard.contribution.perCautionCents)} / caution` },
   ]
 
   return (
@@ -131,12 +131,12 @@ export function KpiEconomicsRisk() {
             <div className="mt-1 text-[11px] text-muted-foreground">Yield {percent(scorecard.guarantee.grossRevenueYield)}</div>
           </div>
           <div className="border-t border-border px-4 py-4 sm:border-l xl:border-t-0">
-            <div className="text-[10px] font-bold uppercase text-muted-foreground">Contribution mesurée</div>
+            <div className="text-[10px] font-bold uppercase text-muted-foreground">Marge contributive réelle</div>
             <div className="mt-2 text-[24px] font-semibold tabular-nums">{euroCents(scorecard.contribution.measuredContributionCents)}</div>
             <div className="mt-1 text-[11px] text-muted-foreground">{euroCents(scorecard.contribution.perCautionCents)} / caution</div>
           </div>
           <div className="border-t border-border px-4 py-4 sm:border-l xl:border-t-0">
-            <div className="text-[10px] font-bold uppercase text-muted-foreground">Contribution / volume</div>
+            <div className="text-[10px] font-bold uppercase text-muted-foreground">Marge contributive réelle / volume</div>
             <div className="mt-2 text-[24px] font-semibold tabular-nums">{percent(scorecard.guarantee.measuredContributionYield)}</div>
             <div className="mt-1 text-[11px] text-muted-foreground">Avant PSP et perte finale nette</div>
           </div>
