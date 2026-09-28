@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { MDXRemote, type MDXRemoteSerializeResult } from "next-mdx-remote";
 import { Callout } from "fumadocs-ui/components/callout";
 import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
@@ -35,12 +35,12 @@ function GuideCode({ title, children }: { title?: string; children?: string }) {
   );
 }
 
-function DocTabs({ items, children }: { items: string; children: React.ReactNode }) {
+function DocTabs({ items, children }: { items: string; children: ReactNode }) {
   const values = items.split("|").map(item => item.trim()).filter(Boolean);
   return <Tabs items={values}>{children}</Tabs>;
 }
 
-function DocTab({ value, children }: { value: string; children: React.ReactNode }) {
+function DocTab({ value, children }: { value: string; children: ReactNode }) {
   return <Tab value={value}>{children}</Tab>;
 }
 
