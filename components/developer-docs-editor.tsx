@@ -1419,31 +1419,33 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
           ) : null}
         </main>
 
-        <aside className="gando-docs-toc">
-          <div>
-            <div className="gando-docs-toc-title">Sur cette page</div>
-            <nav>
-              {toc.length ? toc.map(item => (
-                <a key={item.id} href={`#${item.id}`} className="block" data-depth={item.depth}>
-                  {item.title}
-                </a>
-              )) : <div className="text-[10px] leading-5 text-muted-foreground">Ajoutez des titres H2/H3 pour générer automatiquement la table des matières.</div>}
-            </nav>
+        {!editorActive ? (
+          <aside className="gando-docs-toc">
+            <div>
+              <div className="gando-docs-toc-title">Sur cette page</div>
+              <nav>
+                {toc.length ? toc.map(item => (
+                  <a key={item.id} href={`#${item.id}`} className="block" data-depth={item.depth}>
+                    {item.title}
+                  </a>
+                )) : <div className="text-[10px] leading-5 text-muted-foreground">Ajoutez des titres H2/H3 pour générer automatiquement la table des matières.</div>}
+              </nav>
 
-            <div className="gando-docs-source">
-              <div className="text-[12px] font-semibold text-[#878d9b]">Source</div>
-              <div className="gando-docs-source-card">
-                <div className="flex items-center gap-2 text-[10px] font-semibold"><Github className="h-3.5 w-3.5" /> {connection?.owner}/{connection?.repo}</div>
-                <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.branch}</div>
-                <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.basePath}</div>
-                <div className="mt-3 flex items-center gap-1.5 text-[9px]">
-                  <span className={cn("h-1.5 w-1.5 rounded-full", connection?.writable ? "bg-emerald-500" : "bg-amber-500")} />
-                  <span className="text-muted-foreground">{connection?.writable ? "Lecture + écriture" : "Lecture seule"}</span>
+              <div className="gando-docs-source">
+                <div className="text-[12px] font-semibold text-[#878d9b]">Source</div>
+                <div className="gando-docs-source-card">
+                  <div className="flex items-center gap-2 text-[10px] font-semibold"><Github className="h-3.5 w-3.5" /> {connection?.owner}/{connection?.repo}</div>
+                  <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.branch}</div>
+                  <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">{connection?.basePath}</div>
+                  <div className="mt-3 flex items-center gap-1.5 text-[9px]">
+                    <span className={cn("h-1.5 w-1.5 rounded-full", connection?.writable ? "bg-emerald-500" : "bg-amber-500")} />
+                    <span className="text-muted-foreground">{connection?.writable ? "Lecture + écriture" : "Lecture seule"}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        ) : null}
       </div>
     </div>
   );
