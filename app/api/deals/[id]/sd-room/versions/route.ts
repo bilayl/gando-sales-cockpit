@@ -47,7 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const { data: version, error } = await getSupabaseAdmin()
       .from("sd_document_versions")
-      .select("version,content")
+      .select("id,version,content,source_refs,model_name,prompt_version,created_by_email,change_summary,created_at")
       .eq("document_id", current.id)
       .eq("version", targetVersion)
       .maybeSingle();
@@ -61,10 +61,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       sourceMode: current.source_mode || "manual",
       updatedByEmail: userEmail,
       status: "draft",
-      changeSummary: `Restauration de la version ${targetVersion}`,
+      modelName: version.model_name,
+      promptVersion: version.prompt_version,
+      sourceRefs: Array.isArray(version.source_refs) ? version.source_refs : [],
+      changeSummary: `Restauration fidèle de la version ${targetVersion}`,
     });
 
-    return Response.json({ document });
+    return Response.json({ document, restoredVersion: version });
   } catch (error) {
     return apiError(error);
   }
