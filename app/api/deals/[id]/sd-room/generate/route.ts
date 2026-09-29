@@ -72,10 +72,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       dealName,
       sources: savedSources.map(source => ({ id: source.id, title: source.title, transcript: source.transcript_text })),
     });
+    const currentSD01 = bundle.documents.find(document => document.code === "SD01");
+    const currentContent = currentSD01?.content && typeof currentSD01.content === "object" ? currentSD01.content as Record<string, unknown> : {};
+    const preservedGandoProposal = String(currentContent.gandoProposal || "").trim();
     const document = await saveSDDocument({
       roomId: bundle.room.id,
       code: "SD01",
-      content: generated.content,
+      content: { ...generated.content, gandoProposal: preservedGandoProposal || generated.content.gandoProposal || "" },
       sourceMode: bundle.documents.find(document => document.code === "SD01")?.source_mode === "mixed" ? "mixed" : "agent",
       updatedByEmail: userEmail,
       status: "review",
