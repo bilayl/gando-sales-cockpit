@@ -1016,9 +1016,20 @@ export async function readDeveloperDocsAsset(
   if (file.type !== "file") {
     throw new DeveloperDocsGithubError("Image GitHub invalide.", 404);
   }
-  if (file.encoding !== "base64" || typeof file.content !== "string") {
-    throw new DeveloperDocsGithubError("Format d’image GitHub non pris en charge.", 500);
+
+  if (file.encoding === "base64" && typeof file.content === "string" && file.content.trim()) {
+    return Buffer.from(file.content.replace(/\n/g, ""), "base64");
   }
 
-  return Buffer.from(file.content.replace(/\n/g, ""), "base64");
+  if (file.sha) {
+    const blob = await githubRequest<{ content?: string; encoding?: string }>(
+      connection,
+      `/repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}/git/blobs/${encodeURIComponent(file.sha)}`,
+    );
+    if (blob.encoding === "base64" && typeof blob.content === "string") {
+      return Buffer.from(blob.content.replace(/\n/g, ""), "base64");
+    }
+  }
+
+  throw new DeveloperDocsGithubError("Format d’image GitHub non pris en charge.", 500);
 }
