@@ -32,6 +32,7 @@ import { DeveloperEditorSidebar } from "@/components/developer-editor-sidebar";
 import { DEVELOPER_SLASH_COMMANDS, DeveloperSlashMenu, type SlashCommandId } from "@/components/developer-slash-menu";
 import { GandoSidebarMark } from "@/components/cockpit-sidebar-shared";
 import { DeveloperSiteSettings } from "@/components/developer-site-settings";
+import { DeveloperPageSettingsModal } from "@/components/developer-page-settings-modal";
 
 type DocStatus = "draft" | "published";
 type EditorMode = "edit" | "preview";
@@ -850,6 +851,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
   }, [dirty]);
 
   const currentPage = pages.find(page => page.id === selectedId) ?? null;
+  const pageSettingsPage = pages.find(page => page.id === pageSettingsId) ?? null;
 
   const sections = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -1305,6 +1307,17 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         open={siteSettingsOpen}
         onClose={() => setSiteSettingsOpen(false)}
         onSettingsSaved={settings => setSiteCategories(settings.navigation.categories || [])}
+      />
+
+      <DeveloperPageSettingsModal
+        open={Boolean(pageSettingsId)}
+        page={pageSettingsPage}
+        onClose={() => setPageSettingsId("")}
+        onChange={patch => {
+          if (!pageSettingsPage) return;
+          setPages(items => items.map(page => page.id === pageSettingsPage.id ? { ...page, ...patch } : page));
+          if (pageSettingsPage.id === selectedId) setDirty(true);
+        }}
       />
 
       <input
