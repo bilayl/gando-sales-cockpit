@@ -1301,6 +1301,20 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         onSaved={load}
       />
 
+      <DeveloperSiteSettings
+        open={siteSettingsOpen}
+        onClose={() => setSiteSettingsOpen(false)}
+        onSettingsSaved={settings => setSiteCategories(settings.navigation.categories || [])}
+      />
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+        className="hidden"
+        onChange={handleImageUpload}
+      />
+
       {!editorActive ? (
       <header className="gando-stripe-header">
         <Link href="/" className="gando-stripe-brand" aria-label="Retour au Cockpit Gando">
@@ -1371,12 +1385,23 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         {editorActive && currentPage && connection ? (
           <DeveloperEditorSidebar
             pages={pages}
+            categories={siteCategories}
             selectedId={currentPage.id}
             workspaceLabel={connection.repo}
             sourceLabel={connection.basePath}
             onSelectPage={choosePage}
-            onNewPage={createPage}
-            onSettings={() => setConnectionOpen(true)}
+            onNewPage={() => createPage()}
+            onSettings={() => setSiteSettingsOpen(true)}
+            onAddCategory={addCategory}
+            onRenameCategory={renameCategory}
+            onRenamePage={renamePageAction}
+            onDuplicatePage={duplicatePageAction}
+            onMovePage={movePageAction}
+            onPageSettings={page => {
+              setSelectedId(page.id);
+              setPageSettingsId(page.id);
+            }}
+            onDeletePage={page => void deletePageAction(page)}
           />
         ) : (
         <aside className="gando-docs-sidebar">
