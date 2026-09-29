@@ -1403,7 +1403,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
             workspaceLabel={connection.repo}
             sourceLabel={connection.basePath}
             onSelectPage={choosePage}
-            onNewPage={() => createPage()}
+            onNewPage={section => createPage(section)}
             onSettings={() => setSiteSettingsOpen(true)}
             onAddCategory={addCategory}
             onRenameCategory={renameCategory}
