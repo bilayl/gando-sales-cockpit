@@ -42,6 +42,7 @@ function cleanContent(value: unknown, companyName = ""): SD01Content {
 }
 
 function lines(value: string) { return value.split("\n").map(item => item.trim()).filter(Boolean); }
+function draftLines(value: string) { return value.split("\n"); }
 function textLines(value: string[]) { return value.join("\n"); }
 function formatDate(value?: string | null) {
   if (!value) return "Date inconnue";
@@ -140,6 +141,10 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
     try {
       const cleaned: SD01Content = {
         ...content,
+        currentProcess: lines(textLines(content.currentProcess)),
+        productsAndOffers: lines(textLines(content.productsAndOffers)),
+        painPoints: content.painPoints.map(pain => ({ ...pain, details: lines(textLines(pain.details)) })),
+        urgency: lines(textLines(content.urgency)),
         roi: {
           valueLevers: content.roi.valueLevers.filter(metric => metric.lever.trim() || metric.value.trim()),
           estimates: (content.roi.estimates || []).filter(metric => metric.lever.trim() || metric.value.trim()),
@@ -289,12 +294,12 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
               <div className="space-y-2">{content.stakeholders.map((item, index) => <div key={index} className="group grid gap-2 rounded-xl border border-border bg-background p-3 sm:grid-cols-[1fr_1fr_1fr_auto]"><MiniInput value={item.name} onChange={value => update("stakeholders", content.stakeholders.map((row, position) => position === index ? { ...row, name: value } : row))} placeholder="Nom" /><MiniInput value={item.role} onChange={value => update("stakeholders", content.stakeholders.map((row, position) => position === index ? { ...row, role: value } : row))} placeholder="Fonction" /><MiniInput value={item.organization} onChange={value => update("stakeholders", content.stakeholders.map((row, position) => position === index ? { ...row, organization: value } : row))} placeholder="Organisation" /><Button variant="ghost" size="icon" className="h-9 w-9 text-destructive opacity-60 group-hover:opacity-100" onClick={() => update("stakeholders", content.stakeholders.filter((_, position) => position !== index))}><Trash2 className="h-4 w-4" /></Button>{item.notes ? <div className="sm:col-span-4"><FreeTextarea value={item.notes} onChange={value => update("stakeholders", content.stakeholders.map((row, position) => position === index ? { ...row, notes: value } : row))} rows={2} placeholder="Note…" /></div> : null}</div>)}{!content.stakeholders.length ? <p className="text-sm italic text-muted-foreground">Aucune personne clé ajoutée.</p> : null}</div>
             </DocBlock>
 
-            <DocBlock title="Processus actuel" hint="Une étape par ligne. L’objectif est de comprendre comment le client fonctionne aujourd’hui."><FreeTextarea value={textLines(content.currentProcess)} onChange={value => update("currentProcess", lines(value))} rows={5} placeholder={"Réservation créée\nPréautorisation de caution\nRemise du véhicule"} /></DocBlock>
+            <DocBlock title="Processus actuel" hint="Une étape par ligne. L’objectif est de comprendre comment le client fonctionne aujourd’hui."><FreeTextarea value={textLines(content.currentProcess)} onChange={value => update("currentProcess", draftLines(value))} rows={5} placeholder={"Réservation créée\nPréautorisation de caution\nRemise du véhicule"} /></DocBlock>
 
-            <DocBlock title="Produits & offres" hint="Le contexte commercial existant, sans le confondre avec le modèle proposé par Gando."><FreeTextarea value={textLines(content.productsAndOffers)} onChange={value => update("productsAndOffers", lines(value))} rows={4} placeholder="Une offre par ligne…" /></DocBlock>
+            <DocBlock title="Produits & offres" hint="Le contexte commercial existant, sans le confondre avec le modèle proposé par Gando."><FreeTextarea value={textLines(content.productsAndOffers)} onChange={value => update("productsAndOffers", draftLines(value))} rows={4} placeholder="Une offre par ligne…" /></DocBlock>
 
             <DocBlock title="Enjeux prioritaires" hint="Ce qui justifie réellement le projet." action={<Button variant="outline" size="sm" onClick={addPain}><Plus className="mr-1 h-3.5 w-3.5" />Ajouter</Button>}>
-              <div className="space-y-3">{content.painPoints.map((pain, index) => <div key={index} className="group rounded-xl border border-border bg-background p-4"><div className="flex gap-2"><Input value={pain.title} onChange={event => update("painPoints", content.painPoints.map((row, position) => position === index ? { ...row, title: event.target.value } : row))} placeholder="Enjeu" className="h-auto border-0 bg-transparent p-0 font-semibold shadow-none focus-visible:ring-0" /><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive opacity-60 group-hover:opacity-100" onClick={() => update("painPoints", content.painPoints.filter((_, position) => position !== index).map((row, position) => ({ ...row, priority: position + 1 })))}><Trash2 className="h-4 w-4" /></Button></div><div className="mt-2"><FreeTextarea value={textLines(pain.details)} onChange={value => update("painPoints", content.painPoints.map((row, position) => position === index ? { ...row, details: lines(value) } : row))} rows={3} placeholder="Détail, preuve, conséquence…" /></div></div>)}{!content.painPoints.length ? <p className="text-sm italic text-muted-foreground">Aucun enjeu renseigné.</p> : null}</div>
+              <div className="space-y-3">{content.painPoints.map((pain, index) => <div key={index} className="group rounded-xl border border-border bg-background p-4"><div className="flex gap-2"><Input value={pain.title} onChange={event => update("painPoints", content.painPoints.map((row, position) => position === index ? { ...row, title: event.target.value } : row))} placeholder="Enjeu" className="h-auto border-0 bg-transparent p-0 font-semibold shadow-none focus-visible:ring-0" /><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive opacity-60 group-hover:opacity-100" onClick={() => update("painPoints", content.painPoints.filter((_, position) => position !== index).map((row, position) => ({ ...row, priority: position + 1 })))}><Trash2 className="h-4 w-4" /></Button></div><div className="mt-2"><FreeTextarea value={textLines(pain.details)} onChange={value => update("painPoints", content.painPoints.map((row, position) => position === index ? { ...row, details: draftLines(value) } : row))} rows={3} placeholder="Détail, preuve, conséquence…" /></div></div>)}{!content.painPoints.length ? <p className="text-sm italic text-muted-foreground">Aucun enjeu renseigné.</p> : null}</div>
             </DocBlock>
 
             <DocBlock title="Solution fit" hint="Mini-propal de cadrage : besoin client à gauche, réponse Gando à droite." action={<Button variant="outline" size="sm" onClick={addFit}><Plus className="mr-1 h-3.5 w-3.5" />Ajouter</Button>}>
@@ -316,7 +321,7 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
               <MetricRows rows={content.roi.estimates || []} mode="roi" onChange={rows => update("roi", { ...content.roi, estimates: rows })} onRemove={index => update("roi", { ...content.roi, estimates: (content.roi.estimates || []).filter((_, position) => position !== index) })} />
             </DocBlock>
 
-            <DocBlock title="Pourquoi maintenant ?" hint="Contexte d’urgence ou événement déclencheur, si pertinent."><FreeTextarea value={textLines(content.urgency)} onChange={value => update("urgency", lines(value))} rows={4} placeholder="Un facteur par ligne…" /></DocBlock>
+            <DocBlock title="Pourquoi maintenant ?" hint="Contexte d’urgence ou événement déclencheur, si pertinent."><FreeTextarea value={textLines(content.urgency)} onChange={value => update("urgency", draftLines(value))} rows={4} placeholder="Un facteur par ligne…" /></DocBlock>
           </Card>
 
           <aside className="space-y-4 xl:sticky xl:top-32">
