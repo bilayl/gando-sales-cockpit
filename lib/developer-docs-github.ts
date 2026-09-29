@@ -913,7 +913,27 @@ export async function saveDeveloperSiteSettings(
   }
 
   const current = await getDeveloperSiteSettings(connection);
-  const settings = mergeDeveloperSiteSettings(input);
+  const patch = input && typeof input === "object" ? input as Partial<DeveloperSiteSettings> : {};
+  const settings = mergeDeveloperSiteSettings({
+    ...current.settings,
+    ...patch,
+    general: { ...current.settings.general, ...(patch.general || {}) },
+    styling: { ...current.settings.styling, ...(patch.styling || {}) },
+    branding: { ...current.settings.branding, ...(patch.branding || {}) },
+    typography: { ...current.settings.typography, ...(patch.typography || {}) },
+    navbar: { ...current.settings.navbar, ...(patch.navbar || {}) },
+    footer: { ...current.settings.footer, ...(patch.footer || {}) },
+    banner: { ...current.settings.banner, ...(patch.banner || {}) },
+    thumbnail: { ...current.settings.thumbnail, ...(patch.thumbnail || {}) },
+    content: { ...current.settings.content, ...(patch.content || {}) },
+    codeblocks: { ...current.settings.codeblocks, ...(patch.codeblocks || {}) },
+    contextMenu: { ...current.settings.contextMenu, ...(patch.contextMenu || {}) },
+    navigationBehavior: { ...current.settings.navigationBehavior, ...(patch.navigationBehavior || {}) },
+    search: { ...current.settings.search, ...(patch.search || {}) },
+    navigation: { ...current.settings.navigation, ...(patch.navigation || {}) },
+    apiReference: { ...current.settings.apiReference, ...(patch.apiReference || {}) },
+    redirects: patch.redirects ?? current.settings.redirects,
+  });
   const payload: Record<string, unknown> = {
     message: "docs: update developer site settings",
     content: Buffer.from(JSON.stringify(settings, null, 2) + "\n", "utf8").toString("base64"),
