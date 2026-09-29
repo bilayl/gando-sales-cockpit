@@ -222,6 +222,7 @@ function sanitizeSD01(value: Record<string, unknown>, companyName: string, sourc
       metricsRequired: strings(roi.metricsRequired),
     },
     urgency: strings(value.urgency),
+    gandoProposal: text(value.gandoProposal, 12000),
     decisions: strings(value.decisions),
     openQuestions: strings(value.openQuestions),
     nextSteps: objects(value.nextSteps).map(item => ({
