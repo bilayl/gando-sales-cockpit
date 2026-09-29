@@ -66,7 +66,7 @@ export type SD01Content = {
     metricsRequired: string[];
   };
   urgency: string[];
-  gandoProposal: string;
+  gandoProposal?: string;
   decisions: string[];
   openQuestions: string[];
   nextSteps: SD01NextStep[];
