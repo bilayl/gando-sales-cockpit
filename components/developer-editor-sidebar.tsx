@@ -63,7 +63,7 @@ export function DeveloperEditorSidebar({
   workspaceLabel: string;
   sourceLabel: string;
   onSelectPage: (id: string) => void;
-  onNewPage: () => void;
+  onNewPage: (section?: string) => void;
   onSettings: () => void;
   onAddCategory: () => void;
   onRenameCategory: (section: string) => void;
@@ -147,7 +147,7 @@ export function DeveloperEditorSidebar({
                         <Pencil className="size-4" />
                         Renommer la catégorie
                       </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={onNewPage} className="rounded-lg">
+                      <DropdownMenuItem onSelect={() => onNewPage(section)} className="rounded-lg">
                         <Plus className="size-4" />
                         Ajouter une page
                       </DropdownMenuItem>
@@ -231,7 +231,7 @@ export function DeveloperEditorSidebar({
                     );
                   })}
                   {!sectionPages.length ? (
-                    <button type="button" onClick={onNewPage} className="mint-editor-empty-category">
+                    <button type="button" onClick={() => onNewPage(section)} className="mint-editor-empty-category">
                       <Plus className="size-3.5" /> Ajouter une page
                     </button>
                   ) : null}
@@ -267,7 +267,7 @@ export function DeveloperEditorSidebar({
           <Settings2 className="size-4" />
           Site settings
         </button>
-        <button type="button" className="mint-editor-new-page-button" onClick={onNewPage}>
+        <button type="button" className="mint-editor-new-page-button" onClick={() => onNewPage()}>
           <Plus className="size-4" />
           New page
         </button>
