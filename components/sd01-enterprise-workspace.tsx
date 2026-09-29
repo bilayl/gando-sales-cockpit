@@ -96,6 +96,7 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
   const [allowlist, setAllowlist] = useState("");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
+  const [versionToRestore, setVersionToRestore] = useState<VersionRow | null>(null);
   const [versionToDelete, setVersionToDelete] = useState<VersionRow | null>(null);
 
   const loadVersions = useCallback(async () => {
@@ -185,20 +186,25 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
     finally { setWorking(null); }
   }
 
-  async function restoreVersion(version: number) {
-    if (!window.confirm(`Restaurer la version ${version} dans un nouveau brouillon ?`)) return;
-    setWorking(`restore-${version}`);
+  async function restoreVersion(version: VersionRow) {
+    setWorking(`restore-${version.version}`);
     try {
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/versions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ version }),
+        body: JSON.stringify({ version: version.version }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Restauration impossible");
-      setContent(cleanContent(payload.document?.content, companyName));
-      await load();
-      toast.success(`Version ${version} restaurée`);
+      const restoredContent = payload.restoredVersion?.content ?? payload.document?.content ?? version.content;
+      setContent(cleanContent(restoredContent, companyName));
+      setData(current => current ? {
+        ...current,
+        documents: current.documents.map(document => document.code === "SD01" ? payload.document : document),
+      } : current);
+      await loadVersions();
+      setVersionToRestore(null);
+      toast.success(`Version ${version.version} restaurée à l’identique`);
     } catch (error) { toast.error(error instanceof Error ? error.message : "Restauration impossible"); }
     finally { setWorking(null); }
   }
@@ -322,6 +328,8 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
             </DocBlock>
 
             <DocBlock title="Pourquoi maintenant ?" hint="Contexte d’urgence ou événement déclencheur, si pertinent."><FreeTextarea value={textLines(content.urgency)} onChange={value => update("urgency", draftLines(value))} rows={4} placeholder="Un facteur par ligne…" /></DocBlock>
+
+            <DocBlock title="Proposition Gando" hint="Texte libre de proposition, placé juste après « Pourquoi maintenant ? »."><FreeTextarea value={content.gandoProposal || ""} onChange={value => update("gandoProposal", value)} rows={8} placeholder="Décris ici la proposition Gando pour ce client…" /></DocBlock>
           </Card>
 
           <aside className="space-y-4 xl:sticky xl:top-32">
@@ -353,7 +361,7 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
               const isActive = version.version === sd01?.version;
               const isPublished = Boolean(sd01?.published_version && version.version === sd01.published_version);
               const protectedVersion = isActive || isPublished;
-              return <div key={version.id} className="rounded-lg border border-border p-3 text-xs"><div className="flex items-center justify-between gap-2"><div><div className="flex items-center gap-2"><div className="font-semibold">Version {version.version}</div>{isActive ? <Badge variant="outline" className="text-[9px]">Active</Badge> : isPublished ? <Badge variant="outline" className="text-[9px]">Publiée</Badge> : null}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{formatDate(version.created_at)}</div></div><div className="flex items-center gap-1"><Button variant="ghost" size="sm" className="h-8" onClick={() => void restoreVersion(version.version)} disabled={working === `restore-${version.version}`}><RotateCcw className="mr-1 h-3.5 w-3.5" />Restaurer</Button>{!protectedVersion ? <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title={`Supprimer la version ${version.version}`} onClick={() => setVersionToDelete(version)} disabled={working === `delete-${version.id}`}>{working === `delete-${version.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</Button> : null}</div></div>{version.change_summary ? <p className="mt-2 text-muted-foreground">{version.change_summary}</p> : null}</div>;
+              return <div key={version.id} className="rounded-lg border border-border p-3 text-xs"><div className="flex items-center justify-between gap-2"><div><div className="flex items-center gap-2"><div className="font-semibold">Version {version.version}</div>{isActive ? <Badge variant="outline" className="text-[9px]">Active</Badge> : isPublished ? <Badge variant="outline" className="text-[9px]">Publiée</Badge> : null}</div><div className="mt-0.5 text-[10px] text-muted-foreground">{formatDate(version.created_at)}</div></div><div className="flex items-center gap-1"><Button variant="ghost" size="sm" className="h-8" onClick={() => setVersionToRestore(version)} disabled={isActive || working === `restore-${version.version}`}><RotateCcw className="mr-1 h-3.5 w-3.5" />{isActive ? "Active" : "Restaurer"}</Button>{!protectedVersion ? <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title={`Supprimer la version ${version.version}`} onClick={() => setVersionToDelete(version)} disabled={working === `delete-${version.id}`}>{working === `delete-${version.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</Button> : null}</div></div>{version.change_summary ? <p className="mt-2 text-muted-foreground">{version.change_summary}</p> : null}</div>;
             })}{!versions.length ? <p className="text-xs text-muted-foreground">Aucune version enregistrée.</p> : null}</div></details>
 
             <Card className="p-4 text-xs text-muted-foreground"><div className="flex items-center gap-2 font-semibold text-foreground"><Clock3 className="h-4 w-4 text-primary" />Règle SD01</div><p className="mt-2 leading-5">On comprend le client ici. On décide et on organise la suite dans <strong>SD02 · Prochaines étapes</strong>.</p></Card>
@@ -361,6 +369,27 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
         </div>
       </div>
     </div>
+
+    {versionToRestore ? <div className="fixed inset-0 z-[120] grid place-items-center bg-black/45 p-4 backdrop-blur-[2px]" onMouseDown={() => working !== `restore-${versionToRestore.version}` && setVersionToRestore(null)}>
+      <div role="dialog" aria-modal="true" aria-labelledby="restore-version-title" className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl" onMouseDown={event => event.stopPropagation()}>
+        <div className="flex items-start gap-4">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary/10 text-primary"><RotateCcw className="h-5 w-5" /></div>
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-primary">Confirmer la restauration</div>
+            <h2 id="restore-version-title" className="mt-1 text-xl font-black tracking-[-0.025em]">Restaurer la version {versionToRestore.version} ?</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">Le contenu exact de cette version du {formatDate(versionToRestore.created_at)} remplacera le brouillon actuellement affiché. L’historique existant reste conservé.</p>
+            {versionToRestore.change_summary ? <div className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">{versionToRestore.change_summary}</div> : null}
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setVersionToRestore(null)} disabled={working === `restore-${versionToRestore.version}`}>Annuler</Button>
+          <Button onClick={() => void restoreVersion(versionToRestore)} disabled={working === `restore-${versionToRestore.version}`}>
+            {working === `restore-${versionToRestore.version}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+            Confirmer la restauration
+          </Button>
+        </div>
+      </div>
+    </div> : null}
 
     {versionToDelete ? <div className="fixed inset-0 z-[120] grid place-items-center bg-black/45 p-4 backdrop-blur-[2px]" onMouseDown={() => working !== `delete-${versionToDelete.id}` && setVersionToDelete(null)}>
       <div role="dialog" aria-modal="true" aria-labelledby="delete-version-title" className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl" onMouseDown={event => event.stopPropagation()}>
