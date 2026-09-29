@@ -1459,7 +1459,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
 
           <div className="gando-docs-sidebar-footer space-y-2">
             {canEdit ? (
-              <button type="button" onClick={createPage} className="flex items-center justify-center gap-1.5">
+              <button type="button" onClick={() => createPage()} className="flex items-center justify-center gap-1.5">
                 <Plus className="h-3.5 w-3.5" /> Nouvelle page
               </button>
             ) : null}
@@ -1496,7 +1496,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
                 <Folder className="mx-auto h-8 w-8 text-muted-foreground" />
                 <h2 className="mt-4 text-lg font-semibold">Aucune page dans {connection.basePath}</h2>
                 <p className="mt-1 text-xs text-muted-foreground">Créez la première page ; elle sera ajoutée directement au dépôt GitHub.</p>
-                {canEdit ? <button type="button" onClick={createPage} className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#17181c] px-4 text-xs font-semibold text-white dark:bg-white dark:text-black"><Plus className="h-4 w-4" /> Créer une page</button> : null}
+                {canEdit ? <button type="button" onClick={() => createPage()} className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#17181c] px-4 text-xs font-semibold text-white dark:bg-white dark:text-black"><Plus className="h-4 w-4" /> Créer une page</button> : null}
               </div>
             </div>
           ) : mode === "edit" && canEdit ? (
