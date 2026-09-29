@@ -248,15 +248,5 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       </Card>
     </div>
 
-    <Card className="p-5 lg:p-6">
-      <Field label="Proposition Gando" hint="Bloc de texte libre affiché à la fin de la proposition">
-        <Area
-          value={value.proposalGandoText || ""}
-          onChange={next => set("proposalGandoText", next)}
-          rows={8}
-          placeholder="Ajoute ici le texte final de la proposition Gando…"
-        />
-      </Field>
-    </Card>
   </div></div>;
 }
