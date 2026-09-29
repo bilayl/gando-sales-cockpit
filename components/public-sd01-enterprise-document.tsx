@@ -103,6 +103,7 @@ export function PublicSD01EnterpriseDocument({
     .map(item => item.trim())
     .filter(Boolean);
   const urgency = nonEmptyLines(content.urgency);
+  const gandoProposal = String(content.gandoProposal || "").trim();
 
   return <div className="space-y-5 sm:space-y-6">
     {summary ? <AccordionBubble title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")}>
@@ -139,5 +140,6 @@ export function PublicSD01EnterpriseDocument({
     <RoiTable rows={roiRows} companyName={companyName} language={language} />
 
     {urgency.length ? <Section title={tr(language, "Pourquoi maintenant ?", "Why now?")}><BulletList items={urgency} /></Section> : null}
+    {gandoProposal ? <Section title={tr(language, "Proposition Gando", "Gando proposal")}><p className="whitespace-pre-wrap text-[15px] leading-7 text-[#465157]">{gandoProposal}</p></Section> : null}
   </div>;
 }
