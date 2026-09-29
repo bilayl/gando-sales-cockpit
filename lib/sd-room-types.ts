@@ -66,6 +66,7 @@ export type SD01Content = {
     metricsRequired: string[];
   };
   urgency: string[];
+  gandoProposal: string;
   decisions: string[];
   openQuestions: string[];
   nextSteps: SD01NextStep[];
@@ -180,6 +181,7 @@ export function createEmptySD01(companyName = ""): SD01Content {
     solutionFit: [],
     roi: { valueLevers: [], estimates: [], metricsRequired: [] },
     urgency: [],
+    gandoProposal: "",
     decisions: [],
     openQuestions: [],
     nextSteps: [],
