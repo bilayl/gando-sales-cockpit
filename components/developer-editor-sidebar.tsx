@@ -34,10 +34,15 @@ import { cn } from "@/lib/utils";
 type EditorPage = {
   id: string;
   path: string;
+  sha: string;
   title: string;
-  section: string;
   slug: string;
+  section: string;
+  description: string;
+  body: string;
   status: "draft" | "published";
+  order: number;
+  updatedAt: string | null;
 };
 
 export function DeveloperEditorSidebar({
