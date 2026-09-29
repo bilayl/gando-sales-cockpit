@@ -9,14 +9,14 @@ type RoomLanguage = "fr" | "en";
 const tr = (language: RoomLanguage, fr: string, en: string) => language === "en" ? en : fr;
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#687277]">{children}</div>;
+  return <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#687277]">{children}</div>;
 }
 
 function Section({ title, children, kicker }: { title: string; children: React.ReactNode; kicker?: string }) {
   return <section className="rounded-[18px] border border-[#e0e4e6] bg-white px-5 py-6 shadow-[0_1px_2px_rgba(20,30,35,0.025)] sm:px-8 sm:py-8">
     {kicker ? <Eyebrow>{kicker}</Eyebrow> : null}
-    <h2 className="mt-1 text-[21px] font-semibold tracking-[-0.025em] text-[#172126] sm:text-[23px]">{title}</h2>
-    <div className="mt-5 text-[15px] leading-7 text-[#465157]">{children}</div>
+    <h2 className="mt-1 text-[23px] font-semibold tracking-[-0.025em] text-[#172126] sm:text-[25px]">{title}</h2>
+    <div className="mt-5 text-[16px] leading-7 text-[#465157] sm:leading-8">{children}</div>
   </section>;
 }
 
@@ -26,33 +26,33 @@ function AccordionBubble({ title, children, kicker, defaultOpen = false }: { tit
     <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-5 sm:px-8 sm:py-6 [&::-webkit-details-marker]:hidden">
       <div className="min-w-0 flex-1">
         {kicker ? <Eyebrow>{kicker}</Eyebrow> : null}
-        <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.025em] text-[#172126] sm:text-[22px]">{title}</h2>
+        <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.025em] text-[#172126] sm:text-[24px]">{title}</h2>
       </div>
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[#e0e4e6] bg-[#f7f8f9] text-[#6558c8] transition group-open:bg-[#f0edff]">
         <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
       </span>
     </summary>
-    <div className="border-t border-[#eceeef] px-5 py-6 text-[15px] leading-7 text-[#465157] sm:px-8 sm:py-7">{children}</div>
+    <div className="border-t border-[#eceeef] px-5 py-6 text-[16px] leading-7 text-[#465157] sm:px-8 sm:py-7 sm:leading-8">{children}</div>
   </details>;
 }
 
 function BulletList({ items }: { items: string[] }) {
-  return <ul className="space-y-3">{items.map((item, index) => <li key={`${index}-${item}`} className="flex gap-3"><span className="mt-[10px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#7166c7]" /><span>{item}</span></li>)}</ul>;
+  return <ul className="space-y-3.5">{items.map((item, index) => <li key={`${index}-${item}`} className="flex gap-3 leading-7"><span className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#7166c7]" /><span>{item}</span></li>)}</ul>;
 }
 
 function RoiTable({ rows, companyName, language }: { rows: SD01Metric[]; companyName: string; language: RoomLanguage }) {
   if (!rows.length) return null;
   return <Section title={tr(language, "Valeur & estimation du ROI", "Value & ROI estimate")} kicker={tr(language, "Impact attendu", "Expected impact")}>
     <div className="overflow-hidden rounded-[14px] border border-[#dedaf7]">
-      <div className="hidden grid-cols-[1fr_1.35fr_1.35fr] bg-[#f5f3ff] text-[11px] font-semibold text-[#6558c8] sm:grid">
+      <div className="hidden grid-cols-[1fr_1.35fr_1.35fr] bg-[#f5f3ff] text-[12px] font-semibold text-[#6558c8] sm:grid">
         <div className="px-4 py-3">{tr(language, "Levier", "Lever")}</div>
         <div className="border-l border-[#dedaf7] px-4 py-3">{tr(language, "Mécanisme", "Mechanism")}</div>
         <div className="border-l border-[#dedaf7] px-4 py-3">{tr(language, `Valeur pour ${companyName}`, `Value for ${companyName}`)}</div>
       </div>
       <div className="divide-y divide-[#e4e0f7]">{rows.map((row, index) => <div key={`${row.lever}-${index}`} className="grid bg-white sm:grid-cols-[1fr_1.35fr_1.35fr]">
-        <div className="px-4 py-4"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, "Levier", "Lever")}</div><div className="font-semibold text-[#202a2f]">{row.lever || tr(language, "À préciser", "TBD")}</div></div>
-        <div className="border-t border-[#eceeef] px-4 py-4 sm:border-l sm:border-t-0"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, "Mécanisme", "Mechanism")}</div>{row.mechanism || tr(language, "À préciser", "TBD")}</div>
-        <div className="border-t border-[#eceeef] px-4 py-4 sm:border-l sm:border-t-0"><div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, `Valeur pour ${companyName}`, `Value for ${companyName}`)}</div>{row.value || tr(language, "À estimer", "To estimate")}</div>
+        <div className="px-4 py-4"><div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, "Levier", "Lever")}</div><div className="font-semibold text-[#202a2f]">{row.lever || tr(language, "À préciser", "TBD")}</div></div>
+        <div className="border-t border-[#eceeef] px-4 py-4 sm:border-l sm:border-t-0"><div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, "Mécanisme", "Mechanism")}</div>{row.mechanism || tr(language, "À préciser", "TBD")}</div>
+        <div className="border-t border-[#eceeef] px-4 py-4 sm:border-l sm:border-t-0"><div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6558c8] sm:hidden">{tr(language, `Valeur pour ${companyName}`, `Value for ${companyName}`)}</div>{row.value || tr(language, "À estimer", "To estimate")}</div>
       </div>)}</div>
     </div>
   </Section>;
@@ -107,7 +107,7 @@ export function PublicSD01EnterpriseDocument({
 
   return <div className="space-y-5 sm:space-y-6">
     {summary ? <AccordionBubble title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")}>
-      <p className="text-[18px] font-medium leading-8 text-[#202a2f]">{summary}</p>
+      <p className="text-[19px] font-medium leading-8 text-[#202a2f]">{summary}</p>
     </AccordionBubble> : null}
 
     {hasCompanyContext ? <AccordionBubble title={tr(language, "Entreprise & contexte", "Company & context")}>
@@ -121,7 +121,7 @@ export function PublicSD01EnterpriseDocument({
 
     {currentProcess.length ? <AccordionBubble title={tr(language, "Processus actuel", "Current process")}><BulletList items={currentProcess} /></AccordionBubble> : null}
 
-    {stakeholders.length ? <Section title={tr(language, "Personnes clés", "Key people")}><div className="grid gap-3 sm:grid-cols-2">{stakeholders.map((person, index) => <div key={index} className="rounded-xl bg-[#f6f7f8] p-4">{String(person.name || "").trim() ? <div className="font-semibold text-[#202a2f]">{person.name}</div> : null}{(String(person.role || "").trim() || String(person.organization || "").trim()) ? <div className="mt-1 text-[13px] text-[#687277]">{[person.role, person.organization].map(value => String(value || "").trim()).filter(Boolean).join(" · ")}</div> : null}{String(person.notes || "").trim() ? <p className="mt-2 text-[13px] leading-6 text-[#687277]">{person.notes}</p> : null}</div>)}</div></Section> : null}
+    {stakeholders.length ? <Section title={tr(language, "Personnes clés", "Key people")}><div className="grid gap-3 sm:grid-cols-2">{stakeholders.map((person, index) => <div key={index} className="rounded-xl bg-[#f6f7f8] p-4">{String(person.name || "").trim() ? <div className="font-semibold text-[#202a2f]">{person.name}</div> : null}{(String(person.role || "").trim() || String(person.organization || "").trim()) ? <div className="mt-1 text-[14px] leading-6 text-[#687277]">{[person.role, person.organization].map(value => String(value || "").trim()).filter(Boolean).join(" · ")}</div> : null}{String(person.notes || "").trim() ? <p className="mt-2 text-[14px] leading-6 text-[#687277]">{person.notes}</p> : null}</div>)}</div></Section> : null}
 
     {productsAndOffers.length ? <Section title={tr(language, "Produits & offres", "Products & offers")}><BulletList items={productsAndOffers} /></Section> : null}
 
@@ -132,7 +132,7 @@ export function PublicSD01EnterpriseDocument({
     {solutionFit.length ? <Section title={tr(language, "Solution fit", "Solution fit")} kicker={tr(language, "Besoin → réponse proposée", "Need → proposed response")}><div className="divide-y divide-[#eceeef]">{solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2">{item.need ? <div className="font-semibold text-[#202a2f]">{item.need}</div> : <div />}{item.response ? <div>{item.response}</div> : null}</div>)}</div></Section> : null}
 
     {commercialItems.length ? <Section title={tr(language, "Modèle commercial", "Commercial model")} kicker={tr(language, "Sous la solution proposée", "Below the proposed solution")}>
-      <div className="grid gap-3">{commercialItems.map((item, index) => <div key={`${index}-${item}`} className="flex gap-4 rounded-[14px] border border-[#e2e4e7] bg-[#fafafa] p-4 sm:p-5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#6e62c3] text-[11px] font-semibold text-white">{index + 1}</div><p className="pt-0.5 whitespace-pre-line text-[15px] leading-6 text-[#394348]">{item}</p></div>)}</div>
+      <div className="grid gap-3">{commercialItems.map((item, index) => <div key={`${index}-${item}`} className="flex gap-4 rounded-[14px] border border-[#e2e4e7] bg-[#fafafa] p-4 sm:p-5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#6e62c3] text-[11px] font-semibold text-white">{index + 1}</div><p className="pt-0.5 whitespace-pre-line text-[16px] leading-7 text-[#394348]">{item}</p></div>)}</div>
     </Section> : null}
 
     {metrics.length ? <PublicSD01MetricConfirmations token={token} metrics={content.roi.valueLevers} email={email} firstName={firstName} lastName={lastName} language={language} companyName={companyName} locked={locked} onConfirmed={onMetricConfirmed} /> : null}
@@ -140,6 +140,6 @@ export function PublicSD01EnterpriseDocument({
     <RoiTable rows={roiRows} companyName={companyName} language={language} />
 
     {urgency.length ? <Section title={tr(language, "Pourquoi maintenant ?", "Why now?")}><BulletList items={urgency} /></Section> : null}
-    {gandoProposal ? <Section title={tr(language, "Proposition Gando", "Gando proposal")}><p className="whitespace-pre-wrap text-[15px] leading-7 text-[#465157]">{gandoProposal}</p></Section> : null}
+    {gandoProposal ? <Section title={tr(language, "Proposition Gando", "Gando proposal")}><p className="whitespace-pre-wrap text-[16px] leading-8 text-[#465157]">{gandoProposal}</p></Section> : null}
   </div>;
 }
