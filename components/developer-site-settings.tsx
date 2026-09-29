@@ -21,6 +21,7 @@ import {
   Type,
   Upload,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 type SiteSettings = {
@@ -42,7 +43,7 @@ type SiteSettings = {
   redirects: Array<{ from: string; to: string }>;
 };
 
-const sections = [
+const sections: Array<{ group: string; items: Array<{ id: string; label: string; icon: LucideIcon }> }> = [
   { group: "Appearance", items: [
     { id: "general", label: "General", icon: Globe2 },
     { id: "styling", label: "Styling", icon: Palette },
@@ -67,7 +68,7 @@ const sections = [
     { id: "apiReference", label: "API reference", icon: Braces },
     { id: "redirects", label: "Redirects", icon: Link2 },
   ]},
-] as const;
+];
 
 function Field({
   label,
