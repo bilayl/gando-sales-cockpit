@@ -698,3 +698,307 @@ export function publicDeveloperDocsConnection(connection: DeveloperDocsConnectio
     ),
   };
 }
+
+
+export type DeveloperSiteSettings = {
+  general: {
+    siteName: string;
+    siteUrl: string;
+    language: string;
+  };
+  styling: {
+    accentColor: string;
+    radius: string;
+    theme: "system" | "light" | "dark";
+  };
+  branding: {
+    logoLight: string;
+    logoDark: string;
+    logoDestination: string;
+    faviconLight: string;
+    faviconDark: string;
+  };
+  typography: {
+    fontFamily: string;
+    headingFontFamily: string;
+  };
+  navbar: {
+    enabled: boolean;
+    ctaLabel: string;
+    ctaUrl: string;
+  };
+  footer: {
+    enabled: boolean;
+    copyright: string;
+  };
+  banner: {
+    enabled: boolean;
+    text: string;
+    link: string;
+  };
+  thumbnail: {
+    image: string;
+  };
+  content: {
+    editLink: boolean;
+    feedback: boolean;
+  };
+  codeblocks: {
+    theme: string;
+    showCopy: boolean;
+    showLineNumbers: boolean;
+  };
+  contextMenu: {
+    enabled: boolean;
+    copyLink: boolean;
+  };
+  navigationBehavior: {
+    openFirst: boolean;
+    showIcons: boolean;
+  };
+  search: {
+    enabled: boolean;
+    placeholder: string;
+  };
+  navigation: {
+    categories: string[];
+  };
+  apiReference: {
+    enabled: boolean;
+    partnerPath: string;
+    operatorPath: string;
+  };
+  redirects: Array<{ from: string; to: string }>;
+};
+
+export const DEFAULT_DEVELOPER_SITE_SETTINGS: DeveloperSiteSettings = {
+  general: {
+    siteName: "Gando Developers",
+    siteUrl: "https://app.gando.app",
+    language: "fr",
+  },
+  styling: {
+    accentColor: "#735DF3",
+    radius: "12",
+    theme: "system",
+  },
+  branding: {
+    logoLight: "/assets/gando-docs-light.svg",
+    logoDark: "/assets/gando-docs-dark.svg",
+    logoDestination: "/",
+    faviconLight: "/assets/gando-docs-favicon.svg",
+    faviconDark: "/assets/gando-docs-favicon.svg",
+  },
+  typography: {
+    fontFamily: "Inter",
+    headingFontFamily: "Inter",
+  },
+  navbar: {
+    enabled: true,
+    ctaLabel: "Dashboard",
+    ctaUrl: "https://app.gando.app",
+  },
+  footer: {
+    enabled: true,
+    copyright: "Gando",
+  },
+  banner: {
+    enabled: false,
+    text: "",
+    link: "",
+  },
+  thumbnail: {
+    image: "",
+  },
+  content: {
+    editLink: true,
+    feedback: true,
+  },
+  codeblocks: {
+    theme: "github-dark",
+    showCopy: true,
+    showLineNumbers: false,
+  },
+  contextMenu: {
+    enabled: true,
+    copyLink: true,
+  },
+  navigationBehavior: {
+    openFirst: true,
+    showIcons: true,
+  },
+  search: {
+    enabled: true,
+    placeholder: "Rechercher dans la documentation…",
+  },
+  navigation: {
+    categories: [],
+  },
+  apiReference: {
+    enabled: true,
+    partnerPath: "/partner",
+    operatorPath: "/operator",
+  },
+  redirects: [],
+};
+
+function mergeDeveloperSiteSettings(input: unknown): DeveloperSiteSettings {
+  const source = input && typeof input === "object" ? input as Partial<DeveloperSiteSettings> : {};
+  return {
+    general: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.general, ...(source.general || {}) },
+    styling: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.styling, ...(source.styling || {}) },
+    branding: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.branding, ...(source.branding || {}) },
+    typography: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.typography, ...(source.typography || {}) },
+    navbar: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.navbar, ...(source.navbar || {}) },
+    footer: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.footer, ...(source.footer || {}) },
+    banner: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.banner, ...(source.banner || {}) },
+    thumbnail: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.thumbnail, ...(source.thumbnail || {}) },
+    content: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.content, ...(source.content || {}) },
+    codeblocks: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.codeblocks, ...(source.codeblocks || {}) },
+    contextMenu: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.contextMenu, ...(source.contextMenu || {}) },
+    navigationBehavior: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.navigationBehavior, ...(source.navigationBehavior || {}) },
+    search: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.search, ...(source.search || {}) },
+    navigation: {
+      categories: Array.isArray(source.navigation?.categories)
+        ? source.navigation.categories.map(item => String(item).trim()).filter(Boolean)
+        : [],
+    },
+    apiReference: { ...DEFAULT_DEVELOPER_SITE_SETTINGS.apiReference, ...(source.apiReference || {}) },
+    redirects: Array.isArray(source.redirects)
+      ? source.redirects
+          .map(item => ({
+            from: String(item?.from || "").trim(),
+            to: String(item?.to || "").trim(),
+          }))
+          .filter(item => item.from && item.to)
+      : [],
+  };
+}
+
+function developerSiteSettingsPath(connection: DeveloperDocsConnection) {
+  return `${connection.basePath}/site.config.json`;
+}
+
+export async function getDeveloperSiteSettings(connection: DeveloperDocsConnection) {
+  const path = developerSiteSettingsPath(connection);
+  try {
+    const file = await githubRequest<GithubContentsFile>(
+      connection,
+      `/repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}/contents/${githubPath(path)}?ref=${encodeURIComponent(connection.branch)}`,
+    );
+    const parsed = JSON.parse(decodeGithubContent(file));
+    return {
+      settings: mergeDeveloperSiteSettings(parsed),
+      sha: file.sha || "",
+      path,
+    };
+  } catch (error) {
+    if (error instanceof DeveloperDocsGithubError && error.status === 404) {
+      return {
+        settings: DEFAULT_DEVELOPER_SITE_SETTINGS,
+        sha: "",
+        path,
+      };
+    }
+    throw error;
+  }
+}
+
+export async function saveDeveloperSiteSettings(
+  connection: DeveloperDocsConnection,
+  input: unknown,
+) {
+  if (!connection.token) {
+    throw new DeveloperDocsGithubError("Ajoutez un token GitHub avant de modifier les paramètres du site.", 409);
+  }
+
+  const current = await getDeveloperSiteSettings(connection);
+  const settings = mergeDeveloperSiteSettings(input);
+  const payload: Record<string, unknown> = {
+    message: "docs: update developer site settings",
+    content: Buffer.from(JSON.stringify(settings, null, 2) + "\n", "utf8").toString("base64"),
+    branch: connection.branch,
+  };
+  if (current.sha) payload.sha = current.sha;
+
+  await githubRequest(
+    connection,
+    `/repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}/contents/${githubPath(current.path)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+
+  return getDeveloperSiteSettings(connection);
+}
+
+function cleanDeveloperAssetName(fileName: string) {
+  const dot = fileName.lastIndexOf(".");
+  const ext = dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
+  const base = (dot >= 0 ? fileName.slice(0, dot) : fileName)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "image";
+  return `${base}${ext}`;
+}
+
+export async function uploadDeveloperDocsAsset(
+  connection: DeveloperDocsConnection,
+  input: { fileName: string; bytes: Buffer },
+) {
+  if (!connection.token) {
+    throw new DeveloperDocsGithubError("Ajoutez un token GitHub avant d’envoyer une image.", 409);
+  }
+
+  const safeName = cleanDeveloperAssetName(input.fileName);
+  const uniqueName = `${Date.now()}-${safeName}`;
+  const path = `public/developer-docs-assets/${uniqueName}`;
+
+  await githubRequest(
+    connection,
+    `/repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}/contents/${githubPath(path)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        message: `docs: upload ${safeName}`,
+        content: input.bytes.toString("base64"),
+        branch: connection.branch,
+      }),
+    },
+  );
+
+  return {
+    path,
+    src: `/developer-docs-assets/${uniqueName}`,
+    fileName: uniqueName,
+  };
+}
+
+export async function readDeveloperDocsAsset(
+  connection: DeveloperDocsConnection,
+  path: string,
+) {
+  const normalized = path.trim().replace(/^\/+/, "");
+  if (
+    !normalized.startsWith("public/developer-docs-assets/")
+    || normalized.includes("..")
+  ) {
+    throw new DeveloperDocsGithubError("Chemin d’image invalide.", 400);
+  }
+
+  const file = await githubRequest<GithubContentsFile>(
+    connection,
+    `/repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}/contents/${githubPath(normalized)}?ref=${encodeURIComponent(connection.branch)}`,
+  );
+  if (file.type !== "file") {
+    throw new DeveloperDocsGithubError("Image GitHub invalide.", 404);
+  }
+  if (file.encoding !== "base64" || typeof file.content !== "string") {
+    throw new DeveloperDocsGithubError("Format d’image GitHub non pris en charge.", 500);
+  }
+
+  return Buffer.from(file.content.replace(/\n/g, ""), "base64");
+}
