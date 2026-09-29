@@ -36,8 +36,18 @@ function AccordionBubble({ title, children, kicker, defaultOpen = false }: { tit
   </details>;
 }
 
+function RichInlineText({ value }: { value: string }) {
+  const parts = String(value || "").split(/(\*\*[^*]+\*\*)/g);
+  return <>{parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={index} className="font-semibold text-[#202a2f]">{part.slice(2, -2)}</strong>;
+    }
+    return <span key={index}>{part}</span>;
+  })}</>;
+}
+
 function BulletList({ items }: { items: string[] }) {
-  return <ul className="space-y-3.5">{items.map((item, index) => <li key={`${index}-${item}`} className="flex gap-3 leading-7"><span className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#7166c7]" /><span>{item}</span></li>)}</ul>;
+  return <ul className="space-y-3.5">{items.map((item, index) => <li key={`${index}-${item}`} className="flex gap-3 leading-7"><span className="mt-[11px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#7166c7]" /><span><RichInlineText value={item} /></span></li>)}</ul>;
 }
 
 function RoiTable({ rows, companyName, language }: { rows: SD01Metric[]; companyName: string; language: RoomLanguage }) {
@@ -107,32 +117,32 @@ export function PublicSD01EnterpriseDocument({
 
   return <div className="space-y-5 sm:space-y-6">
     {summary ? <AccordionBubble title={tr(language, "Synthèse exécutive", "Executive summary")} kicker={tr(language, "SD01 · Compréhension commune", "SD01 · Shared understanding")}>
-      <p className="text-[19px] font-medium leading-8 text-[#202a2f]">{summary}</p>
+      <p className="text-[19px] font-medium leading-8 text-[#202a2f]"><RichInlineText value={summary} /></p>
     </AccordionBubble> : null}
 
     {hasCompanyContext ? <AccordionBubble title={tr(language, "Entreprise & contexte", "Company & context")}>
       {(sector || companyDescription) ? <div className="grid gap-5 sm:grid-cols-2">
         {sector ? <div><Eyebrow>{tr(language, "Secteur", "Industry")}</Eyebrow><div className="mt-2 font-semibold text-[#202a2f]">{sector}</div></div> : null}
-        {companyDescription ? <div><Eyebrow>{tr(language, "Entreprise", "Company")}</Eyebrow><p className="mt-2">{companyDescription}</p></div> : null}
+        {companyDescription ? <div><Eyebrow>{tr(language, "Entreprise", "Company")}</Eyebrow><p className="mt-2"><RichInlineText value={companyDescription} /></p></div> : null}
       </div> : null}
-      {companyContext ? <div className={`${sector || companyDescription ? "mt-5 border-t border-[#eceeef] pt-5" : ""}`}><Eyebrow>{tr(language, "Contexte", "Context")}</Eyebrow><p className="mt-2">{companyContext}</p></div> : null}
-      {gandoContext ? <div className={`${sector || companyDescription || companyContext ? "mt-5" : ""} rounded-xl bg-[#f7f6ff] p-4`}><Eyebrow>{tr(language, "Pourquoi Gando", "Why Gando")}</Eyebrow><p className="mt-2">{gandoContext}</p></div> : null}
+      {companyContext ? <div className={`${sector || companyDescription ? "mt-5 border-t border-[#eceeef] pt-5" : ""}`}><Eyebrow>{tr(language, "Contexte", "Context")}</Eyebrow><p className="mt-2"><RichInlineText value={companyContext} /></p></div> : null}
+      {gandoContext ? <div className={`${sector || companyDescription || companyContext ? "mt-5" : ""} rounded-xl bg-[#f7f6ff] p-4`}><Eyebrow>{tr(language, "Pourquoi Gando", "Why Gando")}</Eyebrow><p className="mt-2"><RichInlineText value={gandoContext} /></p></div> : null}
     </AccordionBubble> : null}
 
     {currentProcess.length ? <AccordionBubble title={tr(language, "Processus actuel", "Current process")}><BulletList items={currentProcess} /></AccordionBubble> : null}
 
-    {stakeholders.length ? <Section title={tr(language, "Personnes clés", "Key people")}><div className="grid gap-3 sm:grid-cols-2">{stakeholders.map((person, index) => <div key={index} className="rounded-xl bg-[#f6f7f8] p-4">{String(person.name || "").trim() ? <div className="font-semibold text-[#202a2f]">{person.name}</div> : null}{(String(person.role || "").trim() || String(person.organization || "").trim()) ? <div className="mt-1 text-[14px] leading-6 text-[#687277]">{[person.role, person.organization].map(value => String(value || "").trim()).filter(Boolean).join(" · ")}</div> : null}{String(person.notes || "").trim() ? <p className="mt-2 text-[14px] leading-6 text-[#687277]">{person.notes}</p> : null}</div>)}</div></Section> : null}
+    {stakeholders.length ? <Section title={tr(language, "Personnes clés", "Key people")}><div className="grid gap-3 sm:grid-cols-2">{stakeholders.map((person, index) => <div key={index} className="rounded-xl bg-[#f6f7f8] p-4">{String(person.name || "").trim() ? <div className="font-semibold text-[#202a2f]">{person.name}</div> : null}{(String(person.role || "").trim() || String(person.organization || "").trim()) ? <div className="mt-1 text-[14px] leading-6 text-[#687277]">{[person.role, person.organization].map(value => String(value || "").trim()).filter(Boolean).join(" · ")}</div> : null}{String(person.notes || "").trim() ? <p className="mt-2 text-[14px] leading-6 text-[#687277]"><RichInlineText value={person.notes} /></p> : null}</div>)}</div></Section> : null}
 
     {productsAndOffers.length ? <Section title={tr(language, "Produits & offres", "Products & offers")}><BulletList items={productsAndOffers} /></Section> : null}
 
     {painPoints.length ? <Section title={tr(language, "Enjeux prioritaires", "Top priorities")}>
-      <div className="space-y-5">{painPoints.map((pain, index) => <div key={index} className="border-b border-[#eceeef] pb-5 last:border-0 last:pb-0">{pain.title ? <div className="font-semibold text-[#202a2f]">{pain.title}</div> : null}{pain.details.length ? <div className={pain.title ? "mt-2" : ""}><BulletList items={pain.details} /></div> : null}</div>)}</div>
+      <div className="space-y-5">{painPoints.map((pain, index) => <div key={index} className="border-b border-[#eceeef] pb-5 last:border-0 last:pb-0">{pain.title ? <div className="font-semibold text-[#202a2f]"><RichInlineText value={pain.title} /></div> : null}{pain.details.length ? <div className={pain.title ? "mt-2" : ""}><BulletList items={pain.details} /></div> : null}</div>)}</div>
     </Section> : null}
 
-    {solutionFit.length ? <Section title={tr(language, "Solution fit", "Solution fit")} kicker={tr(language, "Besoin → réponse proposée", "Need → proposed response")}><div className="divide-y divide-[#eceeef]">{solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2">{item.need ? <div className="font-semibold text-[#202a2f]">{item.need}</div> : <div />}{item.response ? <div>{item.response}</div> : null}</div>)}</div></Section> : null}
+    {solutionFit.length ? <Section title={tr(language, "Solution fit", "Solution fit")} kicker={tr(language, "Besoin → réponse proposée", "Need → proposed response")}><div className="divide-y divide-[#eceeef]">{solutionFit.map((item, index) => <div key={index} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-2">{item.need ? <div className="font-semibold text-[#202a2f]"><RichInlineText value={item.need} /></div> : <div />}{item.response ? <div><RichInlineText value={item.response} /></div> : null}</div>)}</div></Section> : null}
 
     {commercialItems.length ? <Section title={tr(language, "Modèle commercial", "Commercial model")} kicker={tr(language, "Sous la solution proposée", "Below the proposed solution")}>
-      <div className="grid gap-3">{commercialItems.map((item, index) => <div key={`${index}-${item}`} className="flex gap-4 rounded-[14px] border border-[#e2e4e7] bg-[#fafafa] p-4 sm:p-5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#6e62c3] text-[11px] font-semibold text-white">{index + 1}</div><p className="pt-0.5 whitespace-pre-line text-[16px] leading-7 text-[#394348]">{item}</p></div>)}</div>
+      <div className="grid gap-3">{commercialItems.map((item, index) => <div key={`${index}-${item}`} className="flex gap-4 rounded-[14px] border border-[#e2e4e7] bg-[#fafafa] p-4 sm:p-5"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#6e62c3] text-[11px] font-semibold text-white">{index + 1}</div><p className="pt-0.5 whitespace-pre-line text-[16px] leading-7 text-[#394348]"><RichInlineText value={item} /></p></div>)}</div>
     </Section> : null}
 
     {metrics.length ? <PublicSD01MetricConfirmations token={token} metrics={content.roi.valueLevers} email={email} firstName={firstName} lastName={lastName} language={language} companyName={companyName} locked={locked} onConfirmed={onMetricConfirmed} /> : null}
@@ -140,6 +150,6 @@ export function PublicSD01EnterpriseDocument({
     <RoiTable rows={roiRows} companyName={companyName} language={language} />
 
     {urgency.length ? <Section title={tr(language, "Pourquoi maintenant ?", "Why now?")}><BulletList items={urgency} /></Section> : null}
-    {gandoProposal ? <Section title={tr(language, "Proposition Gando", "Gando proposal")}><p className="whitespace-pre-wrap text-[16px] leading-8 text-[#465157]">{gandoProposal}</p></Section> : null}
+    {gandoProposal ? <Section title={tr(language, "Proposition Gando", "Gando proposal")}><p className="whitespace-pre-wrap text-[16px] leading-8 text-[#465157]"><RichInlineText value={gandoProposal} /></p></Section> : null}
   </div>;
 }
