@@ -247,5 +247,16 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         <Field label="Points de valeur / ROI" hint="Une ligne par bénéfice"><Area value={value.proofPoints.join("\n")} onChange={next => set("proofPoints", draftLines(next))} rows={6} placeholder={'Pas de fonds immobilisés\nGain de temps opérationnel\nRevenu additionnel possible'} /></Field>
       </Card>
     </div>
+
+    <Card className="p-5 lg:p-6">
+      <Field label="Proposition Gando" hint="Bloc de texte libre affiché à la fin de la proposition">
+        <Area
+          value={value.proposalGandoText || ""}
+          onChange={next => set("proposalGandoText", next)}
+          rows={8}
+          placeholder="Ajoute ici le texte final de la proposition Gando…"
+        />
+      </Field>
+    </Card>
   </div></div>;
 }
