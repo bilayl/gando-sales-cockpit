@@ -50,6 +50,18 @@ export type SD01Metric = {
   confirmedAt?: string | null;
 };
 
+export type SD01PricingProposal = {
+  enabled: boolean;
+  gandoRatePercent: number;
+  partnerMarginPercent: number;
+  averageDepositAmount: number;
+  monthlyDeposits: number;
+  gandoRateNote: string;
+  partnerMarginNote: string;
+  intro: string;
+  revenueIntro: string;
+};
+
 export type SD01Content = {
   executiveSummary: string;
   companyProfile: { sector: string; description: string; context: string };
@@ -67,6 +79,7 @@ export type SD01Content = {
   };
   urgency: string[];
   gandoProposal?: string;
+  pricingProposal: SD01PricingProposal;
   decisions: string[];
   openQuestions: string[];
   nextSteps: SD01NextStep[];
@@ -182,6 +195,17 @@ export function createEmptySD01(companyName = ""): SD01Content {
     roi: { valueLevers: [], estimates: [], metricsRequired: [] },
     urgency: [],
     gandoProposal: "",
+    pricingProposal: {
+      enabled: false,
+      gandoRatePercent: 2.9,
+      partnerMarginPercent: 0.7,
+      averageDepositAmount: 1000,
+      monthlyDeposits: 60,
+      gandoRateNote: "par caution activée",
+      partnerMarginNote: "optionnelle · conservée par le partenaire",
+      intro: "Les éléments clés sont présentés immédiatement, comme dans une proposition commerciale : tarif, marge éventuelle et conditions principales.",
+      revenueIntro: "Une illustration concrète de ce que la marge partenaire peut représenter. Cette projection dépend du volume réel de cautions activées. Tous les revenus indiqués sont hors taxes (HT).",
+    },
     decisions: [],
     openQuestions: [],
     nextSteps: [],
