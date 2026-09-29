@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, Clock3, Eye, History, Loader2, MessageSquareText, Plus, RefreshCw, RotateCcw, Save, Sparkles, Target, Trash2, Users } from "lucide-react";
+import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bold, Check, ChevronDown, Clock3, Eye, History, Loader2, MessageSquareText, Plus, RefreshCw, RotateCcw, Save, Sparkles, Target, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,7 +60,53 @@ function formatDuration(seconds: number) {
 }
 
 function FreeTextarea({ value, onChange, rows = 4, placeholder }: { value: string; onChange: (value: string) => void; rows?: number; placeholder?: string }) {
-  return <textarea value={value} onChange={event => onChange(event.target.value)} rows={rows} placeholder={placeholder} className="w-full resize-y border-0 bg-transparent p-0 text-[15px] leading-7 text-foreground outline-none placeholder:text-muted-foreground/50 focus:ring-0" />;
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  function applyBold() {
+    const textarea = ref.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart ?? value.length;
+    const end = textarea.selectionEnd ?? start;
+    const selected = value.slice(start, end);
+    const inner = selected || "texte en gras";
+    const next = `${value.slice(0, start)}**${inner}**${value.slice(end)}`;
+    onChange(next);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + 2, start + 2 + inner.length);
+    });
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
+      event.preventDefault();
+      applyBold();
+    }
+  }
+
+  return <div className="group/text relative">
+    <button
+      type="button"
+      onClick={applyBold}
+      className="absolute right-0 top-0 z-10 inline-flex h-7 items-center gap-1 rounded-md border border-border/70 bg-background/95 px-2 text-[10px] font-bold text-muted-foreground opacity-70 shadow-sm transition hover:text-foreground group-focus-within/text:opacity-100 group-hover/text:opacity-100"
+      title="Mettre en gras · Ctrl/Cmd+B"
+      aria-label="Mettre le texte sélectionné en gras"
+    >
+      <Bold className="h-3.5 w-3.5" />
+      Gras
+    </button>
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={event => onChange(event.target.value)}
+      onKeyDown={onKeyDown}
+      rows={rows}
+      placeholder={placeholder}
+      className="w-full resize-y border-0 bg-transparent p-0 pr-16 text-[15px] leading-7 text-foreground outline-none placeholder:text-muted-foreground/50 focus:ring-0"
+    />
+  </div>;
 }
 
 function DocBlock({ title, hint, children, action }: { title: string; hint?: string; children: ReactNode; action?: ReactNode }) {
