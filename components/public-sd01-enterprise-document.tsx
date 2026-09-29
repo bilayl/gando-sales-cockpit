@@ -72,6 +72,79 @@ function nonEmptyLines(values?: string[]) {
   return (values || []).map(value => String(value || "").trim()).filter(Boolean);
 }
 
+function pricingPercent(value: number) {
+  return `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number.isFinite(value) ? value : 0)} %`;
+}
+
+function pricingMoney(value: number) {
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function PricingProposal({ content, language }: { content: SD01Content; language: RoomLanguage }) {
+  const pricing = content.pricingProposal;
+  if (!pricing?.enabled) return null;
+
+  const gandoRate = Math.max(0, Number(pricing.gandoRatePercent) || 0);
+  const partnerMargin = Math.max(0, Number(pricing.partnerMarginPercent) || 0);
+  const averageDeposit = Math.max(0, Number(pricing.averageDepositAmount) || 0);
+  const monthlyDeposits = Math.max(0, Math.round(Number(pricing.monthlyDeposits) || 0));
+  const revenuePerDeposit = averageDeposit * (partnerMargin / 100);
+  const monthlyRevenue = revenuePerDeposit * monthlyDeposits;
+  const annualRevenue = monthlyRevenue * 12;
+
+  return <Section title={tr(language, "Proposition tarifaire", "Pricing proposal")} kicker={tr(language, "Tarification", "Pricing")}>
+    {pricing.intro ? <p className="max-w-4xl text-[16px] leading-8 text-[#566166]"><RichInlineText value={pricing.intro} /></p> : null}
+
+    <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <div className="rounded-[18px] border border-[#dcd8f5] bg-[#f8f7ff] p-5 sm:p-6">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#6f62c5]">{tr(language, "Tarif Gando", "Gando fee")}</div>
+        <div className="mt-4 text-[35px] font-semibold tracking-[-0.04em] text-[#232333] sm:text-[40px]">{pricingPercent(gandoRate)} HT</div>
+        <div className="mt-3 text-[14px] leading-6 text-[#77778b]">{pricing.gandoRateNote || tr(language, "par caution activée", "per activated deposit")}</div>
+      </div>
+
+      <div className="rounded-[18px] border border-[#dcd8f5] bg-[#f8f7ff] p-5 sm:p-6">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#6f62c5]">{tr(language, "Marge partenaire", "Partner margin")}</div>
+        <div className="mt-4 text-[35px] font-semibold tracking-[-0.04em] text-[#232333] sm:text-[40px]">{pricingPercent(partnerMargin)} HT</div>
+        <div className="mt-3 text-[14px] leading-6 text-[#77778b]">{pricing.partnerMarginNote || tr(language, "optionnelle · conservée par le partenaire", "optional · kept by the partner")}</div>
+      </div>
+    </div>
+
+    {partnerMargin > 0 ? <div className="mt-8 border-t border-[#e5e7e9] pt-7">
+      <Eyebrow>{tr(language, "Exemple de revenu partenaire", "Partner revenue example")}</Eyebrow>
+      {pricing.revenueIntro ? <p className="mt-3 max-w-4xl text-[16px] leading-8 text-[#566166]"><RichInlineText value={pricing.revenueIntro} /></p> : null}
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-[18px] border border-[#e1e4e6] bg-[#fbfbfc] p-5 sm:p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#697378]">{tr(language, "Par caution · HT", "Per deposit · excl. tax")}</div>
+          <div className="mt-3 text-[30px] font-semibold tracking-[-0.04em] text-[#232333]">{pricingMoney(revenuePerDeposit)} HT</div>
+          <div className="mt-2 text-[13px] text-[#7c858a]">{pricingMoney(averageDeposit)} × {pricingPercent(partnerMargin)}</div>
+        </div>
+
+        <div className="rounded-[18px] border border-[#dcd8f5] bg-[#f8f7ff] p-5 sm:p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6f62c5]">{tr(language, "Revenu estimé / mois · HT", "Estimated revenue / month · excl. tax")}</div>
+          <div className="mt-3 text-[30px] font-semibold tracking-[-0.04em] text-[#6657c6]">{pricingMoney(monthlyRevenue)} HT</div>
+          <div className="mt-2 text-[13px] text-[#7c758f]">{monthlyDeposits} {tr(language, "cautions activées / mois", "activated deposits / month")}</div>
+        </div>
+
+        <div className="rounded-[18px] border border-[#e1e4e6] bg-[#fbfbfc] p-5 sm:p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#697378]">{tr(language, "Projection annuelle · HT", "Annual projection · excl. tax")}</div>
+          <div className="mt-3 text-[30px] font-semibold tracking-[-0.04em] text-[#232333]">{pricingMoney(annualRevenue)} HT</div>
+          <div className="mt-2 text-[13px] text-[#7c858a]">{tr(language, "à volume mensuel constant", "at constant monthly volume")}</div>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-[16px] bg-[#f7f8f8] px-5 py-4 text-[15px] leading-7 text-[#566166]">
+        {tr(language, "Exemple : avec une caution moyenne de", "Example: with an average deposit of")} <strong className="font-semibold text-[#202a2f]">{pricingMoney(averageDeposit)}</strong> {tr(language, "et une marge partenaire de", "and a partner margin of")} <strong className="font-semibold text-[#202a2f]">{pricingPercent(partnerMargin)}</strong>, {tr(language, "chaque caution activée génère", "each activated deposit generates")} <strong className="font-semibold text-[#202a2f]">{pricingMoney(revenuePerDeposit)} HT</strong>. {tr(language, "À", "At")} <strong className="font-semibold text-[#202a2f]">{monthlyDeposits} {tr(language, "cautions/mois", "deposits/month")}</strong>, {tr(language, "cela représente environ", "this represents approximately")} <strong className="font-semibold text-[#6657c6]">{pricingMoney(monthlyRevenue)} HT/{tr(language, "mois", "month")}</strong>.
+      </div>
+    </div> : null}
+  </Section>;
+}
+
 export function PublicSD01EnterpriseDocument({
   content,
   language,
@@ -151,5 +224,6 @@ export function PublicSD01EnterpriseDocument({
 
     {urgency.length ? <Section title={tr(language, "Pourquoi maintenant ?", "Why now?")}><BulletList items={urgency} /></Section> : null}
     {gandoProposal ? <Section title={tr(language, "Proposition Gando", "Gando proposal")}><p className="whitespace-pre-wrap text-[16px] leading-8 text-[#465157]"><RichInlineText value={gandoProposal} /></p></Section> : null}
+    <PricingProposal content={content} language={language} />
   </div>;
 }
