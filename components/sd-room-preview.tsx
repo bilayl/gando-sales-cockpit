@@ -33,6 +33,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return <section className="rounded-[16px] border border-[#e1e4e6] bg-white p-5 sm:p-6"><h3 className="text-[16px] font-semibold text-[#202a2f]">{title}</h3><div className="mt-4">{children}</div></section>;
 }
 
+function previewPercent(value: number) {
+  return `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number.isFinite(value) ? value : 0)} %`;
+}
+
+function previewMoney(value: number) {
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
 function PreviewSD01({ content }: { content: SD01Content }) {
   const metrics = (content.roi?.valueLevers || []).filter(metric => metric.value?.trim());
   return <div className="space-y-4">
@@ -45,6 +58,24 @@ function PreviewSD01({ content }: { content: SD01Content }) {
     {metrics.length ? <Section title="Métriques confirmées"><div className="grid gap-3 sm:grid-cols-2">{metrics.map((metric, index) => <div key={index} className="rounded-xl bg-[#f3f0ff] p-4"><div className="text-xs font-semibold text-[#5c50ae]">{metric.lever}</div><div className="mt-1 text-xl font-bold text-[#2e2867]">{metric.value}</div>{metric.mechanism ? <div className="mt-1 text-xs leading-5 text-[#6c668a]">{metric.mechanism}</div> : null}</div>)}</div></Section> : null}
     {content.urgency?.length ? <Section title="Pourquoi maintenant ?"><List items={content.urgency} /></Section> : null}
     {content.gandoProposal?.trim() ? <Section title="Proposition Gando"><p className="whitespace-pre-wrap text-sm leading-7 text-[#566166]">{content.gandoProposal}</p></Section> : null}
+    {content.pricingProposal?.enabled ? (() => {
+      const pricing = content.pricingProposal;
+      const perDeposit = pricing.averageDepositAmount * (pricing.partnerMarginPercent / 100);
+      const monthly = perDeposit * pricing.monthlyDeposits;
+      const annual = monthly * 12;
+      return <Section title="Proposition tarifaire">
+        {pricing.intro ? <p className="text-sm leading-7 text-[#566166]">{pricing.intro}</p> : null}
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-[#dedaf7] bg-[#f8f7ff] p-4"><div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8]">Tarif Gando</div><div className="mt-2 text-2xl font-bold text-[#2e2867]">{previewPercent(pricing.gandoRatePercent)} HT</div><div className="mt-1 text-xs text-[#77778b]">{pricing.gandoRateNote}</div></div>
+          <div className="rounded-xl border border-[#dedaf7] bg-[#f8f7ff] p-4"><div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6558c8]">Marge partenaire</div><div className="mt-2 text-2xl font-bold text-[#2e2867]">{previewPercent(pricing.partnerMarginPercent)} HT</div><div className="mt-1 text-xs text-[#77778b]">{pricing.partnerMarginNote}</div></div>
+        </div>
+        {pricing.partnerMarginPercent > 0 ? <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-[#e1e4e6] bg-[#fbfbfc] p-4"><div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#737b80]">Par caution · HT</div><div className="mt-2 text-xl font-bold text-[#202a2f]">{previewMoney(perDeposit)} HT</div></div>
+          <div className="rounded-xl border border-[#dedaf7] bg-[#f8f7ff] p-4"><div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#6558c8]">Revenu / mois · HT</div><div className="mt-2 text-xl font-bold text-[#6558c8]">{previewMoney(monthly)} HT</div><div className="mt-1 text-[10px] text-[#77778b]">{pricing.monthlyDeposits} cautions / mois</div></div>
+          <div className="rounded-xl border border-[#e1e4e6] bg-[#fbfbfc] p-4"><div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#737b80]">Projection annuelle · HT</div><div className="mt-2 text-xl font-bold text-[#202a2f]">{previewMoney(annual)} HT</div></div>
+        </div> : null}
+      </Section>;
+    })() : null}
   </div>;
 }
 

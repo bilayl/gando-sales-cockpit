@@ -34,6 +34,15 @@ function cleanContent(value: unknown, companyName = ""): SD01Content {
     solutionFit: Array.isArray(source.solutionFit) ? source.solutionFit : [],
     roi: { valueLevers: metrics, estimates, metricsRequired: [] },
     urgency: Array.isArray(source.urgency) ? source.urgency : [],
+    pricingProposal: {
+      ...empty.pricingProposal,
+      ...(source.pricingProposal || {}),
+      enabled: Boolean(source.pricingProposal?.enabled),
+      gandoRatePercent: Number(source.pricingProposal?.gandoRatePercent ?? empty.pricingProposal.gandoRatePercent) || 0,
+      partnerMarginPercent: Number(source.pricingProposal?.partnerMarginPercent ?? empty.pricingProposal.partnerMarginPercent) || 0,
+      averageDepositAmount: Number(source.pricingProposal?.averageDepositAmount ?? empty.pricingProposal.averageDepositAmount) || 0,
+      monthlyDeposits: Math.max(0, Math.round(Number(source.pricingProposal?.monthlyDeposits ?? empty.pricingProposal.monthlyDeposits) || 0)),
+    },
     decisions: Array.isArray(source.decisions) ? source.decisions : [],
     openQuestions: Array.isArray(source.openQuestions) ? source.openQuestions : [],
     nextSteps: Array.isArray(source.nextSteps) ? source.nextSteps : [],
@@ -57,6 +66,14 @@ function formatDuration(seconds: number) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
+function formatPercent(value: number) {
+  return `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number.isFinite(value) ? value : 0)} %`;
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number.isFinite(value) ? value : 0);
 }
 
 function FreeTextarea({ value, onChange, rows = 4, placeholder }: { value: string; onChange: (value: string) => void; rows?: number; placeholder?: string }) {
@@ -321,6 +338,10 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
   const addFit = () => update("solutionFit", [...content.solutionFit, { need: "", response: "" }]);
   const addMetric = () => update("roi", { ...content.roi, valueLevers: [...content.roi.valueLevers, { lever: "", mechanism: "", value: "" }] });
   const addRoiEstimate = () => update("roi", { ...content.roi, estimates: [...(content.roi.estimates || []), { lever: "", mechanism: "", value: "" }] });
+  const pricing = content.pricingProposal;
+  const partnerRevenuePerDeposit = pricing.averageDepositAmount * (pricing.partnerMarginPercent / 100);
+  const partnerRevenueMonthly = partnerRevenuePerDeposit * pricing.monthlyDeposits;
+  const partnerRevenueAnnual = partnerRevenueMonthly * 12;
 
   return <>
     <div className="min-h-screen bg-muted/20 px-4 py-6 lg:px-7 lg:py-8">
@@ -376,6 +397,110 @@ export function SD01EnterpriseWorkspace({ dealId }: { dealId: string }) {
             <DocBlock title="Pourquoi maintenant ?" hint="Contexte d’urgence ou événement déclencheur, si pertinent."><FreeTextarea value={textLines(content.urgency)} onChange={value => update("urgency", draftLines(value))} rows={4} placeholder="Un facteur par ligne…" /></DocBlock>
 
             <DocBlock title="Proposition Gando" hint="Texte libre de proposition, placé juste après « Pourquoi maintenant ? »."><FreeTextarea value={content.gandoProposal || ""} onChange={value => update("gandoProposal", value)} rows={8} placeholder="Décris ici la proposition Gando pour ce client…" /></DocBlock>
+
+            <DocBlock
+              title="Proposition tarifaire"
+              hint="Bloc final du SD01. Le revenu partenaire est calculé automatiquement à partir de la caution moyenne, de la marge et du volume mensuel."
+              action={<Button
+                type="button"
+                variant={pricing.enabled ? "default" : "outline"}
+                size="sm"
+                onClick={() => update("pricingProposal", { ...pricing, enabled: !pricing.enabled })}
+              >{pricing.enabled ? "Affichée au client" : "Masquée au client"}</Button>}
+            >
+              <div className="space-y-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="rounded-xl border border-border bg-background p-4">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Tarif Gando · % HT</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={pricing.gandoRatePercent}
+                      onChange={event => update("pricingProposal", { ...pricing, gandoRatePercent: Math.max(0, Number(event.target.value) || 0) })}
+                      className="mt-2 h-10 text-base font-bold"
+                    />
+                    <Input
+                      value={pricing.gandoRateNote}
+                      onChange={event => update("pricingProposal", { ...pricing, gandoRateNote: event.target.value })}
+                      className="mt-2 h-9 text-xs"
+                      placeholder="par caution activée"
+                    />
+                  </label>
+
+                  <label className="rounded-xl border border-border bg-background p-4">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Marge partenaire · % HT</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={pricing.partnerMarginPercent}
+                      onChange={event => update("pricingProposal", { ...pricing, partnerMarginPercent: Math.max(0, Number(event.target.value) || 0) })}
+                      className="mt-2 h-10 text-base font-bold"
+                    />
+                    <Input
+                      value={pricing.partnerMarginNote}
+                      onChange={event => update("pricingProposal", { ...pricing, partnerMarginNote: event.target.value })}
+                      className="mt-2 h-9 text-xs"
+                      placeholder="optionnelle · conservée par le partenaire"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="rounded-xl border border-border bg-muted/20 p-4">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Caution moyenne · €</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="10"
+                      value={pricing.averageDepositAmount}
+                      onChange={event => update("pricingProposal", { ...pricing, averageDepositAmount: Math.max(0, Number(event.target.value) || 0) })}
+                      className="mt-2 h-10 text-base font-bold"
+                    />
+                  </label>
+                  <label className="rounded-xl border border-border bg-muted/20 p-4">
+                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Cautions activées / mois</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={pricing.monthlyDeposits}
+                      onChange={event => update("pricingProposal", { ...pricing, monthlyDeposits: Math.max(0, Math.round(Number(event.target.value) || 0)) })}
+                      className="mt-2 h-10 text-base font-bold"
+                    />
+                  </label>
+                </div>
+
+                <div className="rounded-xl border border-border bg-muted/15 p-4">
+                  <div className="text-[10px] font-black uppercase tracking-[0.12em] text-primary">Texte d’introduction</div>
+                  <div className="mt-3"><FreeTextarea value={pricing.intro} onChange={value => update("pricingProposal", { ...pricing, intro: value })} rows={3} placeholder="Présente les conditions tarifaires…" /></div>
+                  <div className="mt-4 border-t border-border/60 pt-4 text-[10px] font-black uppercase tracking-[0.12em] text-primary">Introduction revenu partenaire</div>
+                  <div className="mt-3"><FreeTextarea value={pricing.revenueIntro} onChange={value => update("pricingProposal", { ...pricing, revenueIntro: value })} rows={3} placeholder="Explique la projection de revenu partenaire…" /></div>
+                </div>
+
+                <div>
+                  <div className="mb-3 text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Aperçu du calcul</div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border border-border bg-background p-4">
+                      <div className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Par caution · HT</div>
+                      <div className="mt-2 text-xl font-black">{formatMoney(partnerRevenuePerDeposit)} HT</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{formatMoney(pricing.averageDepositAmount)} × {formatPercent(pricing.partnerMarginPercent)}</div>
+                    </div>
+                    <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
+                      <div className="text-[10px] font-black uppercase tracking-[0.12em] text-primary">Revenu estimé / mois · HT</div>
+                      <div className="mt-2 text-xl font-black text-primary">{formatMoney(partnerRevenueMonthly)} HT</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{pricing.monthlyDeposits} cautions activées / mois</div>
+                    </div>
+                    <div className="rounded-xl border border-border bg-background p-4">
+                      <div className="text-[10px] font-black uppercase tracking-[0.12em] text-muted-foreground">Projection annuelle · HT</div>
+                      <div className="mt-2 text-xl font-black">{formatMoney(partnerRevenueAnnual)} HT</div>
+                      <div className="mt-1 text-xs text-muted-foreground">à volume mensuel constant</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </DocBlock>
           </Card>
 
           <aside className="space-y-4 xl:sticky xl:top-32">

@@ -223,6 +223,15 @@ function sanitizeSD01(value: Record<string, unknown>, companyName: string, sourc
     },
     urgency: strings(value.urgency),
     gandoProposal: text(value.gandoProposal, 12000),
+    pricingProposal: {
+      ...empty.pricingProposal,
+      ...(value.pricingProposal && typeof value.pricingProposal === "object" ? value.pricingProposal as Partial<SD01Content["pricingProposal"]> : {}),
+      enabled: Boolean((value.pricingProposal as { enabled?: unknown } | undefined)?.enabled),
+      gandoRatePercent: Number((value.pricingProposal as { gandoRatePercent?: unknown } | undefined)?.gandoRatePercent ?? empty.pricingProposal.gandoRatePercent) || 0,
+      partnerMarginPercent: Number((value.pricingProposal as { partnerMarginPercent?: unknown } | undefined)?.partnerMarginPercent ?? empty.pricingProposal.partnerMarginPercent) || 0,
+      averageDepositAmount: Number((value.pricingProposal as { averageDepositAmount?: unknown } | undefined)?.averageDepositAmount ?? empty.pricingProposal.averageDepositAmount) || 0,
+      monthlyDeposits: Math.max(0, Math.round(Number((value.pricingProposal as { monthlyDeposits?: unknown } | undefined)?.monthlyDeposits ?? empty.pricingProposal.monthlyDeposits) || 0)),
+    },
     decisions: strings(value.decisions),
     openQuestions: strings(value.openQuestions),
     nextSteps: objects(value.nextSteps).map(item => ({
