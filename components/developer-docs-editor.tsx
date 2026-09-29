@@ -31,6 +31,8 @@ import { DeveloperMdxPreview } from "@/components/developer-mdx-preview";
 import { DeveloperEditorSidebar } from "@/components/developer-editor-sidebar";
 import { DEVELOPER_SLASH_COMMANDS, DeveloperSlashMenu, type SlashCommandId } from "@/components/developer-slash-menu";
 import { GandoSidebarMark } from "@/components/cockpit-sidebar-shared";
+import { DeveloperSiteSettings } from "@/components/developer-site-settings";
+import { DeveloperPageSettingsModal } from "@/components/developer-page-settings-modal";
 
 type DocStatus = "draft" | "published";
 type EditorMode = "edit" | "preview";
@@ -755,11 +757,16 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const [siteSettingsOpen, setSiteSettingsOpen] = useState(false);
+  const [siteCategories, setSiteCategories] = useState<string[]>([]);
+  const [pageSettingsId, setPageSettingsId] = useState("");
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashStart, setSlashStart] = useState(0);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageInsertAtRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -779,9 +786,21 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         return;
       }
 
-      const pagesResponse = await fetch("/api/developer-docs/pages", { cache: "no-store" });
+      const [pagesResponse, settingsResponse] = await Promise.all([
+        fetch("/api/developer-docs/pages", { cache: "no-store" }),
+        fetch("/api/developer-docs/settings", { cache: "no-store" }),
+      ]);
       const pagesBody = await pagesResponse.json().catch(() => ({})) as { pages?: DocPage[]; error?: string };
       if (!pagesResponse.ok) throw new Error(pagesBody.error || "Documentation GitHub indisponible.");
+
+      const settingsBody = await settingsResponse.json().catch(() => ({})) as {
+        settings?: { navigation?: { categories?: string[] } };
+      };
+      if (settingsResponse.ok) {
+        setSiteCategories(Array.isArray(settingsBody.settings?.navigation?.categories)
+          ? settingsBody.settings?.navigation?.categories || []
+          : []);
+      }
 
       const nextPages = Array.isArray(pagesBody.pages) ? pagesBody.pages : [];
       setPages(nextPages);
@@ -832,6 +851,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
   }, [dirty]);
 
   const currentPage = pages.find(page => page.id === selectedId) ?? null;
+  const pageSettingsPage = pages.find(page => page.id === pageSettingsId) ?? null;
 
   const sections = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -880,7 +900,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     setMessage("");
   }
 
-  function createPage() {
+  function createPage(section = siteCategories[0] || "Guides") {
     if (!canEdit) return;
     if (dirty && !window.confirm("Cette page contient des modifications non enregistrées. Continuer ?")) return;
 
@@ -891,7 +911,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
       sha: "",
       title: "Nouvelle page",
       slug: `nouvelle-page-${pages.length + 1}`,
-      section: "Guides",
+      section,
       description: "",
       body: "# Nouvelle page\n\nCommencez à rédiger votre documentation ici.\n\n## Première section\n\nAjoutez votre contenu.",
       status: "draft",
@@ -1018,6 +1038,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
       "ordered-list": "1. ",
       table: "| Colonne 1 | Colonne 2 |\n| --- | --- |\n| Valeur | Valeur |",
       code: `${tick}${tick}${tick}ts\n\n${tick}${tick}${tick}`,
+      image: "",
       callout: '<Callout title="Information">\n\nAjoutez votre contenu ici.\n\n</Callout>',
       tabs: '<DocTabs items="Tab 1|Tab 2">\n<DocTab value="Tab 1">\n\nContenu du premier onglet.\n\n</DocTab>\n<DocTab value="Tab 2">\n\nContenu du second onglet.\n\n</DocTab>\n</DocTabs>',
       steps: '<Steps>\n<Step>\n\n## Étape 1\n\nDécrivez cette étape.\n\n</Step>\n<Step>\n\n## Étape 2\n\nDécrivez cette étape.\n\n</Step>\n</Steps>',
@@ -1030,6 +1051,14 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     if (!textarea || !currentPage) return;
 
     const end = textarea.selectionStart;
+    if (id === "image") {
+      imageInsertAtRef.current = slashStart;
+      setSlashOpen(false);
+      setSlashQuery("");
+      imageInputRef.current?.click();
+      return;
+    }
+
     const insertion = slashInsertion(id);
     const nextBody = `${currentPage.body.slice(0, slashStart)}${insertion}${currentPage.body.slice(end)}`;
     updateCurrent({ body: nextBody });
@@ -1077,6 +1106,188 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     }
   }
 
+  async function persistSiteCategories(categories: string[]) {
+    const normalized = Array.from(new Set(categories.map(item => item.trim()).filter(Boolean)));
+    setSiteCategories(normalized);
+    try {
+      const response = await fetch("/api/developer-docs/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { navigation: { categories: normalized } } }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Impossible d’enregistrer la navigation.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossible d’enregistrer la navigation.");
+    }
+  }
+
+  function addCategory() {
+    const name = window.prompt("Nom de la nouvelle catégorie");
+    if (!name?.trim()) return;
+    if (siteCategories.some(item => item.toLowerCase() === name.trim().toLowerCase())) return;
+    void persistSiteCategories([...siteCategories, name.trim()]);
+  }
+
+  async function savePageObject(page: DocPage, patch: Partial<DocPage> = {}) {
+    const next = { ...page, ...patch };
+    const response = await fetch("/api/developer-docs/pages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+    const body = await response.json().catch(() => ({})) as { page?: DocPage; error?: string };
+    if (!response.ok || !body.page) throw new Error(body.error || "Enregistrement impossible.");
+    setPages(items => items.map(item => item.id === page.id ? body.page as DocPage : item));
+    if (selectedId === page.id) setSelectedId(body.page.id);
+    return body.page;
+  }
+
+  async function renameCategory(section: string) {
+    const nextName = window.prompt("Nouveau nom de la catégorie", section)?.trim();
+    if (!nextName || nextName === section) return;
+    if (dirty && pages.some(page => page.id === selectedId && page.section === section)) {
+      setError("Enregistrez d’abord la page en cours avant de renommer sa catégorie.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const affected = pages.filter(page => page.section === section);
+      for (const page of affected) {
+        if (page.path || page.sha) await savePageObject(page, { section: nextName });
+        else setPages(items => items.map(item => item.id === page.id ? { ...item, section: nextName } : item));
+      }
+      await persistSiteCategories(siteCategories.map(item => item === section ? nextName : item));
+      setMessage(`Catégorie « ${section} » renommée.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossible de renommer la catégorie.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function renamePageAction(page: DocPage) {
+    const title = window.prompt("Nouveau titre de la page", page.title)?.trim();
+    if (!title || title === page.title) return;
+    if (page.id === selectedId) {
+      setPages(items => items.map(item => item.id === page.id ? { ...item, title } : item));
+      setDirty(true);
+      return;
+    }
+    setSaving(true);
+    void savePageObject(page, { title })
+      .then(() => setMessage("Page renommée."))
+      .catch(reason => setError(reason instanceof Error ? reason.message : "Impossible de renommer la page."))
+      .finally(() => setSaving(false));
+  }
+
+  function duplicatePageAction(page: DocPage) {
+    const id = `new-${Date.now()}`;
+    const copy: DocPage = {
+      ...page,
+      id,
+      path: "",
+      sha: "",
+      title: `${page.title} copie`,
+      slug: `${page.slug}-copie`,
+      status: "draft",
+      order: page.order + 1,
+      updatedAt: null,
+    };
+    setPages(items => [...items, copy]);
+    setSelectedId(id);
+    setMode("edit");
+    setDirty(true);
+    setMessage("Copie créée en brouillon.");
+  }
+
+  function movePageAction(page: DocPage, section: string) {
+    if (page.id === selectedId) {
+      setPages(items => items.map(item => item.id === page.id ? { ...item, section } : item));
+      setDirty(true);
+      if (!siteCategories.includes(section)) void persistSiteCategories([...siteCategories, section]);
+      return;
+    }
+    setSaving(true);
+    void savePageObject(page, { section })
+      .then(() => {
+        if (!siteCategories.includes(section)) void persistSiteCategories([...siteCategories, section]);
+        setMessage(`Page déplacée vers « ${section} ».`);
+      })
+      .catch(reason => setError(reason instanceof Error ? reason.message : "Impossible de déplacer la page."))
+      .finally(() => setSaving(false));
+  }
+
+  async function deletePageAction(page: DocPage) {
+    if (page.id === selectedId) {
+      await deletePage();
+      return;
+    }
+    if (!window.confirm(`Supprimer « ${page.title} » ?`)) return;
+    if (!page.path || !page.sha) {
+      setPages(items => items.filter(item => item.id !== page.id));
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch("/api/developer-docs/pages", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: page.path, sha: page.sha, title: page.title }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Suppression impossible.");
+      setPages(items => items.filter(item => item.id !== page.id));
+      setMessage("Page déplacée vers la corbeille.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Suppression impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !currentPage) return;
+
+    setSaving(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/developer-docs/assets", {
+        method: "POST",
+        body: form,
+      });
+      const body = await response.json().catch(() => ({})) as { src?: string; error?: string };
+      if (!response.ok || !body.src) throw new Error(body.error || "Impossible d’envoyer l’image.");
+
+      const insertAt = imageInsertAtRef.current ?? textareaRef.current?.selectionStart ?? currentPage.body.length;
+      const cursorEnd = textareaRef.current?.selectionStart ?? insertAt;
+      const alt = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+      const markdown = `![${alt}](${body.src})`;
+      const nextBody = `${currentPage.body.slice(0, insertAt)}${markdown}${currentPage.body.slice(cursorEnd)}`;
+      updateCurrent({ body: nextBody });
+      imageInsertAtRef.current = null;
+      setMessage("Image ajoutée au repository et insérée dans le MDX.");
+
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        const cursor = insertAt + markdown.length;
+        textarea.focus();
+        textarea.setSelectionRange(cursor, cursor);
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossible d’envoyer l’image.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const connectionLabel = connection?.connected
     ? `${connection.owner}/${connection.repo}`
     : "Connecter GitHub";
@@ -1090,6 +1301,31 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         canConfigure={canConfigure && canEdit}
         onClose={() => setConnectionOpen(false)}
         onSaved={load}
+      />
+
+      <DeveloperSiteSettings
+        open={siteSettingsOpen}
+        onClose={() => setSiteSettingsOpen(false)}
+        onSettingsSaved={settings => setSiteCategories(settings.navigation.categories || [])}
+      />
+
+      <DeveloperPageSettingsModal
+        open={Boolean(pageSettingsId)}
+        page={pageSettingsPage}
+        onClose={() => setPageSettingsId("")}
+        onChange={patch => {
+          if (!pageSettingsPage) return;
+          setPages(items => items.map(page => page.id === pageSettingsPage.id ? { ...page, ...patch } : page));
+          if (pageSettingsPage.id === selectedId) setDirty(true);
+        }}
+      />
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+        className="hidden"
+        onChange={handleImageUpload}
       />
 
       {!editorActive ? (
@@ -1162,12 +1398,23 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         {editorActive && currentPage && connection ? (
           <DeveloperEditorSidebar
             pages={pages}
+            categories={siteCategories}
             selectedId={currentPage.id}
             workspaceLabel={connection.repo}
             sourceLabel={connection.basePath}
             onSelectPage={choosePage}
-            onNewPage={createPage}
-            onSettings={() => setConnectionOpen(true)}
+            onNewPage={section => createPage(section)}
+            onSettings={() => setSiteSettingsOpen(true)}
+            onAddCategory={addCategory}
+            onRenameCategory={renameCategory}
+            onRenamePage={renamePageAction}
+            onDuplicatePage={duplicatePageAction}
+            onMovePage={movePageAction}
+            onPageSettings={page => {
+              setSelectedId(page.id);
+              setPageSettingsId(page.id);
+            }}
+            onDeletePage={page => void deletePageAction(page)}
           />
         ) : (
         <aside className="gando-docs-sidebar">
@@ -1212,7 +1459,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
 
           <div className="gando-docs-sidebar-footer space-y-2">
             {canEdit ? (
-              <button type="button" onClick={createPage} className="flex items-center justify-center gap-1.5">
+              <button type="button" onClick={() => createPage()} className="flex items-center justify-center gap-1.5">
                 <Plus className="h-3.5 w-3.5" /> Nouvelle page
               </button>
             ) : null}
@@ -1249,7 +1496,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
                 <Folder className="mx-auto h-8 w-8 text-muted-foreground" />
                 <h2 className="mt-4 text-lg font-semibold">Aucune page dans {connection.basePath}</h2>
                 <p className="mt-1 text-xs text-muted-foreground">Créez la première page ; elle sera ajoutée directement au dépôt GitHub.</p>
-                {canEdit ? <button type="button" onClick={createPage} className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#17181c] px-4 text-xs font-semibold text-white dark:bg-white dark:text-black"><Plus className="h-4 w-4" /> Créer une page</button> : null}
+                {canEdit ? <button type="button" onClick={() => createPage()} className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#17181c] px-4 text-xs font-semibold text-white dark:bg-white dark:text-black"><Plus className="h-4 w-4" /> Créer une page</button> : null}
               </div>
             </div>
           ) : mode === "edit" && canEdit ? (

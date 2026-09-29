@@ -8,6 +8,7 @@ import {
   Heading2,
   Heading3,
   Heading4,
+  ImageIcon,
   Info,
   List,
   ListOrdered,
@@ -29,6 +30,7 @@ export type SlashCommandId =
   | "ordered-list"
   | "table"
   | "code"
+  | "image"
   | "callout"
   | "tabs"
   | "steps";
@@ -54,6 +56,7 @@ export const DEVELOPER_SLASH_COMMANDS: SlashCommand[] = [
   { id: "ordered-list", label: "Ordered list", hint: "1.", group: "Lists and Tables", icon: ListOrdered, previewTitle: "Ordered list", previewDescription: "Create a numbered list" },
   { id: "table", label: "Table", hint: "", group: "Lists and Tables", icon: Table2, previewTitle: "Table", previewDescription: "Insert a Markdown table" },
   { id: "code", label: "Code block", hint: "\u0060\u0060\u0060", group: "Advanced", icon: Code2, previewTitle: "Code block", previewDescription: "Add syntax-highlighted code" },
+  { id: "image", label: "Image", hint: "", group: "Advanced", icon: ImageIcon, previewTitle: "Image", previewDescription: "Upload an image and insert it in the MDX page" },
   { id: "callout", label: "Callout", hint: "", group: "Advanced", icon: Info, previewTitle: "Callout", previewDescription: "Add a Fumadocs callout" },
   { id: "tabs", label: "Tabs", hint: "", group: "Advanced", icon: Braces, previewTitle: "Tabs", previewDescription: "Switch between multiple content variants" },
   { id: "steps", label: "Steps", hint: "", group: "Advanced", icon: Workflow, previewTitle: "Steps", previewDescription: "Build a guided multi-step flow" },

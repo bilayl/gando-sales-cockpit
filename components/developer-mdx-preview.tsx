@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ImgHTMLAttributes, type ReactNode } from "react";
 import { MDXRemote, type MDXRemoteSerializeResult } from "next-mdx-remote";
 import { Callout } from "fumadocs-ui/components/callout";
 import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
@@ -44,6 +44,22 @@ function DocTab({ value, children }: { value: string; children: ReactNode }) {
   return <Tab value={value}>{children}</Tab>;
 }
 
+function DocImage(props: ImgHTMLAttributes<HTMLImageElement>) {
+  const rawSrc = typeof props.src === "string" ? props.src : "";
+  const src = rawSrc.startsWith("/developer-docs-assets/")
+    ? `/api/developer-docs/assets?path=${encodeURIComponent(`public${rawSrc}`)}`
+    : rawSrc;
+
+  return (
+    <img
+      {...props}
+      src={src}
+      className="my-6 max-h-[620px] w-auto max-w-full rounded-xl border border-border object-contain shadow-sm"
+      loading="lazy"
+    />
+  );
+}
+
 const components = {
   ...defaultMdxComponents,
   Callout,
@@ -57,6 +73,7 @@ const components = {
   GuideCode,
   DocTabs,
   DocTab,
+  img: DocImage,
 };
 
 function withoutDuplicateTitle(source: string, title: string) {
