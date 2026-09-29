@@ -1104,6 +1104,188 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     }
   }
 
+  async function persistSiteCategories(categories: string[]) {
+    const normalized = Array.from(new Set(categories.map(item => item.trim()).filter(Boolean)));
+    setSiteCategories(normalized);
+    try {
+      const response = await fetch("/api/developer-docs/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { navigation: { categories: normalized } } }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Impossible d’enregistrer la navigation.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossible d’enregistrer la navigation.");
+    }
+  }
+
+  function addCategory() {
+    const name = window.prompt("Nom de la nouvelle catégorie");
+    if (!name?.trim()) return;
+    if (siteCategories.some(item => item.toLowerCase() === name.trim().toLowerCase())) return;
+    void persistSiteCategories([...siteCategories, name.trim()]);
+  }
+
+  async function savePageObject(page: DocPage, patch: Partial<DocPage> = {}) {
+    const next = { ...page, ...patch };
+    const response = await fetch("/api/developer-docs/pages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+    const body = await response.json().catch(() => ({})) as { page?: DocPage; error?: string };
+    if (!response.ok || !body.page) throw new Error(body.error || "Enregistrement impossible.");
+    setPages(items => items.map(item => item.id === page.id ? body.page as DocPage : item));
+    if (selectedId === page.id) setSelectedId(body.page.id);
+    return body.page;
+  }
+
+  async function renameCategory(section: string) {
+    const nextName = window.prompt("Nouveau nom de la catégorie", section)?.trim();
+    if (!nextName || nextName === section) return;
+    if (dirty && pages.some(page => page.id === selectedId && page.section === section)) {
+      setError("Enregistrez d’abord la page en cours avant de renommer sa catégorie.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      const affected = pages.filter(page => page.section === section);
+      for (const page of affected) {
+        if (page.path || page.sha) await savePageObject(page, { section: nextName });
+        else setPages(items => items.map(item => item.id === page.id ? { ...item, section: nextName } : item));
+      }
+      await persistSiteCategories(siteCategories.map(item => item === section ? nextName : item));
+      setMessage(`Catégorie « ${section} » renommée.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossible de renommer la catégorie.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function renamePageAction(page: DocPage) {
+    const title = window.prompt("Nouveau titre de la page", page.title)?.trim();
+    if (!title || title === page.title) return;
+    if (page.id === selectedId) {
+      setPages(items => items.map(item => item.id === page.id ? { ...item, title } : item));
+      setDirty(true);
+      return;
+    }
+    setSaving(true);
+    void savePageObject(page, { title })
+      .then(() => setMessage("Page renommée."))
+      .catch(reason => setError(reason instanceof Error ? reason.message : "Impossible de renommer la page."))
+      .finally(() => setSaving(false));
+  }
+
+  function duplicatePageAction(page: DocPage) {
+    const id = `new-${Date.now()}`;
+    const copy: DocPage = {
+      ...page,
+      id,
+      path: "",
+      sha: "",
+      title: `${page.title} copie`,
+      slug: `${page.slug}-copie`,
+      status: "draft",
+      order: page.order + 1,
+      updatedAt: null,
+    };
+    setPages(items => [...items, copy]);
+    setSelectedId(id);
+    setMode("edit");
+    setDirty(true);
+    setMessage("Copie créée en brouillon.");
+  }
+
+  function movePageAction(page: DocPage, section: string) {
+    if (page.id === selectedId) {
+      setPages(items => items.map(item => item.id === page.id ? { ...item, section } : item));
+      setDirty(true);
+      if (!siteCategories.includes(section)) void persistSiteCategories([...siteCategories, section]);
+      return;
+    }
+    setSaving(true);
+    void savePageObject(page, { section })
+      .then(() => {
+        if (!siteCategories.includes(section)) void persistSiteCategories([...siteCategories, section]);
+        setMessage(`Page déplacée vers « ${section} ».`);
+      })
+      .catch(reason => setError(reason instanceof Error ? reason.message : "Impossible de déplacer la page."))
+      .finally(() => setSaving(false));
+  }
+
+  async function deletePageAction(page: DocPage) {
+    if (page.id === selectedId) {
+      await deletePage();
+      return;
+    }
+    if (!window.confirm(`Supprimer « ${page.title} » ?`)) return;
+    if (!page.path || !page.sha) {
+      setPages(items => items.filter(item => item.id !== page.id));
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch("/api/developer-docs/pages", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: page.path, sha: page.sha, title: page.title }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Suppression impossible.");
+      setPages(items => items.filter(item => item.id !== page.id));
+      setMessage("Page déplacée vers la corbeille.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Suppression impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !currentPage) return;
+
+    setSaving(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/developer-docs/assets", {
+        method: "POST",
+        body: form,
+      });
+      const body = await response.json().catch(() => ({})) as { src?: string; error?: string };
+      if (!response.ok || !body.src) throw new Error(body.error || "Impossible d’envoyer l’image.");
+
+      const insertAt = imageInsertAtRef.current ?? textareaRef.current?.selectionStart ?? currentPage.body.length;
+      const cursorEnd = textareaRef.current?.selectionStart ?? insertAt;
+      const alt = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+      const markdown = `![${alt}](${body.src})`;
+      const nextBody = `${currentPage.body.slice(0, insertAt)}${markdown}${currentPage.body.slice(cursorEnd)}`;
+      updateCurrent({ body: nextBody });
+      imageInsertAtRef.current = null;
+      setMessage("Image ajoutée au repository et insérée dans le MDX.");
+
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        const cursor = insertAt + markdown.length;
+        textarea.focus();
+        textarea.setSelectionRange(cursor, cursor);
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossible d’envoyer l’image.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const connectionLabel = connection?.connected
     ? `${connection.owner}/${connection.repo}`
     : "Connecter GitHub";
