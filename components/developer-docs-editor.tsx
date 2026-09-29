@@ -31,6 +31,7 @@ import { DeveloperMdxPreview } from "@/components/developer-mdx-preview";
 import { DeveloperEditorSidebar } from "@/components/developer-editor-sidebar";
 import { DEVELOPER_SLASH_COMMANDS, DeveloperSlashMenu, type SlashCommandId } from "@/components/developer-slash-menu";
 import { GandoSidebarMark } from "@/components/cockpit-sidebar-shared";
+import { DeveloperSiteSettings } from "@/components/developer-site-settings";
 
 type DocStatus = "draft" | "published";
 type EditorMode = "edit" | "preview";
@@ -755,11 +756,16 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const [siteSettingsOpen, setSiteSettingsOpen] = useState(false);
+  const [siteCategories, setSiteCategories] = useState<string[]>([]);
+  const [pageSettingsId, setPageSettingsId] = useState("");
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashStart, setSlashStart] = useState(0);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageInsertAtRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -779,9 +785,21 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
         return;
       }
 
-      const pagesResponse = await fetch("/api/developer-docs/pages", { cache: "no-store" });
+      const [pagesResponse, settingsResponse] = await Promise.all([
+        fetch("/api/developer-docs/pages", { cache: "no-store" }),
+        fetch("/api/developer-docs/settings", { cache: "no-store" }),
+      ]);
       const pagesBody = await pagesResponse.json().catch(() => ({})) as { pages?: DocPage[]; error?: string };
       if (!pagesResponse.ok) throw new Error(pagesBody.error || "Documentation GitHub indisponible.");
+
+      const settingsBody = await settingsResponse.json().catch(() => ({})) as {
+        settings?: { navigation?: { categories?: string[] } };
+      };
+      if (settingsResponse.ok) {
+        setSiteCategories(Array.isArray(settingsBody.settings?.navigation?.categories)
+          ? settingsBody.settings?.navigation?.categories || []
+          : []);
+      }
 
       const nextPages = Array.isArray(pagesBody.pages) ? pagesBody.pages : [];
       setPages(nextPages);
@@ -880,7 +898,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     setMessage("");
   }
 
-  function createPage() {
+  function createPage(section = siteCategories[0] || "Guides") {
     if (!canEdit) return;
     if (dirty && !window.confirm("Cette page contient des modifications non enregistrées. Continuer ?")) return;
 
@@ -891,7 +909,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
       sha: "",
       title: "Nouvelle page",
       slug: `nouvelle-page-${pages.length + 1}`,
-      section: "Guides",
+      section,
       description: "",
       body: "# Nouvelle page\n\nCommencez à rédiger votre documentation ici.\n\n## Première section\n\nAjoutez votre contenu.",
       status: "draft",
@@ -1018,6 +1036,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
       "ordered-list": "1. ",
       table: "| Colonne 1 | Colonne 2 |\n| --- | --- |\n| Valeur | Valeur |",
       code: `${tick}${tick}${tick}ts\n\n${tick}${tick}${tick}`,
+      image: "",
       callout: '<Callout title="Information">\n\nAjoutez votre contenu ici.\n\n</Callout>',
       tabs: '<DocTabs items="Tab 1|Tab 2">\n<DocTab value="Tab 1">\n\nContenu du premier onglet.\n\n</DocTab>\n<DocTab value="Tab 2">\n\nContenu du second onglet.\n\n</DocTab>\n</DocTabs>',
       steps: '<Steps>\n<Step>\n\n## Étape 1\n\nDécrivez cette étape.\n\n</Step>\n<Step>\n\n## Étape 2\n\nDécrivez cette étape.\n\n</Step>\n</Steps>',
@@ -1030,6 +1049,14 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     if (!textarea || !currentPage) return;
 
     const end = textarea.selectionStart;
+    if (id === "image") {
+      imageInsertAtRef.current = slashStart;
+      setSlashOpen(false);
+      setSlashQuery("");
+      imageInputRef.current?.click();
+      return;
+    }
+
     const insertion = slashInsertion(id);
     const nextBody = `${currentPage.body.slice(0, slashStart)}${insertion}${currentPage.body.slice(end)}`;
     updateCurrent({ body: nextBody });
