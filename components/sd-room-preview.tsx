@@ -44,6 +44,7 @@ function PreviewSD01({ content }: { content: SD01Content }) {
     {content.solutionFit?.length ? <Section title="Solution fit"><div className="divide-y divide-[#eceeef]">{content.solutionFit.map((item, index) => <div key={index} className="grid gap-2 py-4 first:pt-0 last:pb-0 sm:grid-cols-2"><div className="text-sm font-semibold text-[#2f393e]">{item.need}</div><div className="text-sm leading-6 text-[#566166]">{item.response}</div></div>)}</div></Section> : null}
     {metrics.length ? <Section title="Métriques confirmées"><div className="grid gap-3 sm:grid-cols-2">{metrics.map((metric, index) => <div key={index} className="rounded-xl bg-[#f3f0ff] p-4"><div className="text-xs font-semibold text-[#5c50ae]">{metric.lever}</div><div className="mt-1 text-xl font-bold text-[#2e2867]">{metric.value}</div>{metric.mechanism ? <div className="mt-1 text-xs leading-5 text-[#6c668a]">{metric.mechanism}</div> : null}</div>)}</div></Section> : null}
     {content.urgency?.length ? <Section title="Pourquoi maintenant ?"><List items={content.urgency} /></Section> : null}
+    {content.gandoProposal?.trim() ? <Section title="Proposition Gando"><p className="whitespace-pre-wrap text-sm leading-7 text-[#566166]">{content.gandoProposal}</p></Section> : null}
   </div>;
 }
 
