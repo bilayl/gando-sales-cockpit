@@ -54,6 +54,7 @@ export type SD04Content = {
   rolloutPlan: string[];
   callToAction: string;
   offerSummary: string;
+  proposalGandoText?: string;
   pricing: Array<{ item: string; model: string; price: string; notes: string }>;
   assumptions: string[];
   businessCase: Array<{ metric: string; baseline: string; target: string; value: string }>;
@@ -156,6 +157,7 @@ export function createEmptySD04(): SD04Content {
     rolloutPlan: [],
     callToAction: "",
     offerSummary: "",
+    proposalGandoText: "",
     pricing: [],
     assumptions: [],
     businessCase: [],
@@ -289,6 +291,7 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       rolloutPlan: stringList(source.rolloutPlan),
       callToAction: text(source.callToAction),
       offerSummary: text(source.offerSummary || executiveMessage),
+      proposalGandoText: text(source.proposalGandoText, 12000),
       pricing: Array.isArray(source.pricing) ? source.pricing.slice(0, 60).map(item => {
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
         return { item: text(row.item, 500), model: text(row.model, 500), price: text(row.price, 300), notes: text(row.notes, 1000) };
