@@ -83,7 +83,7 @@ export function PublicQuickDealRoom({ token }: { token: string }) {
 
   const proposal = data?.documents.find(document => document.code === "SD04");
   const contract = data?.documents.find(document => document.code === "SD05");
-  const proposalContent = useMemo(() => ({ deckTitle: "", executiveMessage: "", solution: [], pricing: [], commercialTerms: [], proofPoints: [], callToAction: "", proposalGandoText: "", ...((proposal?.content || {}) as Partial<SD04Content>) }) as SD04Content, [proposal]);
+  const proposalContent = useMemo(() => ({ deckTitle: "", executiveMessage: "", solution: [], pricing: [], commercialTerms: [], proofPoints: [], callToAction: "", ...((proposal?.content || {}) as Partial<SD04Content>) }) as SD04Content, [proposal]);
   const contractContent = useMemo(() => ({ contractTitle: "Contrat", contractUrl: "", signatureUrl: "", signatureProvider: "gando", contractStatus: "draft", ...((contract?.content || {}) as Partial<SD05Content>) }) as SD05Content, [contract]);
   const agreed = proposal?.status === "validated";
   const contractSigned = contract?.status === "validated" || contractContent.contractStatus === "signed";
@@ -148,7 +148,6 @@ export function PublicQuickDealRoom({ token }: { token: string }) {
         {proposalContent.solution.length ? <div className={proposalContent.pricing.length ? "mt-7 border-t border-[#eceeef] pt-6" : ""}><div className="text-xs font-bold uppercase tracking-[0.1em] text-[#687277]">Ce que comprend l’offre</div><div className="mt-4"><List items={proposalContent.solution} /></div></div> : null}
         {proposalContent.commercialTerms.length ? <div className="mt-7 border-t border-[#eceeef] pt-6"><div className="text-xs font-bold uppercase tracking-[0.1em] text-[#687277]">Conditions commerciales</div><div className="mt-4"><List items={proposalContent.commercialTerms} /></div></div> : null}
         {proposalContent.proofPoints.length ? <div className="mt-7 border-t border-[#eceeef] pt-6"><div className="text-xs font-bold uppercase tracking-[0.1em] text-[#687277]">Pourquoi Gando</div><div className="mt-4"><List items={proposalContent.proofPoints} /></div></div> : null}
-        {proposalContent.proposalGandoText?.trim() ? <div className="mt-7 border-t border-[#eceeef] pt-6"><div className="text-xs font-bold uppercase tracking-[0.1em] text-[#687277]">Proposition Gando</div><div className="mt-4 whitespace-pre-wrap text-[15px] leading-7 text-[#465157]">{proposalContent.proposalGandoText}</div></div> : null}
       </section>
 
       <section className="mt-6 rounded-[20px] border border-[#d7dce0] bg-[#202a2f] p-6 text-white sm:p-8">{agreed ? <div className="flex gap-4"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#dff0e3] text-[#376b43]"><CheckCircle2 className="h-5 w-5" /></div><div><h2 className="text-xl font-semibold">Accord enregistré</h2><p className="mt-1 text-sm text-white/65">Votre accord sur cette proposition est enregistré{proposal?.validated_at ? ` le ${formatDate(proposal.validated_at)}` : ""}.</p></div></div> : <div>
