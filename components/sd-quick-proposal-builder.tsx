@@ -19,8 +19,12 @@ type RoomResponse = {
   documents: SDDocumentRecord[];
 };
 
-function lines(value: string) {
+function cleanLines(value: string) {
   return value.split("\n").map(item => item.trim()).filter(Boolean);
+}
+
+function draftLines(value: string) {
+  return value.split("\n");
 }
 
 function pricingText(rows: SD04Content["pricing"]) {
@@ -28,7 +32,7 @@ function pricingText(rows: SD04Content["pricing"]) {
 }
 
 function parsePricing(value: string): SD04Content["pricing"] {
-  return lines(value).map(row => {
+  return cleanLines(value).map(row => {
     const [item = "", price = "", notes = ""] = row.split("|").map(part => part.trim());
     return { item, price, notes, model: "" };
   }).filter(row => row.item);
@@ -49,6 +53,7 @@ function Area({ value, onChange, rows = 5, placeholder }: { value: string; onCha
 export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; onChanged?: () => void }) {
   const [data, setData] = useState<RoomResponse | null>(null);
   const [value, setValue] = useState<SD04Content>(createEmptySD04());
+  const [pricingDraft, setPricingDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
 
@@ -60,7 +65,9 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       if (!response.ok) throw new Error(payload.message || payload.error || "Chargement impossible");
       setData(payload);
       const document = (payload.documents || []).find((item: SDDocumentRecord) => item.code === "SD04");
-      setValue({ ...createEmptySD04(), ...((document?.content || {}) as Partial<SD04Content>) });
+      const nextValue = { ...createEmptySD04(), ...((document?.content || {}) as Partial<SD04Content>) };
+      setValue(nextValue);
+      setPricingDraft(pricingText(nextValue.pricing));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Chargement impossible");
     } finally {
@@ -86,6 +93,10 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
   const set = <K extends keyof SD04Content>(key: K, next: SD04Content[K]) => setValue(current => ({ ...current, [key]: next }));
 
   function generateTemplate() {
+    const templatePricing: SD04Content["pricing"] = [
+      { item: "Tarif Gando", model: "", price: "[X % HT]", notes: "par caution activée" },
+      { item: "Marge partenaire", model: "", price: "[+X % HT]", notes: "optionnelle · conservée par le partenaire" },
+    ];
     setValue(current => ({
       ...current,
       deckTitle: current.deckTitle || `Proposition Gando × ${companyName}`,
@@ -95,10 +106,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         "Garantie d’encaissement selon les conditions contractuelles",
         "Parcours digital de création, d’envoi et de suivi des cautions",
       ],
-      pricing: current.pricing.length ? current.pricing : [
-        { item: "Tarif Gando", model: "", price: "[X % HT]", notes: "par caution activée" },
-        { item: "Marge partenaire", model: "", price: "[+X % HT]", notes: "optionnelle · conservée par le partenaire" },
-      ],
+      pricing: current.pricing.length ? current.pricing : templatePricing,
       commercialTerms: current.commercialTerms.length ? current.commercialTerms : [
         "Durée de sécurisation : [XX jours]",
         "Plafond de caution : [X XXX €]",
@@ -118,6 +126,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       },
       callToAction: current.callToAction || "Êtes-vous en accord avec cette proposition pour passer au contrat ?",
     }));
+    setPricingDraft(current => current.trim() ? current : pricingText(templatePricing));
     toast.success("Modèle de propal généré — complète les éléments entre crochets");
   }
 
@@ -131,6 +140,10 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         deckTitle: value.deckTitle.trim(),
         executiveMessage: value.executiveMessage.trim(),
         offerSummary: value.executiveMessage.trim(),
+        solution: cleanLines(value.solution.join("\n")),
+        pricing: parsePricing(pricingDraft),
+        commercialTerms: cleanLines(value.commercialTerms.join("\n")),
+        proofPoints: cleanLines(value.proofPoints.join("\n")),
         callToAction: value.callToAction.trim() || "Êtes-vous en accord avec cette proposition ?",
       };
       const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/document`, {
@@ -141,7 +154,9 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Enregistrement impossible");
       setData(current => current ? { ...current, documents: current.documents.map(item => item.code === "SD04" ? payload.document : item) } : current);
-      setValue({ ...createEmptySD04(), ...((payload.document?.content || {}) as Partial<SD04Content>) });
+      const nextValue = { ...createEmptySD04(), ...((payload.document?.content || {}) as Partial<SD04Content>) };
+      setValue(nextValue);
+      setPricingDraft(pricingText(nextValue.pricing));
       toast.success(publish ? "Lien de propal prêt à être partagé" : "Propal enregistrée");
       onChanged?.();
       if (publish) await load();
@@ -222,14 +237,14 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       <Card className="space-y-5 p-5 lg:p-6">
         <Field label="Titre de la proposition"><Input value={value.deckTitle} onChange={event => set("deckTitle", event.target.value)} placeholder={`Proposition Gando × ${companyName}`} /></Field>
         <Field label="Message principal" hint="Ce que le client doit comprendre en 20 secondes"><Area value={value.executiveMessage} onChange={next => set("executiveMessage", next)} rows={6} placeholder={`Dans le cadre du deal « ${dealName} », voici le cadre commercial proposé à ${companyName}…`} /></Field>
-        <Field label="Ce que comprend l’offre" hint="Un élément par ligne"><Area value={value.solution.join("\n")} onChange={next => set("solution", lines(next))} rows={7} placeholder={'Caution sans blocage de fonds\nGarantie d’encaissement\nParcours digital de suivi'} /></Field>
+        <Field label="Ce que comprend l’offre" hint="Un élément par ligne"><Area value={value.solution.join("\n")} onChange={next => set("solution", draftLines(next))} rows={7} placeholder={'Caution sans blocage de fonds\nGarantie d’encaissement\nParcours digital de suivi'} /></Field>
         <Field label="Prochaine étape"><Input value={value.callToAction} onChange={event => set("callToAction", event.target.value)} placeholder="Êtes-vous en accord avec cette proposition pour passer au contrat ?" /></Field>
       </Card>
 
       <Card className="space-y-5 p-5 lg:p-6">
-        <Field label="Prix / offre" hint="Une ligne : intitulé | prix | précision"><Area value={pricingText(value.pricing)} onChange={next => set("pricing", parsePricing(next))} rows={7} placeholder={'Tarif Gando | [X % HT] | par caution activée\nMarge partenaire | [+X % HT] | optionnelle'} /></Field>
-        <Field label="Conditions commerciales" hint="Une condition par ligne"><Area value={value.commercialTerms.join("\n")} onChange={next => set("commercialTerms", lines(next))} rows={7} placeholder={'Durée de sécurisation : [XX jours]\nPlafond : [X XXX €]\nFrais d’encaissement : [X % + X € HT]'} /></Field>
-        <Field label="Points de valeur / ROI" hint="Une ligne par bénéfice"><Area value={value.proofPoints.join("\n")} onChange={next => set("proofPoints", lines(next))} rows={6} placeholder={'Pas de fonds immobilisés\nGain de temps opérationnel\nRevenu additionnel possible'} /></Field>
+        <Field label="Prix / offre" hint="Une ligne : intitulé | prix | précision"><Area value={pricingDraft} onChange={next => { setPricingDraft(next); set("pricing", parsePricing(next)); }} rows={7} placeholder={'Tarif Gando | [X % HT] | par caution activée\nMarge partenaire | [+X % HT] | optionnelle'} /></Field>
+        <Field label="Conditions commerciales" hint="Une condition par ligne"><Area value={value.commercialTerms.join("\n")} onChange={next => set("commercialTerms", draftLines(next))} rows={7} placeholder={'Durée de sécurisation : [XX jours]\nPlafond : [X XXX €]\nFrais d’encaissement : [X % + X € HT]'} /></Field>
+        <Field label="Points de valeur / ROI" hint="Une ligne par bénéfice"><Area value={value.proofPoints.join("\n")} onChange={next => set("proofPoints", draftLines(next))} rows={6} placeholder={'Pas de fonds immobilisés\nGain de temps opérationnel\nRevenu additionnel possible'} /></Field>
       </Card>
     </div>
   </div></div>;
