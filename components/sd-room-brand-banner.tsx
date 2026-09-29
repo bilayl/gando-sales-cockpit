@@ -59,9 +59,9 @@ export function SDRoomBrandBanner({
           <span className={cn("text-4xl font-black", light ? "text-[#172a32]" : "text-white")}>×</span>
           <GandoMark className="h-20 w-20" />
         </div>
-        <div className={cn("mt-5 text-[9px] font-black uppercase tracking-[0.18em]", light ? "text-[#4d39b8]" : "text-white/80")}>Gando Deal Room</div>
-        <div className={cn("mt-2 text-xl font-black tracking-[-0.035em]", light ? "text-[#172a32]" : "text-white")}>{title || `${companyName || "Client"} × Gando`}</div>
-        <div className={cn("mt-2 max-w-xl text-xs leading-5", light ? "text-[#526268]" : "text-white/85")}>{subtitle || "Espace de collaboration"}</div>
+        <div className={cn("mt-5 text-[11px] font-black uppercase tracking-[0.16em]", light ? "text-[#4d39b8]" : "text-white/80")}>Gando Deal Room</div>
+        <div className={cn("mt-2 text-[24px] font-black tracking-[-0.035em] sm:text-[26px]", light ? "text-[#172a32]" : "text-white")}>{title || `${companyName || "Client"} × Gando`}</div>
+        <div className={cn("mt-2 max-w-2xl text-[15px] leading-6", light ? "text-[#526268]" : "text-white/85")}>{subtitle || "Espace de collaboration"}</div>
       </div>
     </section>
   );
