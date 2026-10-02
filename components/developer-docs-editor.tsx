@@ -1501,7 +1501,17 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
                 {canEdit ? <button type="button" onClick={() => createPage()} className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#17181c] px-4 text-xs font-semibold text-white dark:bg-white dark:text-black"><Plus className="h-4 w-4" /> Créer une page</button> : null}
               </div>
             </div>
-          ) : designerActive ? (\n            <DeveloperVisualDesigner\n              title={currentPage.title}\n              description={currentPage.description}\n              source={currentPage.body}\n              dirty={dirty}\n              saving={saving}\n              onChange={body => updateCurrent({ body })}\n              onSave={() => void savePage("published")}\n            />\n          ) : mode === "edit" && canEdit ? (
+          ) : designerActive ? (
+            <DeveloperVisualDesigner
+              title={currentPage.title}
+              description={currentPage.description}
+              source={currentPage.body}
+              dirty={dirty}
+              saving={saving}
+              onChange={body => updateCurrent({ body })}
+              onSave={() => void savePage("published")}
+            />
+          ) : mode === "edit" && canEdit ? (
             <div className="mint-editor-stage">
               <header className="mint-editor-topbar">
                 <div className="min-w-0">
