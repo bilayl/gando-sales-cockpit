@@ -15,7 +15,7 @@ type DesignerEdit = { type: "h1" | "h2" | "h3" | "p" | "blockquote"; previousTex
 function Editable({ tag, type, children, enabled, onEdit }: { tag: "h1" | "h2" | "h3" | "p" | "blockquote"; type: DesignerEdit["type"]; children: ReactNode; enabled: boolean; onEdit?: (edit: DesignerEdit) => void }) {
   const Tag = tag;
   if (!enabled) return <Tag>{children}</Tag>;
-  return <Tag className="gando-designer-editable" contentEditable suppressContentEditableWarning onBlur={event => { const nextText = event.currentTarget.innerText.trim(); const previousText = typeof children === "string" ? children.trim() : event.currentTarget.getAttribute("data-designer-text") || ""; if (nextText && nextText !== previousText) onEdit?.({ type, previousText, nextText }); }} data-designer-text={typeof children === "string" ? children : ""}>{children}</Tag>;
+  return <Tag className="gando-designer-editable" contentEditable suppressContentEditableWarning onFocus={event => { event.currentTarget.setAttribute("data-designer-text", event.currentTarget.innerText.trim()); }} onBlur={event => { const nextText = event.currentTarget.innerText.trim(); const previousText = event.currentTarget.getAttribute("data-designer-text") || ""; if (nextText && nextText !== previousText) onEdit?.({ type, previousText, nextText }); }} data-designer-text={typeof children === "string" ? children : ""}>{children}</Tag>;
 }
 
 function ApiEndpoint({ method, path }: { method: "GET" | "POST" | "PATCH" | "DELETE"; path: string }) {
