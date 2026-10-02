@@ -33,9 +33,10 @@ import { DEVELOPER_SLASH_COMMANDS, DeveloperSlashMenu, type SlashCommandId } fro
 import { GandoSidebarMark } from "@/components/cockpit-sidebar-shared";
 import { DeveloperSiteSettings } from "@/components/developer-site-settings";
 import { DeveloperPageSettingsModal } from "@/components/developer-page-settings-modal";
+import { DeveloperVisualDesigner } from "@/components/developer-visual-designer";
 
 type DocStatus = "draft" | "published";
-type EditorMode = "edit" | "preview";
+type EditorMode = "edit" | "preview" | "designer";
 
 type DocPage = {
   id: string;
@@ -1292,6 +1293,7 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
     ? `${connection.owner}/${connection.repo}`
     : "Connecter GitHub";
   const editorActive = mode === "edit" && canEdit && Boolean(connection?.connected) && Boolean(currentPage);
+  const designerActive = mode === "designer" && canEdit && Boolean(connection?.connected) && Boolean(currentPage);
 
   return (
     <div className="gando-developer-root flex h-screen min-h-[680px] flex-col overflow-hidden">
@@ -1499,6 +1501,16 @@ export function DeveloperDocsEditor({ canEdit }: { canEdit: boolean }) {
                 {canEdit ? <button type="button" onClick={() => createPage()} className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#17181c] px-4 text-xs font-semibold text-white dark:bg-white dark:text-black"><Plus className="h-4 w-4" /> Créer une page</button> : null}
               </div>
             </div>
+          ) : designerActive ? (
+            <DeveloperVisualDesigner
+              title={currentPage.title}
+              description={currentPage.description}
+              source={currentPage.body}
+              dirty={dirty}
+              saving={saving}
+              onChange={body => updateCurrent({ body })}
+              onSave={() => void savePage("published")}
+            />
           ) : mode === "edit" && canEdit ? (
             <div className="mint-editor-stage">
               <header className="mint-editor-topbar">
