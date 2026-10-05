@@ -43,7 +43,10 @@ type FinanceInputs = {
   monthlyFixedCosts: number;
   safetyMonths: number;
   monthlyGrowthRate: number;
-  salesMonthlyCost: number;
+  salesFixedAnnualGross: number;
+  salesVariableAnnualTarget: number;
+  employerChargeRate: number;
+  salesToolsMonthlyCost: number;
   salesOnboardingCost: number;
   salesTargetCautions: number;
   salesRampMonths: number;
@@ -67,10 +70,13 @@ const DEFAULT_INPUTS: FinanceInputs = {
   monthlyFixedCosts: 0,
   safetyMonths: 12,
   monthlyGrowthRate: 0.12,
-  salesMonthlyCost: 2500,
-  salesOnboardingCost: 1000,
-  salesTargetCautions: 250,
-  salesRampMonths: 4,
+  salesFixedAnnualGross: 95000,
+  salesVariableAnnualTarget: 55000,
+  employerChargeRate: 0.42,
+  salesToolsMonthlyCost: 500,
+  salesOnboardingCost: 5000,
+  salesTargetCautions: 500,
+  salesRampMonths: 6,
   forecastMonths: 36,
 };
 
@@ -159,10 +165,14 @@ export function FinancePlanningDashboard() {
   const investableCash = Math.max(0, inputs.treasury - safeTreasuryFloor);
 
   const salesModel = useMemo(() => {
+    const annualOTE = inputs.salesFixedAnnualGross + inputs.salesVariableAnnualTarget;
+    const annualEmployerPayrollCost = annualOTE * (1 + inputs.employerChargeRate);
+    const monthlyPayrollCost = annualEmployerPayrollCost / 12;
+    const monthlyAllInCost = monthlyPayrollCost + inputs.salesToolsMonthlyCost;
     const monthlyContributionAtTarget = inputs.salesTargetCautions * actuals.contributionPerCaution;
-    const steadyMonthlyNet = monthlyContributionAtTarget - inputs.salesMonthlyCost;
+    const steadyMonthlyNet = monthlyContributionAtTarget - monthlyAllInCost;
     const breakEvenCautions = actuals.contributionPerCaution > 0
-      ? Math.ceil(inputs.salesMonthlyCost / actuals.contributionPerCaution)
+      ? Math.ceil(monthlyAllInCost / actuals.contributionPerCaution)
       : 0;
 
     let cumulative = -inputs.salesOnboardingCost;
@@ -171,16 +181,16 @@ export function FinancePlanningDashboard() {
     for (let month = 1; month <= 36; month += 1) {
       const factor = rampFactor(month, inputs.salesRampMonths);
       const contribution = monthlyContributionAtTarget * factor;
-      cumulative += contribution - inputs.salesMonthlyCost;
+      cumulative += contribution - monthlyAllInCost;
       if (cumulative >= 0 && paybackMonth == null) paybackMonth = month;
     }
 
-    const burnAfterHire = Math.max(0, currentNetBurn + inputs.salesMonthlyCost - monthlyContributionAtTarget);
+    const burnAfterHire = Math.max(0, currentNetBurn + monthlyAllInCost - monthlyContributionAtTarget);
     const runwayAfterHire = burnAfterHire > 0
       ? Math.max(0, inputs.treasury - inputs.salesOnboardingCost) / burnAfterHire
       : Number.POSITIVE_INFINITY;
 
-    const annualCost = inputs.salesMonthlyCost * 12 + inputs.salesOnboardingCost;
+    const annualCost = annualEmployerPayrollCost + (inputs.salesToolsMonthlyCost * 12) + inputs.salesOnboardingCost;
     const annualContribution = Array.from({ length: 12 }, (_, index) => {
       const factor = rampFactor(index + 1, inputs.salesRampMonths);
       return monthlyContributionAtTarget * factor;
@@ -201,10 +211,14 @@ export function FinancePlanningDashboard() {
     );
     const recommendedAnnualBudget = recommendedMonthlyBudget * 12 + inputs.salesOnboardingCost;
     const budgetUsage = recommendedMonthlyBudget > 0
-      ? inputs.salesMonthlyCost / recommendedMonthlyBudget
-      : inputs.salesMonthlyCost > 0 ? Number.POSITIVE_INFINITY : 0;
+      ? monthlyAllInCost / recommendedMonthlyBudget
+      : monthlyAllInCost > 0 ? Number.POSITIVE_INFINITY : 0;
 
     return {
+      annualOTE,
+      annualEmployerPayrollCost,
+      monthlyPayrollCost,
+      monthlyAllInCost,
       monthlyContributionAtTarget,
       steadyMonthlyNet,
       breakEvenCautions,
@@ -228,7 +242,9 @@ export function FinancePlanningDashboard() {
       const salesCautions = inputs.salesTargetCautions * rampFactor(month, inputs.salesRampMonths);
       const cautions = organicCautions + salesCautions;
       const contribution = cautions * actuals.contributionPerCaution;
-      const salesCost = inputs.salesMonthlyCost + (month === 1 ? inputs.salesOnboardingCost : 0);
+      const annualOTE = inputs.salesFixedAnnualGross + inputs.salesVariableAnnualTarget;
+      const monthlyPayrollCost = (annualOTE * (1 + inputs.employerChargeRate)) / 12;
+      const salesCost = monthlyPayrollCost + inputs.salesToolsMonthlyCost + (month === 1 ? inputs.salesOnboardingCost : 0);
       const netCashFlow = contribution - monthlyFixedCosts - salesCost;
       treasury += netCashFlow;
 
@@ -340,8 +356,8 @@ export function FinancePlanningDashboard() {
           <div className="flex items-start gap-2">
             <BriefcaseBusiness className="mt-0.5 size-4 text-primary" />
             <div>
-              <div className="text-sm font-semibold">Décision : recruter un Sales</div>
-              <div className="text-[10px] text-muted-foreground">Combien le recrutement coûte, combien de cautions il doit générer et son impact cash.</div>
+              <div className="text-sm font-semibold">Décision : recruter un Head of Sales</div>
+              <div className="text-[10px] text-muted-foreground">Preset marché Paris 2026, ajustable selon le profil réellement ciblé et le plan commercial Gando.</div>
             </div>
           </div>
           <Badge variant="outline" className={runwayStatus.className}>{runwayStatus.label}</Badge>
@@ -370,27 +386,65 @@ export function FinancePlanningDashboard() {
             <div className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
               {salesModel.recommendedMonthlyBudget <= 0
                 ? "Renseigne d’abord la trésorerie pour calculer une enveloppe soutenable."
-                : inputs.salesMonthlyCost <= salesModel.recommendedMonthlyBudget
-                  ? "Le coût testé reste dans l’enveloppe calculée."
-                  : `Le scénario dépasse l’enveloppe d’environ ${euro(inputs.salesMonthlyCost - salesModel.recommendedMonthlyBudget)}/mois.`}
+                : salesModel.monthlyAllInCost <= salesModel.recommendedMonthlyBudget
+                  ? "Le coût complet testé reste dans l’enveloppe calculée."
+                  : `Le scénario dépasse l’enveloppe d’environ ${euro(salesModel.monthlyAllInCost - salesModel.recommendedMonthlyBudget)}/mois.`}
             </div>
           </div>
         </div>
 
-        <div className="grid gap-4 p-4 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Coût mensuel Sales" value={inputs.salesMonthlyCost} suffix="€" onChange={value => update("salesMonthlyCost", value)} />
-            <Field label="Coût onboarding" value={inputs.salesOnboardingCost} suffix="€" onChange={value => update("salesOnboardingCost", value)} />
-            <Field label="Objectif cautions / mois" value={inputs.salesTargetCautions} suffix="cautions" onChange={value => update("salesTargetCautions", value)} />
-            <Field label="Montée en puissance" value={inputs.salesRampMonths} suffix="mois" onChange={value => update("salesRampMonths", Math.max(1, Math.round(value)))} />
+        <div className="grid gap-4 p-4 lg:grid-cols-[0.95fr_1.05fr]">
+          <div>
+            <div className="mb-3 rounded-lg border border-border bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Preset marché</div>
+                  <div className="mt-1 text-sm font-semibold">Head of Sales · Paris · early-stage</div>
+                  <div className="mt-1 text-[10px] leading-relaxed text-muted-foreground">Base de travail : 95 k€ fixe + 55 k€ variable = 150 k€ OTE. Tous les paramètres restent modifiables.</div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 shrink-0"
+                  onClick={() => setInputs(current => ({
+                    ...current,
+                    salesFixedAnnualGross: 95000,
+                    salesVariableAnnualTarget: 55000,
+                    employerChargeRate: 0.42,
+                    salesToolsMonthlyCost: 500,
+                    salesOnboardingCost: 5000,
+                    salesTargetCautions: 500,
+                    salesRampMonths: 6,
+                  }))}
+                >
+                  Charger le preset
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Fixe brut annuel" value={inputs.salesFixedAnnualGross} suffix="€" onChange={value => update("salesFixedAnnualGross", value)} />
+              <Field label="Variable cible annuel" value={inputs.salesVariableAnnualTarget} suffix="€" onChange={value => update("salesVariableAnnualTarget", value)} />
+              <Field label="Charges employeur estimées" value={inputs.employerChargeRate * 100} suffix="%" onChange={value => update("employerChargeRate", value / 100)} helper="Hypothèse ajustable ; le coût exact dépend du statut, des allègements et de la paie." />
+              <Field label="Outils / mois" value={inputs.salesToolsMonthlyCost} suffix="€" onChange={value => update("salesToolsMonthlyCost", value)} />
+              <Field label="Onboarding / recrutement" value={inputs.salesOnboardingCost} suffix="€" onChange={value => update("salesOnboardingCost", value)} />
+              <Field label="Objectif incrémental à régime" value={inputs.salesTargetCautions} suffix="cautions/mois" onChange={value => update("salesTargetCautions", value)} helper="Objectif Gando : impact équipe, pas seulement production individuelle." />
+              <Field label="Montée en puissance" value={inputs.salesRampMonths} suffix="mois" onChange={value => update("salesRampMonths", Math.max(1, Math.round(value)))} />
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-border p-3 sm:grid-cols-4">
+              <MiniMetric label="OTE" value={euro(salesModel.annualOTE)} />
+              <MiniMetric label="Coût employeur annuel" value={euro(salesModel.annualEmployerPayrollCost)} />
+              <MiniMetric label="Coût complet / mois" value={euro(salesModel.monthlyAllInCost)} />
+              <MiniMetric label="Coût complet année 1" value={euro(salesModel.annualCost)} />
+            </div>
           </div>
 
           <div className="grid sm:grid-cols-2 xl:grid-cols-3">
-            <DecisionMetric icon={<BadgeEuro className="size-4" />} label="Cautions pour payer le Sales" value={integer(salesModel.breakEvenCautions)} detail="par mois, au niveau de contribution actuel" />
+            <DecisionMetric icon={<BadgeEuro className="size-4" />} label="Cautions pour payer le Head of Sales" value={integer(salesModel.breakEvenCautions)} detail="par mois, sur le coût complet et la contribution actuelle" />
             <DecisionMetric icon={<TrendingUp className="size-4" />} label="Contribution à plein régime" value={euro(salesModel.monthlyContributionAtTarget)} detail={`Net direct : ${euro(salesModel.steadyMonthlyNet)}/mois`} />
             <DecisionMetric icon={<Banknote className="size-4" />} label="Runway après recrutement" value={Number.isFinite(salesModel.runwayAfterHire) ? `${salesModel.runwayAfterHire.toFixed(1)} mois` : "∞"} detail={`Cible interne : ${inputs.safetyMonths} mois`} />
             <DecisionMetric icon={<ArrowRight className="size-4" />} label="Payback estimé" value={salesModel.paybackMonth ? `${salesModel.paybackMonth} mois` : "> 36 mois"} detail="Avec montée en puissance" />
-            <DecisionMetric icon={<Calculator className="size-4" />} label="Coût année 1" value={euro(salesModel.annualCost)} detail={`Contribution générée : ${euro(salesModel.annualContribution)}`} />
+            <DecisionMetric icon={<Calculator className="size-4" />} label="Coût complet année 1" value={euro(salesModel.annualCost)} detail={`Contribution générée : ${euro(salesModel.annualContribution)}`} />
             <DecisionMetric icon={<WalletCards className="size-4" />} label="ROI année 1" value={percent(salesModel.roi)} detail="Sur contribution mesurée" />
           </div>
         </div>
@@ -483,6 +537,15 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   );
 }
 
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[9px] font-bold uppercase tracking-[0.07em] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-sm font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
 function DecisionMetric({
   icon,
   label,
@@ -504,3 +567,4 @@ function DecisionMetric({
     </div>
   );
 }
+
