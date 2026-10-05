@@ -186,6 +186,23 @@ export function FinancePlanningDashboard() {
       return monthlyContributionAtTarget * factor;
     }).reduce((sum, value) => sum + value, 0);
     const roi = annualCost > 0 ? (annualContribution - annualCost) / annualCost : 0;
+    const safetyHorizon = Math.max(1, Math.round(inputs.safetyMonths));
+    const avgRampFactor = Array.from({ length: safetyHorizon }, (_, index) =>
+      rampFactor(index + 1, inputs.salesRampMonths)
+    ).reduce((sum, value) => sum + value, 0) / safetyHorizon;
+    const avgMonthlySalesContribution = monthlyContributionAtTarget * avgRampFactor;
+    const availableMonthlyBurn = Math.max(
+      0,
+      (Math.max(0, inputs.treasury - inputs.salesOnboardingCost) / safetyHorizon) - currentNetBurn
+    );
+    const recommendedMonthlyBudget = Math.max(
+      0,
+      availableMonthlyBurn + avgMonthlySalesContribution
+    );
+    const recommendedAnnualBudget = recommendedMonthlyBudget * 12 + inputs.salesOnboardingCost;
+    const budgetUsage = recommendedMonthlyBudget > 0
+      ? inputs.salesMonthlyCost / recommendedMonthlyBudget
+      : inputs.salesMonthlyCost > 0 ? Number.POSITIVE_INFINITY : 0;
 
     return {
       monthlyContributionAtTarget,
@@ -196,6 +213,10 @@ export function FinancePlanningDashboard() {
       annualCost,
       annualContribution,
       roi,
+      recommendedMonthlyBudget,
+      recommendedAnnualBudget,
+      budgetUsage,
+      avgMonthlySalesContribution,
     };
   }, [actuals.contributionPerCaution, currentNetBurn, inputs]);
 
@@ -243,7 +264,7 @@ export function FinancePlanningDashboard() {
   const runwayStatus = statusMeta(salesModel.runwayAfterHire, inputs.safetyMonths);
 
   return (
-    <div className="space-y-5">
+    <div id="overview" className="space-y-5 scroll-mt-24">
       <Card className="overflow-hidden border-primary/20">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-primary/[0.025] px-4 py-4">
           <div>
@@ -277,7 +298,7 @@ export function FinancePlanningDashboard() {
         </div>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <div id="hypotheses" className="grid scroll-mt-24 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="overflow-hidden">
           <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             <Calculator className="size-4 text-primary" />
@@ -300,7 +321,7 @@ export function FinancePlanningDashboard() {
           </div>
         </Card>
 
-        <Card className="overflow-hidden">
+        <Card id="treasury" className="scroll-mt-24 overflow-hidden">
           <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             <PiggyBank className="size-4 text-primary" />
             <div className="text-sm font-semibold">Lecture CEO</div>
@@ -314,7 +335,7 @@ export function FinancePlanningDashboard() {
         </Card>
       </div>
 
-      <Card className="overflow-hidden">
+      <Card id="recruitment" className="scroll-mt-24 overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div className="flex items-start gap-2">
             <BriefcaseBusiness className="mt-0.5 size-4 text-primary" />
@@ -324,6 +345,36 @@ export function FinancePlanningDashboard() {
             </div>
           </div>
           <Badge variant="outline" className={runwayStatus.className}>{runwayStatus.label}</Badge>
+        </div>
+
+        <div className="grid gap-4 border-b border-border bg-muted/15 p-4 lg:grid-cols-3">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Budget mensuel recommandé</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{euro(salesModel.recommendedMonthlyBudget)}</div>
+            <div className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Budget maximal estimé pour préserver environ {inputs.safetyMonths} mois de runway, en tenant compte du ramp-up et de la contribution attendue.
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Budget année 1 recommandé</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{euro(salesModel.recommendedAnnualBudget)}</div>
+            <div className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              Inclut {euro(inputs.salesOnboardingCost)} d’onboarding et 12 mois de coût récurrent.
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Position du scénario testé</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">
+              {Number.isFinite(salesModel.budgetUsage) ? percent(salesModel.budgetUsage) : "—"}
+            </div>
+            <div className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              {salesModel.recommendedMonthlyBudget <= 0
+                ? "Renseigne d’abord la trésorerie pour calculer une enveloppe soutenable."
+                : inputs.salesMonthlyCost <= salesModel.recommendedMonthlyBudget
+                  ? "Le coût testé reste dans l’enveloppe calculée."
+                  : `Le scénario dépasse l’enveloppe d’environ ${euro(inputs.salesMonthlyCost - salesModel.recommendedMonthlyBudget)}/mois.`}
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-4 p-4 lg:grid-cols-[0.9fr_1.1fr]">
@@ -352,7 +403,7 @@ export function FinancePlanningDashboard() {
         ) : null}
       </Card>
 
-      <Card className="overflow-hidden">
+      <Card id="forecast" className="scroll-mt-24 overflow-hidden">
         <div className="border-b border-border px-4 py-3">
           <div className="text-sm font-semibold">Prévisionnel cash-flow</div>
           <div className="text-[10px] text-muted-foreground">BP dynamique : croissance organique + impact du Sales + coûts fixes.</div>
