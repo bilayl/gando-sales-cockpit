@@ -7,6 +7,7 @@ import {
   LogOut,
   Palette,
   UsersRound,
+  WalletCards,
 } from "lucide-react";
 import { GandoMark } from "@/components/gando-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -66,6 +67,18 @@ export default async function Page() {
       icon: Palette,
       iconClassName: "bg-[#fff0e7] text-[#d96c2f]",
     },
+    ...(access.role === "admin"
+      ? [
+          {
+            key: "finance",
+            name: "Finance",
+            domain: "finance.gando.pro",
+            href: "/finance",
+            icon: WalletCards,
+            iconClassName: "bg-[#eaf4ff] text-[#2563eb]",
+          } satisfies CockpitApp,
+        ]
+      : []),
     {
       key: "developer",
       name: "Développeur",
@@ -123,7 +136,7 @@ export default async function Page() {
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Choisissez l’outil Gando que vous souhaitez ouvrir.</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 sm:gap-x-10 lg:grid-cols-5 lg:gap-x-14">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 sm:gap-x-10 lg:grid-cols-6 lg:gap-x-10">
             {visibleApps.map(app => {
               const Icon = app.icon;
               const content = (
