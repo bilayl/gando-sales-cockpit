@@ -1,7 +1,9 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
+import { FinanceSidebar } from "@/components/finance/finance-sidebar";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { GlobalPhoneDialer } from "@/components/global-phone-dialer";
 import { PageTransition } from "@/components/page-transition";
@@ -18,6 +20,7 @@ export function DashboardLayout({
   email?: string;
   role: CockpitRole;
 }) {
+  const pathname = usePathname();
   const sidebarOpen = useUIStore(state => state.sidebarOpen);
   const setSidebarOpen = useUIStore(state => state.setSidebarOpen);
 
@@ -32,7 +35,11 @@ export function DashboardLayout({
         } as CSSProperties
       }
     >
-      <AppSidebar email={email} role={role} />
+      {pathname.startsWith("/finance") ? (
+        <FinanceSidebar email={email} role={role} />
+      ) : (
+        <AppSidebar email={email} role={role} />
+      )}
       <SidebarInset className="min-h-svh min-w-0 bg-background text-foreground">
         <DashboardHeader />
         <main className="min-h-0 min-w-0 flex-1">
