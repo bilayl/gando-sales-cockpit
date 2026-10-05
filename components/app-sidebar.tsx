@@ -15,6 +15,7 @@ import {
   PanelLeftOpen,
   PhoneCall,
   Search,
+  WalletCards,
 } from "lucide-react";
 import {
   Sidebar,
@@ -108,6 +109,7 @@ export function AppSidebar({
     { href: "/contacts", label: "Contacts", icon: ContactRound },
     { href: "/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
+    { href: "/finance", label: "Finance", icon: WalletCards, visible: role !== "commercial" },
   ];
 
   const tools: NavItem[] = [
