@@ -536,19 +536,28 @@ function ConnectionModal({
                   Une fois connecté, le Cockpit affichera automatiquement les repositories auxquels ce compte a accès.
                 </p>
 
-                {connection?.oauthAvailable ? (
-                  <a
-                    href="/api/developer-docs/github/start"
-                    className="mt-4 inline-flex h-9 items-center gap-2 rounded-xl bg-[#17181c] px-4 text-xs font-semibold text-white transition hover:bg-[#2b2d33] dark:bg-white dark:text-black"
-                  >
-                    <Github className="h-4 w-4" />
-                    Continuer avec GitHub
-                  </a>
-                ) : null}
+                <a
+                  href="/api/developer-docs/github/start"
+                  className="mt-4 inline-flex h-9 items-center gap-2 rounded-xl bg-[#17181c] px-4 text-xs font-semibold text-white transition hover:bg-[#2b2d33] dark:bg-white dark:text-black"
+                >
+                  <Github className="h-4 w-4" />
+                  Continuer avec GitHub
+                </a>
+
+                {!connection?.oauthAvailable ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-[10px] leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+                    OAuth GitHub n’est pas détecté sur ce déploiement. Le bouton reste visible pour diagnostiquer la configuration.
+                  </div>
+                ) : (
+                  <div className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                    <Check className="h-3 w-3" />
+                    OAuth GitHub détecté
+                  </div>
+                )}
 
                 <div className="my-5 flex items-center gap-3 text-[9px] uppercase tracking-[0.09em] text-muted-foreground">
                   <span className="h-px flex-1 bg-border" />
-                  {connection?.oauthAvailable ? "ou connexion avancée" : "connexion"}
+                  ou connexion par token
                   <span className="h-px flex-1 bg-border" />
                 </div>
 
