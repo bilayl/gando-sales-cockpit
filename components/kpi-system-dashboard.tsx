@@ -95,6 +95,7 @@ const dictionary = [
   ["Retention J+30", "Rétention", "Part des loueurs activés d’une cohorte encore actifs à J+30.", "MAU J+30 / activés cohorte"],
   ["Marge / MAU", "Economics", "Marge nette moyenne générée par un loueur actif.", "Marge nette / MAU"],
   ["Marge / caution", "Economics", "Marge nette moyenne générée par une caution activée.", "Marge nette / cautions"],
+  ["Assurance à payer", "Economics", "Montant dû à l’assurance sur les cautions couvertes de la période.", "TDV assuré × taux assurance"],
   ["Take rate", "Economics", "Part du volume sécurisé transformée en revenu Gando.", "CA / TDV"],
   ["CAC payback", "Economics", "Nombre de mois de marge nécessaires pour rembourser le CAC MAU.", "CAC MAU / marge 30j par MAU"],
   ["Loss rate", "Risque", "Part du volume définitivement perdue après encaissement et recouvrement.", "Pertes définitives / volume exposé"],
