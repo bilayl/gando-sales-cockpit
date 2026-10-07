@@ -45,6 +45,7 @@ type TeamInputs = {
   onboardingCost: number;
   targetMultiple: number;
   rampMonths: number;
+  currentRampMonth: number;
   winRate: number;
   actualContributionThisMonth: number;
   benchmarkDealId: string;
@@ -59,6 +60,7 @@ const DEFAULT_INPUTS: TeamInputs = {
   onboardingCost: 500,
   targetMultiple: 5,
   rampMonths: 4,
+  currentRampMonth: 1,
   winRate: 0.2,
   actualContributionThisMonth: 0,
   benchmarkDealId: "average",
@@ -163,7 +165,7 @@ export function TeamEfficiencyDashboard() {
       : null;
     const monthlySignedDeals = signedDealsPerYear != null ? signedDealsPerYear / 12 : null;
 
-    const currentRampMonth = Math.min(6, Math.max(1, inputs.rampMonths));
+    const currentRampMonth = Math.min(12, Math.max(1, Math.round(inputs.currentRampMonth)));
     const currentExpectedContribution = fullMonthlyContributionTarget * rampFactor(currentRampMonth, inputs.rampMonths);
     const currentPerformanceRatio = currentExpectedContribution > 0
       ? inputs.actualContributionThisMonth / currentExpectedContribution
@@ -233,6 +235,7 @@ export function TeamEfficiencyDashboard() {
       onboardingCost: 500,
       targetMultiple: 5,
       rampMonths: 4,
+      currentRampMonth: 1,
       winRate: 0.2,
     };
     setInputs(next);
@@ -301,6 +304,7 @@ export function TeamEfficiencyDashboard() {
             <Field label="Onboarding / recrutement" value={inputs.onboardingCost} suffix="€" onChange={value => update("onboardingCost", value)} />
             <Field label="Multiple de rendement" value={inputs.targetMultiple} suffix="x" onChange={value => update("targetMultiple", Math.max(1, value))} />
             <Field label="Ramp-up" value={inputs.rampMonths} suffix="mois" onChange={value => update("rampMonths", Math.max(1, Math.round(value)))} />
+            <Field label="Mois dans le poste" value={inputs.currentRampMonth} suffix="M" onChange={value => update("currentRampMonth", Math.max(1, Math.round(value)))} />
             <Field label="Taux de closing" value={inputs.winRate * 100} suffix="%" onChange={value => update("winRate", Math.max(0.01, Math.min(1, value / 100)))} />
             <label className="block">
               <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Benchmark de deal</span>
@@ -356,7 +360,7 @@ export function TeamEfficiencyDashboard() {
             <TeamMetric
               label="Cible mensuelle à régime"
               value={euro(model.fullMonthlyContributionTarget)}
-              detail={"Benchmark : " + benchmark.label}
+              detail={"Cible M" + Math.round(inputs.currentRampMonth) + " · benchmark " + benchmark.label}
             />
             <TeamMetric
               label="Atteinte vs cible"
