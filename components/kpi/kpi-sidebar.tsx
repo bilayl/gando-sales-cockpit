@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BadgeEuro,
+  BriefcaseBusiness,
   ChartSpline,
   Calculator,
   Database,
@@ -12,6 +13,7 @@ import {
   LayoutDashboard,
   Target,
   TrendingUp,
+  UsersRound,
   WalletCards,
 } from "lucide-react";
 import {
@@ -38,6 +40,8 @@ const items = [
   { href: "/kpi/growth", label: "Croissance", icon: TrendingUp },
   { href: "/kpi/economics", label: "Économie & risque", icon: BadgeEuro },
   { href: "/kpi/offer-analysis", label: "Analyse offre", icon: Calculator },
+  { href: "/kpi/deals", label: "Valeur des deals", icon: BriefcaseBusiness },
+  { href: "/kpi/team", label: "Équipe & rendement", icon: UsersRound },
   { href: "/kpi/forecast", label: "Prévisions", icon: ChartSpline },
   { href: "/kpi/acquisition", label: "Acquisition", icon: Target },
   { href: "/kpi/cash", label: "Cash & coûts", icon: WalletCards },
