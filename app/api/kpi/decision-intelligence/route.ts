@@ -12,6 +12,7 @@ type Deposit = {
   accountId: string;
   status: string;
   amountCents: number;
+  startAt: number | null;
   createdAt: number | null;
   updatedAt: number | null;
   archived: boolean;
@@ -30,7 +31,6 @@ type MonthBucket = {
   mau: Set<string>;
 };
 
-const SUCCESSFUL = new Set(["active", "close", "captured"]);
 const MATCH_WINDOW_MS = 14 * 86400000;
 const DEFAULT_INSURANCE_RATE_BPS = 114;
 const DEFAULT_INSURANCE_EFFECTIVE_FROM = Date.parse("2026-09-01T00:00:00.000Z");
@@ -52,7 +52,27 @@ function ts(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 function monthKey(value: number) {
-  return new Date(value).toISOString().slice(0, 7);
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date(value));
+  const year = parts.find(part => part.type === "year")?.value || "0000";
+  const month = parts.find(part => part.type === "month")?.value || "00";
+  return `${year}-${month}`;
+}
+
+function localDateKey(value: number) {
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const year = parts.find(part => part.type === "year")?.value || "0000";
+  const month = parts.find(part => part.type === "month")?.value || "00";
+  const day = parts.find(part => part.type === "day")?.value || "00";
+  return `${year}-${month}-${day}`;
 }
 function monthStart(key: string) {
   const [year, month] = key.split("-").map(Number);
@@ -98,6 +118,7 @@ function buildDeposits(rows: MirrorRow[]): Deposit[] {
     accountId: str(row.payload.account_id),
     status: str(row.payload.status),
     amountCents: num(row.payload.amount_cents),
+    startAt: ts(row.payload.start_at),
     createdAt: ts(row.payload.created_at),
     updatedAt: ts(row.payload.updated_at),
     archived: bool(row.payload.is_archived),
@@ -211,12 +232,13 @@ export async function GET() {
       .filter(row => row.clientId && row.amountCents > 0 && row.createdAt != null);
 
     const feeByDeposit = matchFees(deposits, fees);
-    const wonDeposits = deposits.filter(deposit => SUCCESSFUL.has(deposit.status) && !deposit.archived && feeByDeposit.has(deposit.id));
+    const activatedDeposits = deposits.filter(deposit => !deposit.archived && deposit.startAt != null);
     const rules = (rulesResult.data || []) as Row[];
     const insuranceRateBps = settingsResult.data?.insurance_rate_bps == null
       ? DEFAULT_INSURANCE_RATE_BPS
       : num(settingsResult.data.insurance_rate_bps);
     const insuranceEffectiveFrom = ts(settingsResult.data?.insurance_effective_from) ?? DEFAULT_INSURANCE_EFFECTIVE_FROM;
+    const insuranceEffectiveDate = String(settingsResult.data?.insurance_effective_from || "2026-09-01").slice(0, 10);
 
     const buckets = new Map<string, MonthBucket>();
     const ensureBucket = (key: string) => {
@@ -237,7 +259,7 @@ export async function GET() {
         if (effectiveTo != null && feeAt > effectiveTo) continue;
         const mode = str(rule.calculation_mode) || "fixed_tier";
         if (mode === "active_volume_rate") {
-          if (deposit.status === "active") cost += Math.round(deposit.amountCents * num(rule.rate_bps) / 10000);
+          cost += Math.round(deposit.amountCents * num(rule.rate_bps) / 10000);
         } else {
           const tiers = Array.isArray(rule.tiers) ? rule.tiers as Tier[] : [];
           cost += reward(deposit.amountCents, tiers);
@@ -246,19 +268,23 @@ export async function GET() {
       return cost;
     }
 
-    for (const deposit of wonDeposits) {
-      const fee = feeByDeposit.get(deposit.id);
-      if (!fee?.createdAt) continue;
-      const key = monthKey(fee.createdAt);
+    for (const deposit of activatedDeposits) {
+      const activationAt = deposit.startAt!;
+      const key = monthKey(activationAt);
       const bucket = ensureBucket(key);
       bucket.cautions += 1;
       bucket.tdvCents += deposit.amountCents;
-      bucket.revenueCents += fee.amountCents;
       if (deposit.accountId) bucket.mau.add(deposit.accountId);
-      if (fee.createdAt >= insuranceEffectiveFrom) {
+
+      const fee = feeByDeposit.get(deposit.id);
+      if (fee) bucket.revenueCents += fee.amountCents;
+
+      // Assurance : 1,14 % uniquement pour les activations à partir du 01/09/2026
+      // (comparaison sur la date locale Europe/Paris).
+      if (localDateKey(activationAt) >= insuranceEffectiveDate) {
         bucket.insuranceCostCents += Math.round(deposit.amountCents * insuranceRateBps / 10000);
       }
-      bucket.partnerCostCents += partnerCostForDeposit(deposit, fee.createdAt);
+      bucket.partnerCostCents += partnerCostForDeposit(deposit, activationAt);
     }
 
     for (const row of captureRows) {
@@ -276,11 +302,10 @@ export async function GET() {
     }
 
     const accountMonths = new Map<string, Set<string>>();
-    for (const deposit of wonDeposits) {
-      const feeAt = feeByDeposit.get(deposit.id)?.createdAt;
-      if (feeAt == null || !deposit.accountId) continue;
+    for (const deposit of activatedDeposits) {
+      if (deposit.startAt == null || !deposit.accountId) continue;
       const set = accountMonths.get(deposit.accountId) || new Set<string>();
-      set.add(monthKey(feeAt));
+      set.add(monthKey(deposit.startAt));
       accountMonths.set(deposit.accountId, set);
     }
 
