@@ -24,6 +24,20 @@ type DealPayload = {
   deals: DealEconomics[];
 };
 
+type CostEntry = {
+  id: string;
+  year: number;
+  monthNumber: number;
+  family: string;
+  category: string;
+  label: string;
+  amount: number;
+};
+
+type CostPayload = {
+  entries?: CostEntry[];
+};
+
 type TeamInputs = {
   fixedMonthlyCost: number;
   variableMonthlyCost: number;
@@ -81,6 +95,7 @@ function performanceMeta(ratio: number) {
 
 export function TeamEfficiencyDashboard() {
   const [data, setData] = useState<DealPayload | null>(null);
+  const [costData, setCostData] = useState<CostPayload | null>(null);
   const [inputs, setInputs] = useState<TeamInputs>(DEFAULT_INPUTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -95,10 +110,15 @@ export function TeamEfficiencyDashboard() {
 
     void (async () => {
       try {
-        const response = await fetch("/api/kpi/deal-economics", { cache: "no-store" });
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || "Impossible de charger les benchmarks deals.");
-        setData(body);
+        const [dealResponse, costResponse] = await Promise.all([
+          fetch("/api/kpi/deal-economics", { cache: "no-store" }),
+          fetch("/api/kpi/cost-control", { cache: "no-store" }),
+        ]);
+        const [dealBody, costBody] = await Promise.all([dealResponse.json(), costResponse.json()]);
+        if (!dealResponse.ok) throw new Error(dealBody.error || "Impossible de charger les benchmarks deals.");
+        if (!costResponse.ok) throw new Error(costBody.error || "Impossible de charger les coûts d’équipe.");
+        setData(dealBody);
+        setCostData(costBody);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Impossible de charger les benchmarks deals.");
       } finally {
@@ -177,6 +197,19 @@ export function TeamEfficiencyDashboard() {
     };
   }, [benchmark.annualContribution, inputs]);
 
+  const currentTeamCosts = useMemo(() => {
+    const now = new Date();
+    return (costData?.entries || [])
+      .filter(row =>
+        row.year === now.getFullYear() &&
+        row.monthNumber === now.getMonth() + 1 &&
+        row.family === "structure" &&
+        row.category === "team"
+      )
+      .sort((a, b) => b.amount - a.amount);
+  }, [costData]);
+
+  const currentTeamCostTotal = currentTeamCosts.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const performance = performanceMeta(model.currentPerformanceRatio);
 
   function update<K extends keyof TeamInputs>(key: K, value: TeamInputs[K]) {
@@ -234,9 +267,10 @@ export function TeamEfficiencyDashboard() {
           </Button>
         </div>
 
-        <div className="grid sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid sm:grid-cols-2 xl:grid-cols-6">
           {[
             ["Coût complet / mois", euro(model.fullyLoadedMonthlyCost), "Fixe + variable + outils + onboarding amorti"],
+            ["Coût équipe réel", euro(currentTeamCostTotal), currentTeamCosts.length ? currentTeamCosts.length + " ligne(s) équipe ce mois" : "À saisir dans Cash & coûts"],
             ["Objectif x" + number(inputs.targetMultiple, 1), euro(model.fullMonthlyContributionTarget), "Contribution à créer / mois à régime"],
             ["Deals signés / an", number(model.signedDealsPerYear, 2), "Avec le benchmark sélectionné"],
             ["Opps qualifiées / mois", number(model.monthlyQualifiedOpportunities, 1), "Selon le taux de closing"],
@@ -368,6 +402,42 @@ export function TeamEfficiencyDashboard() {
                   <TableCell className="text-right">{number(row.signedTarget, 2)}</TableCell>
                 </TableRow>
               ))}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <BriefcaseBusiness className="size-4 text-primary" />
+          <div>
+            <div className="text-sm font-semibold">Coûts équipe enregistrés ce mois</div>
+            <div className="text-[10px] text-muted-foreground">Les dépenses saisies dans Cash & coûts avec la catégorie Équipe remontent ici automatiquement.</div>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Personne / poste</TableHead>
+                <TableHead className="text-right">Coût du mois</TableHead>
+                <TableHead className="text-right">Coût annualisé</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {currentTeamCosts.length ? currentTeamCosts.map(row => (
+                <TableRow key={row.id}>
+                  <TableCell className="font-semibold">{row.label}</TableCell>
+                  <TableCell className="text-right">{euro(row.amount)}</TableCell>
+                  <TableCell className="text-right">{euro(row.amount * 12)}</TableCell>
+                </TableRow>
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={3} className="h-20 text-center text-xs text-muted-foreground">
+                    Aucun coût personne n’est encore enregistré ce mois. Ajoute-le dans Cash & coûts → Structure → Équipe.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>
