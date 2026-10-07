@@ -14,6 +14,8 @@ type DealEconomics = {
   stage: string;
   status: string;
   enabled: boolean;
+  source: "dealroom" | "live" | "dealroom+live";
+  basis: string;
   monthlyDeposits: number;
   averageDepositAmount: number;
   gandoRatePercent: number;
@@ -21,13 +23,20 @@ type DealEconomics = {
   monthlySecuredVolume: number;
   monthlyGrossRevenue: number;
   monthlyInsuranceCost: number;
+  monthlyPartnerCost: number;
   monthlyPspCost: number;
   monthlyContribution: number;
   annualGrossRevenue: number;
+  annualRecurringContribution: number;
   annualContribution: number;
   contributionMargin: number | null;
   probability: number;
   weightedAnnualContribution: number;
+  oneTimeCost: number;
+  actualMonthlyDeposits: number | null;
+  actualMonthlySecuredVolume: number | null;
+  actualMonthlyGrossRevenue: number | null;
+  actualMonthlyContribution: number | null;
 };
 
 type DealEconomicsPayload = {
@@ -38,6 +47,7 @@ type DealEconomicsPayload = {
   };
   summary: {
     activeDeals: number;
+    liveDeals: number;
     pipelineAnnualGrossRevenue: number;
     pipelineAnnualContribution: number;
     weightedPipelineContribution: number;
@@ -72,6 +82,7 @@ function stageLabel(stage: string) {
     SD03: "Solution",
     SD04: "Proposition",
     SD05: "Contrat",
+    LIVE: "Live",
   };
   return labels[stage] || stage;
 }
@@ -121,11 +132,11 @@ export function DealEconomicsDashboard() {
             </div>
             <h2 className="mt-1 text-lg font-bold">Combien chaque deal peut réellement rapporter à Gando</h2>
             <p className="mt-1 max-w-3xl text-[11px] leading-relaxed text-muted-foreground">
-              Le calcul repart des hypothèses déjà présentes dans chaque dealroom : nombre de cautions, caution moyenne et taux Gando.
+              Le calcul combine les dealrooms, les propositions/contrats et le run-rate réel des comptes Gando. Un client live n’est donc plus invisible s’il n’a pas de SD01 complet.
             </p>
           </div>
           <Badge variant="secondary" className="text-[9px]">
-            {data?.summary.activeDeals || 0} deals chiffrés
+            {data?.summary.activeDeals || 0} deals · {data?.summary.liveDeals || 0} live · assurance {percent(data?.assumptions.insuranceRate, 2)}
           </Badge>
         </div>
 
@@ -154,7 +165,7 @@ export function DealEconomicsDashboard() {
               <div>
                 <div className="text-sm font-semibold">{topDeal.companyName} · lecture du deal</div>
                 <div className="text-[10px] text-muted-foreground">
-                  Estimation issue des hypothèses commerciales enregistrées dans le dealroom.
+                  {topDeal.basis} · assurance {percent(data?.assumptions.insuranceRate, 2)}.
                 </div>
               </div>
             </div>
@@ -167,13 +178,13 @@ export function DealEconomicsDashboard() {
             <DealMetric label="Volume sécurisé / mois" value={euro(topDeal.monthlySecuredVolume)} detail="Base économique" />
             <DealMetric label="CA Gando / mois" value={euro(topDeal.monthlyGrossRevenue)} detail={topDeal.gandoRatePercent.toFixed(2) + " % HT"} />
             <DealMetric label="Contribution / mois" value={euro(topDeal.monthlyContribution)} detail={percent(topDeal.contributionMargin)} />
-            <DealMetric label="Contribution / an" value={euro(topDeal.annualContribution)} detail={percent(topDeal.probability) + " de probabilité actuelle"} />
+            <DealMetric label="Contribution / an" value={euro(topDeal.annualContribution)} detail={topDeal.oneTimeCost > 0 ? "Année 1 après " + euro(topDeal.oneTimeCost) + " de coût de lancement" : percent(topDeal.probability) + " de probabilité actuelle"} />
           </div>
 
           <div className="grid border-t border-border bg-muted/10 sm:grid-cols-3">
-            <DealMetric label="Assurance estimée / mois" value={euro(topDeal.monthlyInsuranceCost)} detail={percent(data?.assumptions.insuranceRate)} />
-            <DealMetric label="Paiement estimé / mois" value={euro(topDeal.monthlyPspCost)} detail={(data?.assumptions.pspRate ? percent(data.assumptions.pspRate) : "—") + " + " + euro(data?.assumptions.pspFixedEur, 2) + "/transaction"} />
-            <DealMetric label="Valeur pipeline pondérée" value={euro(topDeal.weightedAnnualContribution)} detail="Contribution annuelle × probabilité du stage" />
+            <DealMetric label="Assurance estimée / mois" value={euro(topDeal.monthlyInsuranceCost)} detail={percent(data?.assumptions.insuranceRate, 2)} />
+            <DealMetric label="Paiement + partenaire / mois" value={euro(topDeal.monthlyPspCost + topDeal.monthlyPartnerCost)} detail={(data?.assumptions.pspRate ? percent(data.assumptions.pspRate) : "—") + " + " + euro(data?.assumptions.pspFixedEur, 2) + "/transaction"} />
+            <DealMetric label="Valeur pipeline pondérée" value={euro(topDeal.weightedAnnualContribution)} detail={topDeal.stage === "LIVE" ? "Client déjà actif" : "Contribution année 1 × probabilité du stage"} />
           </div>
         </Card>
       ) : null}
@@ -193,12 +204,14 @@ export function DealEconomicsDashboard() {
             <TableHeader>
               <TableRow>
                 <TableHead>Deal</TableHead>
+                <TableHead>Base</TableHead>
                 <TableHead>Stage</TableHead>
                 <TableHead className="text-right">Cautions/mois</TableHead>
                 <TableHead className="text-right">Volume sécurisé</TableHead>
                 <TableHead className="text-right">CA/mois</TableHead>
                 <TableHead className="text-right">Contribution/mois</TableHead>
                 <TableHead className="text-right">Contribution/an</TableHead>
+                <TableHead className="text-right">Réel CA/mois</TableHead>
                 <TableHead className="text-right">Pondéré</TableHead>
               </TableRow>
             </TableHeader>
@@ -212,18 +225,32 @@ export function DealEconomicsDashboard() {
                     </div>
                   </TableCell>
                   <TableCell>
+                    <div className="max-w-[150px] text-[9px] leading-4 text-muted-foreground">{deal.basis}</div>
+                  </TableCell>
+                  <TableCell>
                     <Badge variant="outline" className="text-[9px]">{stageLabel(deal.stage)}</Badge>
                   </TableCell>
                   <TableCell className="text-right">{integer(deal.monthlyDeposits)}</TableCell>
                   <TableCell className="text-right">{euro(deal.monthlySecuredVolume)}</TableCell>
                   <TableCell className="text-right">{euro(deal.monthlyGrossRevenue)}</TableCell>
                   <TableCell className="text-right font-semibold">{euro(deal.monthlyContribution)}</TableCell>
-                  <TableCell className="text-right font-semibold">{euro(deal.annualContribution)}</TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {euro(deal.annualContribution)}
+                    {deal.oneTimeCost > 0 ? <div className="text-[9px] font-normal text-muted-foreground">- {euro(deal.oneTimeCost)} lancement</div> : null}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {deal.actualMonthlyGrossRevenue != null ? (
+                      <div>
+                        <div className="font-semibold">{euro(deal.actualMonthlyGrossRevenue)}</div>
+                        <div className="text-[9px] text-muted-foreground">{integer(deal.actualMonthlyDeposits)} cautions / 30 j</div>
+                      </div>
+                    ) : "—"}
+                  </TableCell>
                   <TableCell className="text-right">{euro(deal.weightedAnnualContribution)}</TableCell>
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center text-xs text-muted-foreground">
+                  <TableCell colSpan={10} className="h-24 text-center text-xs text-muted-foreground">
                     Aucun dealroom ne contient encore assez de données pour calculer sa valeur.
                   </TableCell>
                 </TableRow>
@@ -236,7 +263,7 @@ export function DealEconomicsDashboard() {
       <div className="flex gap-2 rounded-lg border border-border bg-muted/15 px-3 py-2.5 text-[10px] leading-4 text-muted-foreground">
         <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
         <span>
-          La contribution affichée est une contribution deal avant coûts de structure : CA de sécurisation moins assurance et frais de paiement. Elle ne remplace pas le résultat comptable global, mais permet de comparer les opportunités et de fixer des objectifs commerciaux cohérents.
+          La contribution deal retire l’assurance à 1,14 %, les coûts partenaire connus et une estimation PSP. Les coûts de structure restent dans la page Rentabilité. Pour les clients live comme LR Location, le run-rate réel Gando des 30 derniers jours est utilisé ; pour Atlantis, la proposition/contrat complète le dealroom.
         </span>
       </div>
     </div>
