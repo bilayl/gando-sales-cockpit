@@ -35,6 +35,7 @@ type CostControlData = {
     year: number;
     monthNumber: number;
     amount: number;
+    family?: string;
   }>;
 };
 
@@ -146,7 +147,11 @@ export function FinancePlanningDashboard() {
 
     const now = new Date();
     const currentCosts = (costData?.entries || [])
-      .filter(row => row.year === now.getFullYear() && row.monthNumber === now.getMonth() + 1)
+      .filter(row =>
+        row.year === now.getFullYear() &&
+        row.monthNumber === now.getMonth() + 1 &&
+        (row.family === "acquisition" || row.family === "structure")
+      )
       .reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
     return {
@@ -325,7 +330,7 @@ export function FinancePlanningDashboard() {
           </div>
           <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Trésorerie disponible" value={inputs.treasury} suffix="€" onChange={value => update("treasury", value)} />
-            <Field label="Coûts fixes mensuels" value={monthlyFixedCosts} suffix="€" onChange={value => update("monthlyFixedCosts", value)} helper={inputs.monthlyFixedCosts === 0 && actuals.currentCosts > 0 ? "Prérempli avec les coûts du mois" : undefined} />
+            <Field label="Coûts fixes mensuels" value={monthlyFixedCosts} suffix="€" onChange={value => update("monthlyFixedCosts", value)} helper={inputs.monthlyFixedCosts === 0 && actuals.currentCosts > 0 ? "Prérempli avec structure + acquisition du mois" : undefined} />
             <Field label="Runway de sécurité" value={inputs.safetyMonths} suffix="mois" onChange={value => update("safetyMonths", value)} />
             <Field label="Croissance mensuelle" value={inputs.monthlyGrowthRate * 100} suffix="%" onChange={value => update("monthlyGrowthRate", value / 100)} />
             <Field label="Horizon prévisionnel" value={inputs.forecastMonths} suffix="mois" onChange={value => update("forecastMonths", Math.max(12, Math.min(60, Math.round(value))))} />
