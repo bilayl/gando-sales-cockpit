@@ -14,6 +14,8 @@ type DealEconomics = {
   id: string;
   companyName: string;
   enabled: boolean;
+  monthlyDeposits: number;
+  monthlyContribution: number;
   annualContribution: number;
 };
 
@@ -49,6 +51,10 @@ type TeamInputs = {
   winRate: number;
   actualContributionThisMonth: number;
   benchmarkDealId: string;
+  targetFleetSize: number;
+  rentalsPerVehicleMonth: number;
+  gandoAdoptionRate: number;
+  qualificationRate: number;
 };
 
 const STORAGE_KEY = "gando-team-efficiency-v2";
@@ -64,6 +70,10 @@ const DEFAULT_INPUTS: TeamInputs = {
   winRate: 0.2,
   actualContributionThisMonth: 0,
   benchmarkDealId: "average",
+  targetFleetSize: 50,
+  rentalsPerVehicleMonth: 3,
+  gandoAdoptionRate: 0.2,
+  qualificationRate: 0.35,
 };
 
 function euro(value: number | null | undefined, digits = 0) {
@@ -136,15 +146,21 @@ export function TeamEfficiencyDashboard() {
 
   const benchmark = useMemo(() => {
     if (inputs.benchmarkDealId === "average") {
+      const totalMonthlyDeposits = benchmarkDeals.reduce((sum, deal) => sum + Number(deal.monthlyDeposits || 0), 0);
+      const totalMonthlyContribution = benchmarkDeals.reduce((sum, deal) => sum + Number(deal.monthlyContribution || 0), 0);
       return {
         label: "Deal moyen du pipeline",
         annualContribution: data?.summary.averageAnnualContribution || 0,
+        monthlyDeposits: benchmarkDeals.length ? totalMonthlyDeposits / benchmarkDeals.length : 0,
+        monthlyContribution: benchmarkDeals.length ? totalMonthlyContribution / benchmarkDeals.length : 0,
       };
     }
     const deal = benchmarkDeals.find(item => item.id === inputs.benchmarkDealId);
     return {
       label: deal?.companyName || "Deal sélectionné",
       annualContribution: deal?.annualContribution || 0,
+      monthlyDeposits: deal?.monthlyDeposits || 0,
+      monthlyContribution: deal?.monthlyContribution || 0,
     };
   }, [benchmarkDeals, data, inputs.benchmarkDealId]);
 
@@ -164,6 +180,42 @@ export function TeamEfficiencyDashboard() {
       ? qualifiedOpportunitiesPerYear / 12
       : null;
     const monthlySignedDeals = signedDealsPerYear != null ? signedDealsPerYear / 12 : null;
+
+    const contributionPerCaution = benchmark.monthlyDeposits > 0
+      ? benchmark.monthlyContribution / benchmark.monthlyDeposits
+      : 0;
+    const monthlyCautionTarget = contributionPerCaution > 0
+      ? fullMonthlyContributionTarget / contributionPerCaution
+      : null;
+
+    const cautionsPerTargetCompany = Math.max(
+      0,
+      inputs.targetFleetSize * inputs.rentalsPerVehicleMonth * inputs.gandoAdoptionRate
+    );
+    const liveCompaniesNeeded = monthlyCautionTarget != null && cautionsPerTargetCompany > 0
+      ? monthlyCautionTarget / cautionsPerTargetCompany
+      : null;
+    const qualifiedCompaniesNeeded = liveCompaniesNeeded != null && inputs.winRate > 0
+      ? liveCompaniesNeeded / inputs.winRate
+      : null;
+    const companiesToProspect = qualifiedCompaniesNeeded != null && inputs.qualificationRate > 0
+      ? qualifiedCompaniesNeeded / inputs.qualificationRate
+      : null;
+    const weeklyProspecting = companiesToProspect != null ? companiesToProspect / 4.33 : null;
+
+    const fleetScenarios = [20, 50, 100].map(fleetSize => {
+      const cautionsPerCompany = fleetSize * inputs.rentalsPerVehicleMonth * inputs.gandoAdoptionRate;
+      const liveCompanies = monthlyCautionTarget != null && cautionsPerCompany > 0
+        ? Math.ceil(monthlyCautionTarget / cautionsPerCompany)
+        : null;
+      const qualifiedCompanies = liveCompanies != null && inputs.winRate > 0
+        ? Math.ceil(liveCompanies / inputs.winRate)
+        : null;
+      const prospects = qualifiedCompanies != null && inputs.qualificationRate > 0
+        ? Math.ceil(qualifiedCompanies / inputs.qualificationRate)
+        : null;
+      return { fleetSize, cautionsPerCompany, liveCompanies, qualifiedCompanies, prospects };
+    });
 
     const currentRampMonth = Math.min(12, Math.max(1, Math.round(inputs.currentRampMonth)));
     const currentExpectedContribution = fullMonthlyContributionTarget * rampFactor(currentRampMonth, inputs.rampMonths);
@@ -195,9 +247,17 @@ export function TeamEfficiencyDashboard() {
       currentExpectedContribution,
       currentPerformanceRatio,
       first90DaysTarget,
+      contributionPerCaution,
+      monthlyCautionTarget,
+      cautionsPerTargetCompany,
+      liveCompaniesNeeded,
+      qualifiedCompaniesNeeded,
+      companiesToProspect,
+      weeklyProspecting,
+      fleetScenarios,
       ramp,
     };
-  }, [benchmark.annualContribution, inputs]);
+  }, [benchmark, inputs]);
 
   const currentTeamCosts = useMemo(() => {
     const now = new Date();
@@ -237,6 +297,10 @@ export function TeamEfficiencyDashboard() {
       rampMonths: 4,
       currentRampMonth: 1,
       winRate: 0.2,
+      targetFleetSize: 50,
+      rentalsPerVehicleMonth: 3,
+      gandoAdoptionRate: 0.2,
+      qualificationRate: 0.35,
     };
     setInputs(next);
     try {
@@ -275,9 +339,9 @@ export function TeamEfficiencyDashboard() {
             ["Coût complet / mois", euro(model.fullyLoadedMonthlyCost), "Fixe + variable + outils + onboarding amorti"],
             ["Coût équipe réel", euro(currentTeamCostTotal), currentTeamCosts.length ? currentTeamCosts.length + " ligne(s) équipe ce mois" : "À saisir dans Cash & coûts"],
             ["Objectif x" + number(inputs.targetMultiple, 1), euro(model.fullMonthlyContributionTarget), "Contribution à créer / mois à régime"],
-            ["Deals signés / an", number(model.signedDealsPerYear, 2), "Avec le benchmark sélectionné"],
-            ["Opps qualifiées / mois", number(model.monthlyQualifiedOpportunities, 1), "Selon le taux de closing"],
-            ["Cible 90 jours", euro(model.first90DaysTarget), "Contribution cumulée pendant le ramp-up"],
+            ["Cautions cible / mois", number(model.monthlyCautionTarget, 0), model.contributionPerCaution > 0 ? euro(model.contributionPerCaution, 2) + " de contribution / caution" : "Benchmark insuffisant"],
+            ["Entreprises live à construire", number(model.liveCompaniesNeeded, 0), inputs.targetFleetSize + " véhicules de moyenne"],
+            ["Prospects à viser / mois", number(model.companiesToProspect, 0), model.weeklyProspecting != null ? number(model.weeklyProspecting, 0) + " entreprises / semaine" : "Selon qualification + closing"],
           ].map(([label, value, helper]) => (
             <div key={label} className="border-border px-4 py-4 sm:border-l first:sm:border-l-0">
               <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">{label}</div>
@@ -306,6 +370,10 @@ export function TeamEfficiencyDashboard() {
             <Field label="Ramp-up" value={inputs.rampMonths} suffix="mois" onChange={value => update("rampMonths", Math.max(1, Math.round(value)))} />
             <Field label="Mois dans le poste" value={inputs.currentRampMonth} suffix="M" onChange={value => update("currentRampMonth", Math.max(1, Math.round(value)))} />
             <Field label="Taux de closing" value={inputs.winRate * 100} suffix="%" onChange={value => update("winRate", Math.max(0.01, Math.min(1, value / 100)))} />
+            <Field label="Taux de qualification" value={inputs.qualificationRate * 100} suffix="%" onChange={value => update("qualificationRate", Math.max(0.01, Math.min(1, value / 100)))} />
+            <Field label="Flotte cible moyenne" value={inputs.targetFleetSize} suffix="véh." onChange={value => update("targetFleetSize", Math.max(1, Math.round(value)))} />
+            <Field label="Locations / véhicule / mois" value={inputs.rentalsPerVehicleMonth} suffix="loc." onChange={value => update("rentalsPerVehicleMonth", Math.max(0.1, value))} />
+            <Field label="Part passant par Gando" value={inputs.gandoAdoptionRate * 100} suffix="%" onChange={value => update("gandoAdoptionRate", Math.max(0.01, Math.min(1, value / 100)))} />
             <label className="block">
               <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Benchmark de deal</span>
               <Select value={inputs.benchmarkDealId} onValueChange={value => update("benchmarkDealId", value)}>
@@ -374,6 +442,84 @@ export function TeamEfficiencyDashboard() {
           </div>
         </Card>
       </div>
+
+      <Card className="overflow-hidden border-primary/15">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="flex items-start gap-2">
+            <Target className="mt-0.5 size-4 text-primary" />
+            <div>
+              <div className="text-sm font-semibold">Plan de ciblage concret</div>
+              <div className="text-[10px] text-muted-foreground">
+                Transformer l’objectif de rendement en nombre d’entreprises, taille de flotte et cautions mensuelles attendues.
+              </div>
+            </div>
+          </div>
+          <Badge variant="secondary" className="text-[9px]">
+            Hypothèse : {number(inputs.rentalsPerVehicleMonth, 1)} locations/véhicule/mois × {percent(inputs.gandoAdoptionRate)}
+          </Badge>
+        </div>
+
+        <div className="grid sm:grid-cols-2 xl:grid-cols-5">
+          <TeamMetric
+            label="Flotte cœur de cible"
+            value={number(inputs.targetFleetSize, 0) + " véhicules"}
+            detail="Modifiable dans les hypothèses"
+          />
+          <TeamMetric
+            label="Cautions / entreprise / mois"
+            value={number(model.cautionsPerTargetCompany, 0)}
+            detail="À maturité avec le taux d’adoption choisi"
+          />
+          <TeamMetric
+            label="Portefeuille live nécessaire"
+            value={number(model.liveCompaniesNeeded, 0) + " entreprises"}
+            detail="Pour couvrir l’objectif de cautions mensuel"
+          />
+          <TeamMetric
+            label="Entreprises qualifiées"
+            value={number(model.qualifiedCompaniesNeeded, 0)}
+            detail={"Avec " + percent(inputs.winRate) + " de closing"}
+          />
+          <TeamMetric
+            label="Entreprises à prospecter"
+            value={number(model.companiesToProspect, 0)}
+            detail={model.weeklyProspecting != null ? "≈ " + number(model.weeklyProspecting, 0) + " / semaine" : "À calculer"}
+          />
+        </div>
+
+        <div className="overflow-x-auto border-t border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Segment</TableHead>
+                <TableHead className="text-right">Flotte</TableHead>
+                <TableHead className="text-right">Cautions / entreprise / mois</TableHead>
+                <TableHead className="text-right">Entreprises live nécessaires</TableHead>
+                <TableHead className="text-right">À qualifier</TableHead>
+                <TableHead className="text-right">À prospecter</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {model.fleetScenarios.map(row => (
+                <TableRow key={row.fleetSize} className={row.fleetSize === 50 ? "bg-primary/[0.025]" : ""}>
+                  <TableCell className="font-semibold">
+                    {row.fleetSize === 20 ? "Petit loueur" : row.fleetSize === 50 ? "Cœur de cible" : "Compte structuré"}
+                  </TableCell>
+                  <TableCell className="text-right">{row.fleetSize} véhicules</TableCell>
+                  <TableCell className="text-right font-semibold">{number(row.cautionsPerCompany, 0)}</TableCell>
+                  <TableCell className="text-right">{number(row.liveCompanies, 0)}</TableCell>
+                  <TableCell className="text-right">{number(row.qualifiedCompanies, 0)}</TableCell>
+                  <TableCell className="text-right">{number(row.prospects, 0)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="border-t border-border bg-muted/10 px-4 py-3 text-[10px] leading-4 text-muted-foreground">
+          Exemple : avec une flotte cible de {number(inputs.targetFleetSize, 0)} véhicules, {number(inputs.rentalsPerVehicleMonth, 1)} locations par véhicule et {percent(inputs.gandoAdoptionRate)} des locations utilisant Gando, une entreprise représente environ {number(model.cautionsPerTargetCompany, 0)} cautions par mois. Le cockpit remonte ensuite le nombre d’entreprises à signer, qualifier puis prospecter pour atteindre l’objectif économique du SDR.
+        </div>
+      </Card>
 
       <Card className="overflow-hidden">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -450,7 +596,7 @@ export function TeamEfficiencyDashboard() {
       <div className="flex gap-2 rounded-lg border border-border bg-muted/15 px-3 py-2.5 text-[10px] leading-4 text-muted-foreground">
         <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
         <span>
-          Le preset SDR est un scénario de travail, pas une donnée comptable. Remplace ses coûts par le contrat réel. La logique de rendement reste la même : coût complet → multiple cible → contribution à générer → nombre d’opportunités et de deals nécessaires.
+          Le preset SDR est un scénario de travail. La partie ciblage est volontairement pilotable : taille de flotte, locations par véhicule, adoption Gando, qualification et closing. La lecture devient : coût complet → contribution cible → cautions nécessaires → portefeuille d’entreprises à construire → comptes à qualifier et prospecter.
         </span>
       </div>
     </div>
