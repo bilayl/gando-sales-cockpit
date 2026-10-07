@@ -414,6 +414,7 @@ export async function GET() {
           cautionsPerMau: recentFreq,
           partnerYield,
           insuranceRateBps,
+          insuranceEffectiveFrom: new Date(insuranceEffectiveFrom).toISOString(),
         },
       },
       drivers: {
