@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCockpitAccess } from "@/lib/cockpit-access";
-import { getGandoMonthlySourceMetrics } from "@/lib/gando-monthly-source";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -75,40 +74,18 @@ function coreToClient(row: Record<string, unknown>) {
 
 async function payload() {
   const admin = getSupabaseAdmin();
-  const [entriesResult, budgetsResult, coreResult, sourceMetrics] = await Promise.all([
+  const [entriesResult, budgetsResult, coreResult] = await Promise.all([
     admin.from("kpi_cost_entries").select("*").order("year", { ascending: false }).order("month_number", { ascending: false }).order("incurred_on", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }),
     admin.from("kpi_cost_monthly_budgets").select("*").order("year", { ascending: false }).order("month_number", { ascending: false }).order("family", { ascending: true }),
     admin.from("kpi_monthly_metrics").select("year,month_number,revenue,tdv,deposits_activated,active_renters").order("year", { ascending: false }).order("month_number", { ascending: false }),
-    getGandoMonthlySourceMetrics(),
   ]);
   if (entriesResult.error) throw entriesResult.error;
   if (budgetsResult.error) throw budgetsResult.error;
   if (coreResult.error) throw coreResult.error;
-  const manualCore = new Map(
-    (coreResult.data || []).map(row => {
-      const client = coreToClient(row as Record<string, unknown>);
-      return [`${client.year}-${String(client.monthNumber).padStart(2, "0")}`, client] as const;
-    }),
-  );
-  const keys = new Set([...manualCore.keys(), ...sourceMetrics.keys()]);
-  const coreRows = [...keys].map(key => {
-    const manual = manualCore.get(key);
-    const source = sourceMetrics.get(key);
-    const [year, monthNumber] = key.split("-").map(Number);
-    return {
-      year,
-      monthNumber,
-      revenue: source?.revenue ?? manual?.revenue ?? null,
-      tdv: source?.tdv ?? manual?.tdv ?? null,
-      deposits: source?.deposits ?? manual?.deposits ?? null,
-      activeRenters: source?.activeRenters ?? manual?.activeRenters ?? null,
-    };
-  }).sort((a, b) => b.year - a.year || b.monthNumber - a.monthNumber);
-
   return {
     entries: (entriesResult.data || []).map(row => entryToClient(row as Record<string, unknown>)),
     budgets: (budgetsResult.data || []).map(row => budgetToClient(row as Record<string, unknown>)),
-    coreRows,
+    coreRows: (coreResult.data || []).map(row => coreToClient(row as Record<string, unknown>)),
   };
 }
 
