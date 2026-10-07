@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { KpiDataSourceHealth } from "@/components/kpi-data-source-health";
 import { KpiSystemDashboard } from "@/components/kpi-system-dashboard";
+import { KpiInsurancePayable } from "@/components/kpi-insurance-payable";
 import { KpiPageShell } from "@/components/kpi/kpi-page-shell";
 import { getCockpitAccess } from "@/lib/cockpit-access";
 
@@ -18,6 +19,7 @@ export default async function KpiDataPage() {
       description="Contrôler les sources, la fraîcheur, les rapprochements et la définition officielle des métriques utilisées dans le pilotage."
     >
       <KpiDataSourceHealth canEdit={access.role !== "commercial"} />
+      <KpiInsurancePayable />
       <KpiSystemDashboard />
     </KpiPageShell>
   );
