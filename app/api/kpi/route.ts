@@ -83,17 +83,24 @@ async function listRows() {
       if (automatic != null) sourceFilledFields.push(field);
       return automatic;
     };
+    const sourceValue = (field: string, manual: number | null, automatic: number | null) => {
+      if (automatic != null) {
+        sourceFilledFields.push(field);
+        return automatic;
+      }
+      return manual;
+    };
 
     return {
       ...row,
-      revenue: fillNumber("revenue", row.revenue, source.revenue),
-      tdv: fillNumber("tdv", row.tdv, source.tdv),
-      deposits: fillNumber("deposits", row.deposits, source.deposits),
-      activeRenters: fillNumber("activeRenters", row.activeRenters, source.activeRenters),
+      revenue: sourceValue("revenue", row.revenue, source.revenue),
+      tdv: sourceValue("tdv", row.tdv, source.tdv),
+      deposits: sourceValue("deposits", row.deposits, source.deposits),
+      activeRenters: sourceValue("activeRenters", row.activeRenters, source.activeRenters),
       newUsers: fillNumber("newUsers", row.newUsers, source.newUsers),
       registeredUsers: fillNumber("registeredUsers", row.registeredUsers, source.registeredUsers),
       totalClients: fillNumber("totalClients", row.totalClients, source.totalClients),
-      cumulativeDepositVolume: fillNumber(
+      cumulativeDepositVolume: sourceValue(
         "cumulativeDepositVolume",
         row.cumulativeDepositVolume,
         source.cumulativeDepositVolume,

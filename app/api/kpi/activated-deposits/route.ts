@@ -7,14 +7,6 @@ export const dynamic = "force-dynamic";
 type Row = Record<string, unknown>;
 type MirrorRow = { source_id: string; payload: Row };
 
-const EVER_ACTIVE = new Set([
-  "active",
-  "processing",
-  "captured",
-  "close",
-  "cancelled",
-  "capture_issue",
-]);
 const PAGE_SIZE = 1000;
 
 function str(value: unknown) {
@@ -34,6 +26,17 @@ function timestamp(value: unknown) {
   if (typeof value !== "string" || !value) return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function monthKey(value: number) {
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date(value));
+  const year = parts.find(part => part.type === "year")?.value || "0000";
+  const month = parts.find(part => part.type === "month")?.value || "00";
+  return `${year}-${month}`;
 }
 
 async function readSourceTable(table: string): Promise<MirrorRow[]> {
@@ -76,8 +79,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const accounts = new Map(accountRows.map(row => [row.source_id, row.payload]));
-    const start = Date.UTC(year, monthNumber - 1, 1);
-    const end = Date.UTC(year, monthNumber, 1);
+    const targetMonth = `${year}-${String(monthNumber).padStart(2, "0")}`;
 
     const rows = depositRows
       .map(row => {
@@ -98,10 +100,8 @@ export async function GET(request: NextRequest) {
       })
       .filter(row =>
         !row.archived &&
-        EVER_ACTIVE.has(row.status) &&
         row.activationAt != null &&
-        Date.parse(row.activationAt) >= start &&
-        Date.parse(row.activationAt) < end
+        monthKey(Date.parse(row.activationAt)) === targetMonth
       )
       .sort((a, b) => Date.parse(b.activationAt!) - Date.parse(a.activationAt!))
       .map(row => ({

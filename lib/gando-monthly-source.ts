@@ -52,15 +52,6 @@ type MutableMonth = {
   advancedGuaranteeCents: number;
 };
 
-const SUCCESSFUL = new Set(["active", "close", "captured"]);
-const EVER_ACTIVE = new Set([
-  "active",
-  "processing",
-  "captured",
-  "close",
-  "cancelled",
-  "capture_issue",
-]);
 const MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 1000;
 
@@ -84,7 +75,14 @@ function ts(value: unknown) {
 }
 
 function monthKey(value: number) {
-  return new Date(value).toISOString().slice(0, 7);
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date(value));
+  const year = parts.find(part => part.type === "year")?.value || "0000";
+  const month = parts.find(part => part.type === "month")?.value || "00";
+  return `${year}-${month}`;
 }
 
 function monthEndMs(key: string) {
@@ -214,28 +212,25 @@ export async function getGandoMonthlySourceMetrics() {
     .filter(row => row.clientId && row.amountCents > 0 && row.createdAt != null);
 
   const feeByDeposit = matchFees(deposits, fees);
-  const wonDeposits = deposits.filter(
-    deposit => SUCCESSFUL.has(deposit.status) && !deposit.archived && feeByDeposit.has(deposit.id),
+  const activatedDeposits = deposits.filter(
+    deposit => !deposit.archived && deposit.startAt != null,
   );
 
   const months = new Map<string, MutableMonth>();
 
-  // KPI "cautions actives" et MAU : une caution / un loueur reste compté dans son mois
-  // d'activation même si le statut évolue ensuite. Le mois de référence est start_at.
-  for (const deposit of deposits) {
-    if (deposit.archived || !EVER_ACTIVE.has(deposit.status) || deposit.startAt == null) continue;
-    const bucket = getMonth(months, monthKey(deposit.startAt));
+  // Source de vérité des KPI d'usage : start_at = date réelle d'activation.
+  // Une caution reste comptée dans son mois d'activation quel que soit son statut actuel
+  // (active, close, captured, capture_issue, cancelled, etc.).
+  for (const deposit of activatedDeposits) {
+    const bucket = getMonth(months, monthKey(deposit.startAt!));
     bucket.deposits += 1;
-    if (deposit.accountId) bucket.activeAccounts.add(deposit.accountId);
-  }
-
-  // Revenus / TDV restent basés sur les cautions gagnées et leur frais de sécurisation.
-  for (const deposit of wonDeposits) {
-    const fee = feeByDeposit.get(deposit.id);
-    if (!fee?.createdAt) continue;
-    const bucket = getMonth(months, monthKey(fee.createdAt));
-    bucket.revenueCents += fee.amountCents;
     bucket.tdvCents += deposit.amountCents;
+    if (deposit.accountId) bucket.activeAccounts.add(deposit.accountId);
+
+    // Le revenu de sécurisation est rattaché au mois de la caution activée,
+    // pas au timestamp technique du frais.
+    const fee = feeByDeposit.get(deposit.id);
+    if (fee) bucket.revenueCents += fee.amountCents;
   }
 
   const userCreatedAt = userRows

@@ -12,6 +12,7 @@ type Deposit = {
   accountId: string;
   status: string;
   amountCents: number;
+  startAt: number | null;
   createdAt: number | null;
   updatedAt: number | null;
   archived: boolean;
@@ -19,7 +20,6 @@ type Deposit = {
 type FeeOperation = { id: string; clientId: string; amountCents: number; createdAt: number | null };
 type Tier = { min_cents?: number; max_cents?: number; reward_cents?: number };
 
-const SUCCESSFUL_DEPOSIT_STATUSES = new Set(["active", "close", "captured"]);
 const FEE_MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const DEFAULT_INSURANCE_RATE_BPS = 114;
 const DEFAULT_INSURANCE_EFFECTIVE_FROM = Date.parse("2026-09-01T00:00:00.000Z");
@@ -71,6 +71,7 @@ function buildDeposits(rows: MirrorRow[]): Deposit[] {
     accountId: str(row.payload.account_id),
     status: str(row.payload.status),
     amountCents: num(row.payload.amount_cents),
+    startAt: timestamp(row.payload.start_at),
     createdAt: timestamp(row.payload.created_at),
     updatedAt: timestamp(row.payload.updated_at),
     archived: bool(row.payload.is_archived),
@@ -142,10 +143,10 @@ export async function GET() {
       .filter(row => row.clientId && row.amountCents > 0);
 
     const feeByDeposit = matchFeesToDeposits(deposits, feeOperations);
-    const wonDeposits = deposits.filter(deposit => SUCCESSFUL_DEPOSIT_STATUSES.has(deposit.status) && !deposit.archived && feeByDeposit.has(deposit.id));
-    const guaranteeProvidedCents = wonDeposits.reduce((sum, deposit) => sum + deposit.amountCents, 0);
-    const grossRevenueCents = wonDeposits.reduce((sum, deposit) => sum + (feeByDeposit.get(deposit.id)?.amountCents || 0), 0);
-    const activeAccounts = new Set(wonDeposits.map(deposit => deposit.accountId).filter(Boolean));
+    const activatedDeposits = deposits.filter(deposit => !deposit.archived && deposit.startAt != null);
+    const guaranteeProvidedCents = activatedDeposits.reduce((sum, deposit) => sum + deposit.amountCents, 0);
+    const grossRevenueCents = activatedDeposits.reduce((sum, deposit) => sum + (feeByDeposit.get(deposit.id)?.amountCents || 0), 0);
+    const activeAccounts = new Set(activatedDeposits.map(deposit => deposit.accountId).filter(Boolean));
 
     const paidCaptures = captureRows.filter(row => str(row.payload.status) === "paid");
     const paidCaptureAmountCents = paidCaptures.reduce((sum, row) => sum + num(row.payload.amount_cents), 0);
@@ -161,7 +162,7 @@ export async function GET() {
       const effectiveFrom = timestamp(rule.effective_from);
       const effectiveTo = timestamp(rule.effective_to);
 
-      for (const deposit of wonDeposits) {
+      for (const deposit of activatedDeposits) {
         if (deposit.accountId !== accountId) continue;
         const fee = feeByDeposit.get(deposit.id);
         if (!fee || fee.createdAt == null) continue;
@@ -169,9 +170,7 @@ export async function GET() {
         if (effectiveTo != null && fee.createdAt > effectiveTo + 86400000 - 1) continue;
 
         if (mode === "active_volume_rate") {
-          if (deposit.status === "active" && rateBps > 0) {
-            partnerCostCents += Math.round(deposit.amountCents * rateBps / 10000);
-          }
+          if (rateBps > 0) partnerCostCents += Math.round(deposit.amountCents * rateBps / 10000);
         } else {
           partnerCostCents += rewardForDeposit(deposit.amountCents, tiers);
         }
@@ -182,16 +181,15 @@ export async function GET() {
       ? DEFAULT_INSURANCE_RATE_BPS
       : num(settingsResult.data.insurance_rate_bps);
     const insuranceEffectiveFrom = timestamp(settingsResult.data?.insurance_effective_from) ?? DEFAULT_INSURANCE_EFFECTIVE_FROM;
-    const insuredDeposits = wonDeposits.filter(deposit => {
-      const feeAt = feeByDeposit.get(deposit.id)?.createdAt;
-      return feeAt != null && feeAt >= insuranceEffectiveFrom;
+    const insuredDeposits = activatedDeposits.filter(deposit => {
+      return deposit.startAt != null && deposit.startAt >= insuranceEffectiveFrom;
     });
     const insuredGuaranteeCents = insuredDeposits.reduce((sum, deposit) => sum + deposit.amountCents, 0);
     const insuranceTotalCents = Math.round(insuredGuaranteeCents * insuranceRateBps / 10000);
     const measuredContributionCents = grossRevenueCents - partnerCostCents - insuranceTotalCents;
 
     const matchedDepositCount = feeByDeposit.size;
-    const successfulDepositCount = deposits.filter(deposit => SUCCESSFUL_DEPOSIT_STATUSES.has(deposit.status) && !deposit.archived).length;
+    const successfulDepositCount = activatedDeposits.length;
     const lastSyncedAt = (syncResult.data || [])
       .map(row => row.last_completed_at)
       .filter(Boolean)
@@ -200,7 +198,7 @@ export async function GET() {
 
     const accountRows = [...activeAccounts].map(accountId => {
       const account = accounts.get(accountId) || {};
-      const accountDeposits = wonDeposits.filter(deposit => deposit.accountId === accountId);
+      const accountDeposits = activatedDeposits.filter(deposit => deposit.accountId === accountId);
       const accountFees = accountDeposits.reduce((sum, deposit) => sum + (feeByDeposit.get(deposit.id)?.amountCents || 0), 0);
       return {
         accountId,
@@ -218,12 +216,12 @@ export async function GET() {
         sourceTables: (syncResult.data || []).filter(row => row.status === "success").length,
       },
       core: {
-        successfulDeposits: wonDeposits.length,
+        successfulDeposits: activatedDeposits.length,
         activeAccounts: activeAccounts.size,
         guaranteeProvidedCents,
-        averageGuaranteeCents: wonDeposits.length ? Math.round(guaranteeProvidedCents / wonDeposits.length) : 0,
+        averageGuaranteeCents: activatedDeposits.length ? Math.round(guaranteeProvidedCents / activatedDeposits.length) : 0,
         grossRevenueCents,
-        grossRevenuePerCautionCents: wonDeposits.length ? Math.round(grossRevenueCents / wonDeposits.length) : 0,
+        grossRevenuePerCautionCents: activatedDeposits.length ? Math.round(grossRevenueCents / activatedDeposits.length) : 0,
         paidCaptures: paidCaptures.length,
         paidCaptureAmountCents,
         acceptedGuarantees: acceptedGuarantees.length,
@@ -236,17 +234,17 @@ export async function GET() {
         insuranceTotalCents,
         insurancePerInsuredCautionCents: insuredDeposits.length ? Math.round(insuranceTotalCents / insuredDeposits.length) : 0,
         partnerCostCents,
-        partnerCostPerCautionCents: wonDeposits.length ? Math.round(partnerCostCents / wonDeposits.length) : 0,
+        partnerCostPerCautionCents: activatedDeposits.length ? Math.round(partnerCostCents / activatedDeposits.length) : 0,
         measuredContributionCents,
-        measuredContributionPerCautionCents: wonDeposits.length ? Math.round(measuredContributionCents / wonDeposits.length) : 0,
+        measuredContributionPerCautionCents: activatedDeposits.length ? Math.round(measuredContributionCents / activatedDeposits.length) : 0,
         grossRevenueYield: guaranteeProvidedCents > 0 ? grossRevenueCents / guaranteeProvidedCents : null,
         measuredContributionYield: guaranteeProvidedCents > 0 ? measuredContributionCents / guaranteeProvidedCents : null,
       },
       quality: {
         feeOperations: feeOperations.length,
-        matchedFeeOperations: wonDeposits.length,
+        matchedFeeOperations: activatedDeposits.length,
         unmatchedFeeOperations: Math.max(0, feeOperations.length - matchedDepositCount),
-        successfulDepositsWithoutMatchedFee: Math.max(0, successfulDepositCount - wonDeposits.length),
+        successfulDepositsWithoutMatchedFee: Math.max(0, successfulDepositCount - activatedDeposits.length),
         feeMatchWindowDays: FEE_MATCH_WINDOW_MS / 86400000,
       },
       accounts: accountRows,
