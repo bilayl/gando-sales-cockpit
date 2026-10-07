@@ -39,10 +39,20 @@ type CostControlData = {
 };
 
 type DecisionData = {
+  actual?: Array<{
+    month: string;
+    partial: boolean;
+    cautions: number;
+    revenueCents: number;
+    tdvCents: number;
+    insuranceCostCents: number;
+    partnerCostCents: number;
+  }>;
   forecast?: {
     trailing?: {
       avgRevenuePerCautionCents?: number;
       measuredContributionPerCautionCents?: number;
+      insuranceRateBps?: number;
     };
   };
 };
@@ -145,19 +155,31 @@ export function FinanceProfitabilityDashboard() {
   const monthlyRows = useMemo<MonthRow[]>(() => {
     const entries = costData?.entries || [];
     const coreRows = costData?.coreRows || [];
+    const actualRows = decisionData?.actual || [];
 
     return Array.from({ length: 12 }, (_, index) => shiftPeriod(currentKey, index - 11)).map(key => {
       const [year, monthNumber] = key.split("-").map(Number);
       const monthEntries = entries.filter(row => row.year === year && row.monthNumber === monthNumber);
-      const revenue = n(coreRows.find(row => row.year === year && row.monthNumber === monthNumber)?.revenue);
-      const deposits = n(coreRows.find(row => row.year === year && row.monthNumber === monthNumber)?.deposits);
-      const operatingCosts = monthEntries
-        .filter(row => OPERATING_FAMILIES.has(row.family))
+      const core = coreRows.find(row => row.year === year && row.monthNumber === monthNumber);
+      const actual = actualRows.find(row => row.month === key);
+
+      const revenue = actual ? n(actual.revenueCents) / 100 : n(core?.revenue);
+      const deposits = actual ? n(actual.cautions) : n(core?.deposits);
+      const familyTotal = (family: Family) => monthEntries
+        .filter(row => row.family === family)
         .reduce((sum, row) => sum + n(row.amount), 0);
-      const variableCosts = monthEntries
-        .filter(row => VARIABLE_FAMILIES.has(row.family))
-        .reduce((sum, row) => sum + n(row.amount), 0);
-      const totalCosts = monthEntries.reduce((sum, row) => sum + n(row.amount), 0);
+
+      const operatingCosts = familyTotal("acquisition") + familyTotal("structure");
+      const manualTransaction = familyTotal("transaction");
+      const manualRisk = familyTotal("risk");
+      const manualPartners = familyTotal("partners");
+
+      const estimatedPsp = actual ? revenue * 0.016 + deposits * 0.35 : 0;
+      const transactionCosts = manualTransaction > 0 ? manualTransaction : estimatedPsp;
+      const riskCosts = manualRisk > 0 ? manualRisk : n(actual?.insuranceCostCents) / 100;
+      const partnerCosts = manualPartners > 0 ? manualPartners : n(actual?.partnerCostCents) / 100;
+      const variableCosts = transactionCosts + riskCosts + partnerCosts;
+      const totalCosts = operatingCosts + variableCosts;
       const result = revenue - totalCosts;
 
       return {
@@ -173,7 +195,7 @@ export function FinanceProfitabilityDashboard() {
         deposits,
       };
     });
-  }, [costData, currentKey]);
+  }, [costData, currentKey, decisionData]);
 
   const profitability = useMemo(() => {
     const current = monthlyRows.find(row => row.key === currentKey) || null;
@@ -334,6 +356,11 @@ export function FinanceProfitabilityDashboard() {
               detail={profitability.contributionRate ? `Calculée depuis ${profitability.contributionRateSource}` : "Il manque encore assez de données pour calculer la marge"}
             />
             <FinanceMetric
+              label="Assurance"
+              value={percent(n(decisionData?.forecast?.trailing?.insuranceRateBps) / 10000, 2)}
+              detail="1,14 % du volume sécurisé depuis septembre"
+            />
+            <FinanceMetric
               label="Résultat comptable du mois"
               value={profitability.current ? euro(profitability.current.result) : "—"}
               detail={profitability.current ? `${euro(profitability.current.revenue)} de CA - ${euro(profitability.current.totalCosts)} de dépenses enregistrées` : "Aucune donnée ce mois"}
@@ -342,7 +369,7 @@ export function FinanceProfitabilityDashboard() {
           <div className="flex gap-2 border-t border-border bg-muted/15 px-4 py-3 text-[10px] leading-4 text-muted-foreground">
             <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
             <span>
-              Le calcul devient fiable si les dépenses sont saisies chaque mois. Les familles transaction, risque et partenaires servent au taux de coûts variables ; structure et acquisition servent à la base de dépenses à couvrir.
+              Le réel Gando est prioritaire sur la table mensuelle. Assurance et partenaires remontent automatiquement ; si aucun coût transaction n’est saisi, le PSP est estimé à 1,6 % + 0,35 € par caution. Structure et acquisition restent issues du ledger de dépenses.
             </span>
           </div>
         </Card>

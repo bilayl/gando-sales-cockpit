@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BadgeEuro, BriefcaseBusiness, UsersRound, WalletCards } from "lucide-react";
+import { BadgeEuro, BriefcaseBusiness, ChartSpline, UsersRound, WalletCards } from "lucide-react";
 
 const items = [
   { href: "/finance/profitability", label: "Rentabilité", icon: BadgeEuro },
   { href: "/finance/treasury", label: "Trésorerie", icon: WalletCards },
+  { href: "/finance/forecast", label: "Prévisionnel", icon: ChartSpline },
   { href: "/finance/deals", label: "Deals", icon: BriefcaseBusiness },
   { href: "/finance/team", label: "Équipe", icon: UsersRound },
 ] as const;
