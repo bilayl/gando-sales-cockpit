@@ -5,6 +5,8 @@ import { requireSDInternalAccess } from "@/lib/sd-room-access";
 import { normalizeStageContent } from "@/lib/sd-stage-content";
 import { normalizeSD05NativeContent } from "@/lib/sd05-contract";
 import { SD_CODES, type SDCode } from "@/lib/sd-room-types";
+import { approvalIsCurrent, readQuickApproval } from "@/lib/quick-deal-approval";
+import type { SD04Content } from "@/lib/sd-stage-content";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!bundle.room) throw Object.assign(new Error("Room SD introuvable."), { status: 404 });
 
     const current = bundle.documents.find(document => document.code === code);
+    if (code === "SD04" && current?.status === "validated") {
+      throw Object.assign(new Error("La proposition acceptée par le client est figée."), { status: 409 });
+    }
     if (code === "SD05" && current) {
       const currentContent = normalizeSD05NativeContent(current.content);
       if (currentContent.contractStatus === "signed") {
@@ -46,7 +51,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
     }
 
-    const content = (code === "SD05" ? normalizeSD05NativeContent(body?.content) : normalizeStageContent(code, body?.content)) as Record<string, unknown>;
+    let content = (code === "SD05" ? normalizeSD05NativeContent(body?.content) : normalizeStageContent(code, body?.content)) as Record<string, unknown>;
+    if (code === "SD04" && bundle.room.room_mode === "standard") {
+      const approval = readQuickApproval(current?.content);
+      const withApproval: SD04Content = { ...(content as SD04Content), internalApproval: approval };
+      if (!approvalIsCurrent(withApproval, approval)) {
+        // Every pricing or commercial-term change invalidates the old approval.
+        withApproval.internalApproval = {
+          required: approval.required, approvedAt: null, approvedByEmail: null, approvedHash: null,
+        };
+      }
+      if (publish && withApproval.internalApproval?.required && !approvalIsCurrent(withApproval, withApproval.internalApproval)) {
+        throw Object.assign(new Error("La proposition doit être validée par un administrateur avant publication."), { status: 409 });
+      }
+      content = withApproval as unknown as Record<string, unknown>;
+    }
     const sourceMode = current?.source_mode === "agent" ? "mixed" : current?.source_mode || "manual";
     const document = await saveSDDocument({
       roomId: bundle.room.id,
