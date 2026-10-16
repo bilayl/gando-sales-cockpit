@@ -9,12 +9,14 @@ export function computeQuickDealEconomics(value: GandoEconomics) {
   const gandoPerDeposit = deposit * value.gandoRatePercent / 100;
   const partnerPerDeposit = deposit * value.partnerMarginPercent / 100;
   const collectionEvents = volume * value.expectedCollectionSharePercent / 100;
-  const collectionRevenue = collectionEvents * (deposit * value.collectionRatePercent / 100 + value.collectionFixedFee);
+  const averageCollected = deposit * value.averageCollectionAmountPercent / 100;
+  const collectionRevenue = collectionEvents * (averageCollected * value.collectionRatePercent / 100 + value.collectionFixedFee);
   const monthlyGandoRevenue = volume * gandoPerDeposit + value.monthlySubscription + collectionRevenue;
   const monthlyPartnerRevenue = volume * partnerPerDeposit;
-  // Payment rate is applied only to the charged Gando fee, not to the caution amount.
+  // PSP is charged on the entire fee paid by the renter (Gando + partner),
+  // NOT on the secured deposit. Collection PSP and recovery costs are excluded.
   const monthlyInsuranceCost = securedMonthly * value.insuranceCostPercent / 100;
-  const monthlyPaymentCost = volume * (gandoPerDeposit * value.paymentCostPercent / 100 + value.paymentFixedCost);
+  const monthlyPaymentCost = volume * ((gandoPerDeposit + partnerPerDeposit) * value.paymentCostPercent / 100 + value.paymentFixedCost);
   const monthlyContribution = monthlyGandoRevenue - monthlyInsuranceCost - monthlyPaymentCost;
   return {
     securedMonthly,
