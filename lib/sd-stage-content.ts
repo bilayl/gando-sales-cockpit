@@ -78,6 +78,7 @@ export type SD04Content = {
     collectionRatePercent: number;
     collectionFixedFee: number;
     expectedCollectionSharePercent: number;
+    averageCollectionAmountPercent: number;
   };
   internalApproval?: {
     required: boolean;
@@ -201,6 +202,7 @@ export function createEmptySD04(): SD04Content {
       collectionRatePercent: 2.5,
       collectionFixedFee: 2,
       expectedCollectionSharePercent: 0,
+      averageCollectionAmountPercent: 100,
     },
     commercialTerms: [],
     procurementSteps: [],
@@ -373,6 +375,7 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
           collectionRatePercent: amount("collectionRatePercent", 100),
           collectionFixedFee: amount("collectionFixedFee", 10_000),
           expectedCollectionSharePercent: amount("expectedCollectionSharePercent", 100),
+          averageCollectionAmountPercent: amount("averageCollectionAmountPercent", 100),
         };
       })(),
       internalApproval: (() => {
