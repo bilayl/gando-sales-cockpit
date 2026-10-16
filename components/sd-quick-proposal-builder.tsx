@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { SDQuickProposalBranding } from "@/components/sd-quick-proposal-branding";
 import { createEmptySD04, type SD04Content } from "@/lib/sd-stage-content";
 import type { SDDocumentRecord, SDRoomRecord } from "@/lib/sd-room-types";
+import { computeQuickDealEconomics, isQuickPricingRow, quickPricingRows } from "@/lib/quick-deal-economics";
 
 const ROOM_BASE_URL = (process.env.NEXT_PUBLIC_ROOM_BASE_URL || "https://room.gando.pro").replace(/\/$/, "");
 
@@ -17,6 +18,12 @@ type RoomResponse = {
   deal?: { name?: string | null };
   room: SDRoomRecord | null;
   documents: SDDocumentRecord[];
+};
+type ApprovalState = {
+  approval: { required: boolean; approvedAt: string | null; approvedByEmail: string | null; approvedHash: string | null };
+  approvedForCurrent: boolean;
+  canApprove: boolean;
+  documentStatus: string;
 };
 
 function cleanLines(value: string) {
@@ -56,18 +63,25 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
   const [pricingDraft, setPricingDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [approvalWorking, setApprovalWorking] = useState(false);
+  const [pricingConfirmed, setPricingConfirmed] = useState(false);
+  const [approval, setApproval] = useState<ApprovalState | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, { cache: "no-store" });
+      const [response, approvalResponse] = await Promise.all([
+        fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room`, { cache: "no-store" }),
+        fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/quick-approval`, { cache: "no-store" }),
+      ]);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || payload.error || "Chargement impossible");
+      if (approvalResponse.ok) setApproval(await approvalResponse.json());
       setData(payload);
       const document = (payload.documents || []).find((item: SDDocumentRecord) => item.code === "SD04");
       const nextValue = { ...createEmptySD04(), ...((document?.content || {}) as Partial<SD04Content>) };
       setValue(nextValue);
-      setPricingDraft(pricingText(nextValue.pricing));
+      setPricingDraft(pricingText(nextValue.pricing.filter(row => !isQuickPricingRow(row.item))));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Chargement impossible");
     } finally {
@@ -89,14 +103,47 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
   const revenuePerDeposit = revenueExample.averageDeposit * (revenueExample.partnerMarginRate / 100);
   const monthlyRevenue = revenuePerDeposit * revenueExample.monthlyActivations;
   const annualRevenue = monthlyRevenue * 12;
+  const gandoEconomics = value.gandoEconomics || createEmptySD04().gandoEconomics;
+  const gando = computeQuickDealEconomics(gandoEconomics);
+  const canPublish = !approval?.approval.required || approval.approvedForCurrent;
+
+  const setEconomics = (field: keyof typeof gandoEconomics, number: number) => {
+    const next = { ...gandoEconomics, [field]: Math.max(0, Number.isFinite(number) ? number : 0) };
+    setValue(current => ({
+      ...current,
+      gandoEconomics: next,
+      partnerRevenueExample: {
+        ...(current.partnerRevenueExample || createEmptySD04().partnerRevenueExample),
+        averageDeposit: next.averageDeposit,
+        monthlyActivations: next.monthlyActivations,
+        partnerMarginRate: next.partnerMarginPercent,
+      },
+    }));
+    setPricingConfirmed(false);
+  };
+
+  async function changeApproval(action: "approve" | "revoke" | "set_required", required?: boolean) {
+    if (approvalWorking) return;
+    setApprovalWorking(true);
+    try {
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/quick-approval`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, required }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || payload.error || "Validation interne impossible");
+      setApproval(current => current ? { ...current, ...payload } : null);
+      toast.success(action === "approve" ? "Proposition approuvée par Gando" : action === "revoke" ? "Approbation retirée" : "Règle de validation enregistrée");
+      onChanged?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Validation interne impossible");
+    } finally { setApprovalWorking(false); }
+  }
 
   const set = <K extends keyof SD04Content>(key: K, next: SD04Content[K]) => setValue(current => ({ ...current, [key]: next }));
 
   function generateTemplate() {
-    const templatePricing: SD04Content["pricing"] = [
-      { item: "Tarif Gando", model: "", price: "[X % HT]", notes: "par caution activée" },
-      { item: "Marge partenaire", model: "", price: "[+X % HT]", notes: "optionnelle · conservée par le partenaire" },
-    ];
+    const templatePricing = quickPricingRows(gandoEconomics);
     setValue(current => ({
       ...current,
       deckTitle: current.deckTitle || `Proposition Gando × ${companyName}`,
@@ -126,13 +173,14 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       },
       callToAction: current.callToAction || "Êtes-vous en accord avec cette proposition pour passer au contrat ?",
     }));
-    setPricingDraft(current => current.trim() ? current : pricingText(templatePricing));
-    toast.success("Modèle de propal généré — complète les éléments entre crochets");
+    toast.success("Modèle généré — vérifie les tarifs et conditions avant publication");
   }
 
   async function persist(publish: boolean) {
     if (working) return;
     if (publish && !ready) return toast.error("Ajoute au minimum un titre, un message et les éléments de l’offre.");
+    if (publish && !pricingConfirmed) return toast.error("Confirme les prix Gando avant de publier cette proposition.");
+    if (publish && !canPublish) return toast.error("Un administrateur doit approuver les tarifs enregistrés avant publication.");
     setWorking(true);
     try {
       const content: SD04Content = {
@@ -141,7 +189,17 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         executiveMessage: value.executiveMessage.trim(),
         offerSummary: value.executiveMessage.trim(),
         solution: cleanLines(value.solution.join("\n")),
-        pricing: parsePricing(pricingDraft),
+        pricing: [
+          ...quickPricingRows(gandoEconomics),
+          ...parsePricing(pricingDraft).filter(row => !isQuickPricingRow(row.item)),
+        ],
+        gandoEconomics,
+        partnerRevenueExample: {
+          ...revenueExample,
+          averageDeposit: gandoEconomics.averageDeposit,
+          monthlyActivations: gandoEconomics.monthlyActivations,
+          partnerMarginRate: gandoEconomics.partnerMarginPercent,
+        },
         commercialTerms: cleanLines(value.commercialTerms.join("\n")),
         proofPoints: cleanLines(value.proofPoints.join("\n")),
         callToAction: value.callToAction.trim() || "Êtes-vous en accord avec cette proposition ?",
@@ -156,7 +214,8 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       setData(current => current ? { ...current, documents: current.documents.map(item => item.code === "SD04" ? payload.document : item) } : current);
       const nextValue = { ...createEmptySD04(), ...((payload.document?.content || {}) as Partial<SD04Content>) };
       setValue(nextValue);
-      setPricingDraft(pricingText(nextValue.pricing));
+      setPricingDraft(pricingText(nextValue.pricing.filter(row => !isQuickPricingRow(row.item))));
+      if (!publish) setApproval(current => current ? { ...current, approvedForCurrent: false } : null);
       toast.success(publish ? "Lien de propal prêt à être partagé" : "Propal enregistrée");
       onChanged?.();
       if (publish) await load();
