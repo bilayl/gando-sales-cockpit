@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Copy, ExternalLink, Link2, Loader2, Save, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, Copy, ExternalLink, Link2, Loader2, Save, Sparkles, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,8 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
   const [approvalWorking, setApprovalWorking] = useState(false);
   const [pricingConfirmed, setPricingConfirmed] = useState(false);
   const [approval, setApproval] = useState<ApprovalState | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const proposalFileRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,6 +82,13 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       setData(payload);
       const document = (payload.documents || []).find((item: SDDocumentRecord) => item.code === "SD04");
       const nextValue = { ...createEmptySD04(), ...((document?.content || {}) as Partial<SD04Content>) };
+      const economics = nextValue.gandoEconomics;
+      if (economics) nextValue.partnerRevenueExample = {
+        ...nextValue.partnerRevenueExample,
+        averageDeposit: economics.averageDeposit,
+        monthlyActivations: economics.monthlyActivations,
+        partnerMarginRate: economics.partnerMarginPercent,
+      };
       setValue(nextValue);
       setPricingDraft(pricingText(nextValue.pricing.filter(row => !isQuickPricingRow(row.item))));
     } catch (error) {
@@ -98,7 +107,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
   const agreed = document?.status === "validated";
   const published = document?.status === "published" || agreed;
 
-  const ready = useMemo(() => Boolean(value.deckTitle.trim() && value.executiveMessage.trim() && (value.solution.length || value.pricing.length || value.commercialTerms.length)), [value]);
+  const ready = useMemo(() => Boolean(value.deckTitle.trim() && value.executiveMessage.trim() && (value.solution.length || value.pricing.length || value.commercialTerms.length || value.proposalFileUrl)), [value]);
   const revenueExample = value.partnerRevenueExample || createEmptySD04().partnerRevenueExample;
   const revenuePerDeposit = revenueExample.averageDeposit * (revenueExample.partnerMarginRate / 100);
   const monthlyRevenue = revenuePerDeposit * revenueExample.monthlyActivations;
@@ -133,6 +142,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       },
     }));
     setPricingConfirmed(false);
+    setApproval(current => current?.approval.required ? { ...current, approvedForCurrent: false } : current);
   };
 
   async function changeApproval(action: "approve" | "revoke" | "set_required", required?: boolean) {
@@ -153,7 +163,34 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
     } finally { setApprovalWorking(false); }
   }
 
-  const set = <K extends keyof SD04Content>(key: K, next: SD04Content[K]) => setValue(current => ({ ...current, [key]: next }));
+  const set = <K extends keyof SD04Content>(key: K, next: SD04Content[K]) => {
+    setValue(current => ({ ...current, [key]: next }));
+    setPricingConfirmed(false);
+    setApproval(current => current?.approval.required ? { ...current, approvedForCurrent: false } : current);
+  };
+
+  async function importProposal(file: File) {
+    if (uploading || agreed) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch(`/api/deals/${encodeURIComponent(dealId)}/sd-room/quick-proposal-file`, {
+        method: "POST", body: form,
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || payload.error || "Import impossible");
+      setPricingConfirmed(false);
+      toast.success("Proposition importée. Valide ses tarifs puis publie la version finale.");
+      await load();
+      onChanged?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Import impossible");
+    } finally {
+      if (proposalFileRef.current) proposalFileRef.current.value = "";
+      setUploading(false);
+    }
+  }
 
   function generateTemplate() {
     const templatePricing = quickPricingRows(gandoEconomics);
@@ -170,7 +207,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       commercialTerms: current.commercialTerms.length ? current.commercialTerms : [
         "Durée de sécurisation : [XX jours]",
         "Plafond de caution : [X XXX €]",
-        "Frais d’encaissement : [X % + X € HT]",
+        "Frais d’encaissement : selon le barème ci-dessus",
         "Périmètre / date de déploiement : [à confirmer]",
       ],
       proofPoints: current.proofPoints.length ? current.proofPoints : [
@@ -186,6 +223,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       },
       callToAction: current.callToAction || "Êtes-vous en accord avec cette proposition pour passer au contrat ?",
     }));
+    setPricingConfirmed(false);
     toast.success("Modèle généré — vérifie les tarifs et conditions avant publication");
   }
 
@@ -228,10 +266,10 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       const nextValue = { ...createEmptySD04(), ...((payload.document?.content || {}) as Partial<SD04Content>) };
       setValue(nextValue);
       setPricingDraft(pricingText(nextValue.pricing.filter(row => !isQuickPricingRow(row.item))));
-      if (!publish) setApproval(current => current ? { ...current, approvedForCurrent: false } : null);
+      await load();
       toast.success(publish ? "Lien de propal prêt à être partagé" : "Propal enregistrée");
       onChanged?.();
-      if (publish) await load();
+
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible");
     } finally {
@@ -255,10 +293,13 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
 
       <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
         <Button variant="outline" onClick={generateTemplate} disabled={working || agreed}><Sparkles className="mr-2 h-4 w-4" />Générer le modèle</Button>
+        <input ref={proposalFileRef} className="hidden" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => { const file = event.target.files?.[0]; if (file) void importProposal(file); }} />
+        <Button variant="outline" disabled={working || uploading || agreed} onClick={() => proposalFileRef.current?.click()}>{uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}{value.proposalFileUrl ? "Remplacer le document" : "Importer PDF / Word"}</Button>
         <Button variant="outline" onClick={() => void persist(false)} disabled={working}><Save className="mr-2 h-4 w-4" />Enregistrer</Button>
         <Button onClick={() => void persist(true)} disabled={working || !ready || agreed || !canPublish}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}{published ? "Mettre à jour le lien" : "Générer le lien"}</Button>
       </div>
 
+      {value.proposalFileUrl ? <a className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-primary underline" href={value.proposalFileUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" />Fichier joint : {value.proposalFileName || "Proposition importée"}</a> : null}
       <label className="mt-4 flex items-start gap-2 text-xs font-semibold text-muted-foreground">
         <input type="checkbox" className="mt-0.5 h-4 w-4" checked={pricingConfirmed} onChange={event => setPricingConfirmed(event.target.checked)} />
         Je confirme les tarifs de cette version avant publication. Les valeurs préremplies sont une simulation, pas un tarif accordé avec le client.
@@ -310,7 +351,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">CA Gando / an · HT</div><div className="mt-2 text-xl font-black">{euro(gando.annualGandoRevenue)}</div></div>
         <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">Contribution mensuelle estimée</div><div className="mt-2 text-xl font-black">{euro(gando.monthlyContribution)}</div><p className="mt-1 text-[11px] text-muted-foreground">Après assurance/PSP, hors autres coûts</p></div>
       </div>
-      <p className="mt-3 text-xs leading-5 text-muted-foreground">Détail mensuel : {euro(gando.monthlyGandoRevenue)} de revenus Gando − {euro(gando.monthlyInsuranceCost)} d’assurance − {euro(gando.monthlyPaymentCost)} de PSP. Marge estimée du loueur : {euro(gando.monthlyPartnerRevenue)} HT/mois (exclue du CA Gando). Hypothèses Top Location à confirmer.</p>
+      <p className="mt-3 text-xs leading-5 text-muted-foreground">Détail mensuel : {euro(gando.monthlyGandoRevenue)} de revenus Gando − {euro(gando.monthlyInsuranceCost)} d’assurance − {euro(gando.monthlyPaymentCost)} de PSP. Marge estimée du loueur : {euro(gando.monthlyPartnerRevenue)} HT/mois (exclue du CA Gando). Hypothèses pour {companyName} à confirmer.</p>
     </Card>
 
     <section className="overflow-hidden rounded-2xl border-2 border-primary/20 bg-background shadow-sm">
@@ -325,15 +366,15 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
     <Card className="overflow-hidden p-0">
       <div className="border-b border-border bg-primary/[0.035] px-5 py-4 sm:px-6">
         <div className="text-[10px] font-black uppercase tracking-[0.14em] text-primary">Impact financier partenaire</div>
-        <h2 className="mt-1 text-lg font-black tracking-[-0.025em]">Exemple de revenu pour ${companyName}</h2>
+        <h2 className="mt-1 text-lg font-black tracking-[-0.025em]">Exemple de revenu pour {companyName}</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">Ce calcul est présenté comme un exemple dans la propal. Modifie les hypothèses selon le volume réel du loueur.</p>
       </div>
       <div className="p-5 sm:p-6">
         <div className="grid gap-4 md:grid-cols-4">
           <label><span className="text-xs font-bold">Afficher dans la propal</span><select className="mt-2 h-10 w-full rounded-lg border border-input bg-background px-3 text-sm" value={revenueExample.enabled ? "yes" : "no"} onChange={event => set("partnerRevenueExample", { ...revenueExample, enabled: event.target.value === "yes" })}><option value="yes">Oui</option><option value="no">Non</option></select></label>
-          <label><span className="text-xs font-bold">Caution moyenne (€)</span><Input className="mt-2" type="number" min="0" step="50" value={revenueExample.averageDeposit} onChange={event => set("partnerRevenueExample", { ...revenueExample, averageDeposit: Math.max(0, Number(event.target.value) || 0) })} /></label>
-          <label><span className="text-xs font-bold">Cautions activées / mois</span><Input className="mt-2" type="number" min="0" step="1" value={revenueExample.monthlyActivations} onChange={event => set("partnerRevenueExample", { ...revenueExample, monthlyActivations: Math.max(0, Number(event.target.value) || 0) })} /></label>
-          <label><span className="text-xs font-bold">Marge loueur (%)</span><Input className="mt-2" type="number" min="0" max="100" step="0.1" value={revenueExample.partnerMarginRate} onChange={event => set("partnerRevenueExample", { ...revenueExample, partnerMarginRate: Math.max(0, Number(event.target.value) || 0) })} /></label>
+          <label><span className="text-xs font-bold">Caution moyenne (€)</span><Input className="mt-2" type="number" min="0" step="50" value={gandoEconomics.averageDeposit} onChange={event => setEconomics("averageDeposit", Number(event.target.value))} disabled={agreed} /></label>
+          <label><span className="text-xs font-bold">Cautions activées / mois</span><Input className="mt-2" type="number" min="0" step="1" value={gandoEconomics.monthlyActivations} onChange={event => setEconomics("monthlyActivations", Number(event.target.value))} disabled={agreed} /></label>
+          <label><span className="text-xs font-bold">Marge loueur (%)</span><Input className="mt-2" type="number" min="0" max="100" step="0.1" value={gandoEconomics.partnerMarginPercent} onChange={event => setEconomics("partnerMarginPercent", Number(event.target.value))} disabled={agreed} /></label>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
