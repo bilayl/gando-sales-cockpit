@@ -11,8 +11,8 @@ test("Sépare volume de cautions, CA Gando et marge loueur", () => {
   assert.equal(result.annualGandoRevenue, 9_000);
   assert.equal(result.monthlyPartnerRevenue, 210);
   assert.equal(result.monthlyInsuranceCost, 342);
-  assert.equal(result.monthlyPaymentCost, 22.5);
-  assert.equal(result.monthlyContribution, 385.5);
+  assert.equal(result.monthlyPaymentCost, 25.86);
+  assert.equal(result.monthlyContribution, 382.14);
   assert.equal(result.customerPricePercent, 3.2);
 });
 
@@ -26,7 +26,7 @@ test("Intègre abonnement et commissions sur encaissements dans le CA Gando", ()
   assert.equal(result.collectionEvents, 3);
   assert.equal(result.collectionRevenue, 81);
   assert.equal(result.monthlyGandoRevenue, 881);
-  assert.equal(result.monthlyContribution, 516.5);
+  assert.equal(result.monthlyContribution, 513.14);
 });
 
 test("Les lignes de prix sont calculées depuis la grille Gando", () => {
@@ -35,4 +35,12 @@ test("Les lignes de prix sont calculées depuis la grille Gando", () => {
   assert.equal(pricing[0].price, "3 % HT");
   assert.equal(pricing[1].price, "+1 % HT");
   assert.equal(pricing[2].price, "4 % HT");
+});
+
+test("Les commissions d'encaissement portent sur un montant moyen prévu", () => {
+  const model = { ...createEmptySD04().gandoEconomics,
+    expectedCollectionSharePercent: 10, averageCollectionAmountPercent: 40 };
+  const result = computeQuickDealEconomics(model);
+  assert.equal(result.collectionEvents, 3);
+  assert.equal(result.collectionRevenue, 36);
 });
