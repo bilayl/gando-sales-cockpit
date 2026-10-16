@@ -30,6 +30,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { data: roomDetails, error: roomLookupError } = await admin.from("deal_rooms")
       .select("room_mode").eq("id", publicRoom.room.id).single();
     if (roomLookupError) throw roomLookupError;
+    if (code === "SD05" && roomDetails.room_mode === "standard") {
+      return Response.json({ error: "Le statut du contrat est renseigné uniquement par l’équipe Gando." }, { status: 403 });
+    }
     if (code === "SD04" && roomDetails.room_mode === "standard") {
       const { data: sourceProposal, error: sourceError } = await admin.from("sd_documents")
         .select("published_content").eq("room_id", publicRoom.room.id).eq("code", "SD04").single();
