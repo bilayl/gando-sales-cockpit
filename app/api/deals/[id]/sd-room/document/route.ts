@@ -29,6 +29,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const bundle = await getSDRoomBundle(id);
     if (!bundle.room) throw Object.assign(new Error("Room SD introuvable."), { status: 404 });
+    if (code === "SD05" && bundle.room.room_mode === "standard") {
+      throw Object.assign(new Error("Pour un Deal rapide, gérez le contrat et son statut depuis l’onglet Contrat."), { status: 409 });
+    }
 
     const current = bundle.documents.find(document => document.code === code);
     if (code === "SD04" && current?.status === "validated") {

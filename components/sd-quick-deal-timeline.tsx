@@ -39,6 +39,7 @@ export function SDQuickDealTimeline({ dealId, refreshKey = 0 }: { dealId: string
   const [saving, setSaving] = useState<EditableField | null>(null);
   const [firstContact, setFirstContact] = useState("");
   const [proposalSent, setProposalSent] = useState("");
+  const [contractStep, setContractStep] = useState("Pas rédigé");
 
   const load = useCallback(async () => {
     try {
@@ -47,6 +48,8 @@ export function SDQuickDealTimeline({ dealId, refreshKey = 0 }: { dealId: string
       if (response.ok) {
         const nextRoom = payload.room || null;
         setRoom(nextRoom);
+        const contract = (payload.documents || []).find((item: { code: string }) => item.code === "SD05");
+        setContractStep(contract?.status === "validated" ? "Signé" : contract?.status === "published" ? "En attente de signature" : "Pas rédigé");
         if (nextRoom) {
           setFirstContact(toLocalInput(nextRoom.first_contact_at || nextRoom.created_at));
           setProposalSent(toLocalInput(nextRoom.proposal_sent_at));
@@ -61,7 +64,7 @@ export function SDQuickDealTimeline({ dealId, refreshKey = 0 }: { dealId: string
 
   const steps = useMemo(() => room ? [
     { label: "Accord obtenu", value: room.proposal_agreed_at, icon: CheckCircle2, duration: elapsed(room.proposal_sent_at, room.proposal_agreed_at) },
-    { label: "Contrat signé", value: room.contract_signed_at, icon: FileSignature, duration: elapsed(room.proposal_agreed_at || room.proposal_sent_at, room.contract_signed_at) },
+    { label: "Contrat", value: room.contract_signed_at, icon: FileSignature, duration: elapsed(room.proposal_agreed_at || room.proposal_sent_at, room.contract_signed_at) },
   ] : [], [room]);
 
   async function saveTiming(field: EditableField, value: string) {
@@ -110,7 +113,7 @@ export function SDQuickDealTimeline({ dealId, refreshKey = 0 }: { dealId: string
 
       {steps.map(({ label, value, icon: Icon, duration }) => <div key={label} className="rounded-xl border border-border bg-background px-3 py-2.5">
         <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground"><Icon className="h-3.5 w-3.5" /> {label}</div>
-        <div className="mt-1 flex items-end justify-between gap-2"><span className="text-xs font-semibold">{formatDate(value)}</span>{duration ? <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">+{duration}</span> : null}</div>
+        <div className="mt-1 flex items-end justify-between gap-2"><span className="text-xs font-semibold">{label === "Contrat" ? (contractStep === "Signé" ? `Signé · ${formatDate(value)}` : contractStep) : formatDate(value)}</span>{duration ? <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">+{duration}</span> : null}</div>
       </div>)}
     </div>
   </div>;
