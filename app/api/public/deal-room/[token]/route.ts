@@ -16,10 +16,20 @@ function brandTheme(value: unknown): SDRoomBrandTheme {
 }
 
 function keepOnlySD02NextSteps(document: SDDocumentRecord): SDDocumentRecord {
-  if (document.code !== "SD02") return document;
-  const content = document.content && typeof document.content === "object" ? document.content as Record<string, unknown> : {};
-  return {
+  // Never let Gando economics, admin approvals, or unpublished draft data
+  // escape through the anonymous GET or identified POST public API.
+  const published = (document.published_content || document.content || {}) as Record<string, unknown>;
+  const { gandoEconomics: _economics, internalApproval: _approval, ...publicProposal } = published;
+  void _economics; void _approval;
+  const safe: SDDocumentRecord = {
     ...document,
+    content: document.code === "SD04" ? publicProposal : published,
+    published_content: null,
+  };
+  if (document.code !== "SD02") return safe;
+  const content = safe.content && typeof safe.content === "object" ? safe.content as Record<string, unknown> : {};
+  return {
+    ...safe,
     content: {
       ...createEmptySD02(),
       milestones: Array.isArray(content.milestones) ? content.milestones : [],
