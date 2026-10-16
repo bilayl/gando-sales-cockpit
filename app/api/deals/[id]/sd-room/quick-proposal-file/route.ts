@@ -46,6 +46,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const oldApproval = readQuickApproval(previous);
     const next: SD04Content = {
       ...previous,
+      deckTitle: previous.deckTitle || "Proposition Gando × " + bundle.room.company_name,
+      executiveMessage: previous.executiveMessage || "Veuillez consulter la proposition jointe avant de donner votre accord.",
+      pricing: previous.pricing.length ? previous.pricing : [
+        { item: "Tarif Gando", model: "commission", price: previous.gandoEconomics.gandoRatePercent.toLocaleString("fr-FR") + " % HT", notes: "par caution activée" },
+        { item: "Marge partenaire", model: "commission", price: previous.gandoEconomics.partnerMarginPercent.toLocaleString("fr-FR") + " % HT", notes: "pour le loueur" },
+      ],
       proposalFileUrl: publicUrl.publicUrl,
       proposalFileName: file.name.trim().slice(0, 300),
       internalApproval: {
