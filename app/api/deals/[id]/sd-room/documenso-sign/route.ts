@@ -35,6 +35,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const bundle = await getSDRoomBundle(id);
     if (!bundle.room) throw Object.assign(new Error("Deal Room introuvable."), { status: 404 });
     if (bundle.room.room_mode !== "standard") throw Object.assign(new Error("La signature automatisée est disponible dans les Deals rapides."), { status: 409 });
+    if (!bundle.room.proposal_agreed_at || bundle.documents.find(item => item.code === "SD04")?.status !== "validated") {
+      throw Object.assign(new Error("Attendez l’accord réel du client sur la proposition avant d’envoyer le contrat en signature."), { status: 409 });
+    }
 
     const document = bundle.documents.find(item => item.code === "SD05");
     if (!document) throw Object.assign(new Error("Ajoutez ou générez d'abord le contrat."), { status: 409 });
@@ -43,6 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const hasGeneratedContract = Boolean(!content.contractUrl && content.contractTitle && content.contractSummary);
     if (!content.contractUrl && !hasGeneratedContract) throw Object.assign(new Error("Ajoutez ou générez d'abord le contrat."), { status: 409 });
     if (content.contractStatus === "signed") throw Object.assign(new Error("Ce contrat est déjà signé."), { status: 409 });
+    if (content.contractStatus === "internal_review") throw Object.assign(new Error("Finalisez et relisez le contrat avant de l’envoyer en signature."), { status: 409 });
 
     const signerName = String(body?.signerName || "").trim().slice(0, 255);
     const signerEmail = String(body?.signerEmail || "").trim().toLowerCase().slice(0, 320);

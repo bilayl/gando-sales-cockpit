@@ -54,6 +54,8 @@ export type SD04Content = {
   rolloutPlan: string[];
   callToAction: string;
   offerSummary: string;
+  proposalFileUrl: string;
+  proposalFileName: string;
   pricing: Array<{ item: string; model: string; price: string; notes: string }>;
   assumptions: string[];
   businessCase: Array<{ metric: string; baseline: string; target: string; value: string }>;
@@ -62,6 +64,27 @@ export type SD04Content = {
     averageDeposit: number;
     monthlyActivations: number;
     partnerMarginRate: number;
+  };
+  /** Internal revenue model; never send to the customer-facing room. */
+  gandoEconomics: {
+    averageDeposit: number;
+    monthlyActivations: number;
+    gandoRatePercent: number;
+    partnerMarginPercent: number;
+    insuranceCostPercent: number;
+    paymentCostPercent: number;
+    paymentFixedCost: number;
+    monthlySubscription: number;
+    collectionRatePercent: number;
+    collectionFixedFee: number;
+    expectedCollectionSharePercent: number;
+    averageCollectionAmountPercent: number;
+  };
+  internalApproval?: {
+    required: boolean;
+    approvedAt: string | null;
+    approvedByEmail: string | null;
+    approvedHash: string | null;
   };
   commercialTerms: string[];
   procurementSteps: string[];
@@ -156,6 +179,8 @@ export function createEmptySD04(): SD04Content {
     rolloutPlan: [],
     callToAction: "",
     offerSummary: "",
+    proposalFileUrl: "",
+    proposalFileName: "",
     pricing: [],
     assumptions: [],
     businessCase: [],
@@ -164,6 +189,20 @@ export function createEmptySD04(): SD04Content {
       averageDeposit: 1000,
       monthlyActivations: 30,
       partnerMarginRate: 0.7,
+    },
+    gandoEconomics: {
+      averageDeposit: 1000,
+      monthlyActivations: 30,
+      gandoRatePercent: 2.5,
+      partnerMarginPercent: 0.7,
+      insuranceCostPercent: 1.14,
+      paymentCostPercent: 1.6,
+      paymentFixedCost: 0.35,
+      monthlySubscription: 0,
+      collectionRatePercent: 2.5,
+      collectionFixedFee: 2,
+      expectedCollectionSharePercent: 0,
+      averageCollectionAmountPercent: 100,
     },
     commercialTerms: [],
     procurementSteps: [],
@@ -289,6 +328,8 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
       rolloutPlan: stringList(source.rolloutPlan),
       callToAction: text(source.callToAction),
       offerSummary: text(source.offerSummary || executiveMessage),
+      proposalFileUrl: text(source.proposalFileUrl, 2000),
+      proposalFileName: text(source.proposalFileName, 300),
       pricing: Array.isArray(source.pricing) ? source.pricing.slice(0, 60).map(item => {
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
         return { item: text(row.item, 500), model: text(row.model, 500), price: text(row.price, 300), notes: text(row.notes, 1000) };
@@ -311,6 +352,40 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
           averageDeposit: number(example.averageDeposit, 1000, 0, 1000000),
           monthlyActivations: number(example.monthlyActivations, 30, 0, 1000000),
           partnerMarginRate: number(example.partnerMarginRate, 0.7, 0, 100),
+        };
+      })(),
+      gandoEconomics: (() => {
+        const defaults = createEmptySD04().gandoEconomics;
+        const values = source.gandoEconomics && typeof source.gandoEconomics === "object"
+          ? source.gandoEconomics as Record<string, unknown> : {};
+        const amount = (key: keyof typeof defaults, upper: number) => {
+          const raw = values[key];
+          const value = raw === undefined || raw === null || raw === "" ? defaults[key] : Number(raw);
+          return Number.isFinite(value) ? Math.min(upper, Math.max(0, value)) : defaults[key];
+        };
+        return {
+          averageDeposit: amount("averageDeposit", 1_000_000),
+          monthlyActivations: amount("monthlyActivations", 1_000_000),
+          gandoRatePercent: amount("gandoRatePercent", 100),
+          partnerMarginPercent: amount("partnerMarginPercent", 100),
+          insuranceCostPercent: amount("insuranceCostPercent", 100),
+          paymentCostPercent: amount("paymentCostPercent", 100),
+          paymentFixedCost: amount("paymentFixedCost", 10_000),
+          monthlySubscription: amount("monthlySubscription", 1_000_000),
+          collectionRatePercent: amount("collectionRatePercent", 100),
+          collectionFixedFee: amount("collectionFixedFee", 10_000),
+          expectedCollectionSharePercent: amount("expectedCollectionSharePercent", 100),
+          averageCollectionAmountPercent: amount("averageCollectionAmountPercent", 100),
+        };
+      })(),
+      internalApproval: (() => {
+        const data = source.internalApproval && typeof source.internalApproval === "object"
+          ? source.internalApproval as Record<string, unknown> : {};
+        return {
+          required: data.required === true,
+          approvedAt: typeof data.approvedAt === "string" ? data.approvedAt : null,
+          approvedByEmail: typeof data.approvedByEmail === "string" ? data.approvedByEmail : null,
+          approvedHash: typeof data.approvedHash === "string" ? data.approvedHash : null,
         };
       })(),
       commercialTerms: stringList(source.commercialTerms),
