@@ -112,7 +112,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    return Response.json({ document: data, contractPrepared });
+    const published = (data.published_content || data.content || {}) as Record<string, unknown>;
+    const { gandoEconomics: _internalEconomics, internalApproval: _internalApproval, ...publicContent } = published;
+    void _internalEconomics; void _internalApproval;
+    return Response.json({
+      document: { ...data, content: code === "SD04" ? publicContent : published, published_content: null },
+      contractPrepared,
+    });
   } catch (error) {
     const value = error as Error & { status?: number };
     return Response.json({ error: value.message || "Validation impossible." }, { status: value.status || 500 });
