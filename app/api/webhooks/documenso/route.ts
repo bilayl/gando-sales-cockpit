@@ -54,6 +54,12 @@ export async function POST(request: Request) {
   if (error) throw error;
   if (!document) return Response.json({ received: true, ignored: true });
 
+  // Existing external requests must not change manually managed quick-deal statuses.
+  const { data: room, error: roomError } = await admin.from("deal_rooms")
+    .select("room_mode").eq("id", link.roomId).maybeSingle();
+  if (roomError) throw roomError;
+  if (!room || room.room_mode === "standard") return Response.json({ received: true, ignored: true });
+
   const content = normalizeSD05NativeContent(document.content);
   const envelopeId = String(payload.envelopeId || content.signatureEnvelopeId || "").trim();
   if (content.signatureEnvelopeId && envelopeId && content.signatureEnvelopeId !== envelopeId) {
