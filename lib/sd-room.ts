@@ -464,12 +464,21 @@ export async function getPublicSDRoom(token: string, email: string) {
       currentStage: room.current_stage,
       updatedAt: room.updated_at,
     },
-    documents: (documents || []).map(document => ({
-      ...document,
-      content: document.code === "SD01"
-        ? { ...(document.published_content || document.content || {}), evidence: [] }
-        : document.published_content || document.content,
-    })) as SDDocumentRecord[],
+    documents: (documents || []).map(document => {
+      const published = (document.published_content || document.content || {}) as Record<string, unknown>;
+      if (document.code === "SD04") {
+        // Gando's internal revenue model and admin approval must NEVER leak through
+        // the public response (including content, published_content or metadata).
+        const { gandoEconomics: _economics, internalApproval: _approval, ...publicProposal } = published;
+        void _economics; void _approval;
+        return { ...document, content: publicProposal, published_content: null };
+      }
+      return {
+        ...document,
+        content: document.code === "SD01" ? { ...published, evidence: [] } : published,
+        published_content: null,
+      };
+    }) as SDDocumentRecord[],
     visitorEmail,
   };
 }
