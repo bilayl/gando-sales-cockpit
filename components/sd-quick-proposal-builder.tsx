@@ -106,6 +106,19 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
   const gandoEconomics = value.gandoEconomics || createEmptySD04().gandoEconomics;
   const gando = computeQuickDealEconomics(gandoEconomics);
   const canPublish = !approval?.approval.required || approval.approvedForCurrent;
+  const gandoFields = [
+    { key: "averageDeposit", label: "Caution moyenne (€)", step: "50" },
+    { key: "monthlyActivations", label: "Activations / mois", step: "1" },
+    { key: "gandoRatePercent", label: "Frais Gando (%)", step: "0.1" },
+    { key: "partnerMarginPercent", label: "Marge du loueur (%)", step: "0.1" },
+    { key: "monthlySubscription", label: "Abonnement mensuel (€)", step: "1" },
+    { key: "collectionRatePercent", label: "Frais encaissement (%)", step: "0.1" },
+    { key: "collectionFixedFee", label: "Frais fixes encaissement (€)", step: "0.1" },
+    { key: "expectedCollectionSharePercent", label: "Encaissements estimés (%)", step: "0.1" },
+    { key: "insuranceCostPercent", label: "Assurance / caution (%)", step: "0.01" },
+    { key: "paymentCostPercent", label: "PSP / frais Gando (%)", step: "0.1" },
+    { key: "paymentFixedCost", label: "PSP fixe / activation (€)", step: "0.01" },
+  ] as const;
 
   const setEconomics = (field: keyof typeof gandoEconomics, number: number) => {
     const next = { ...gandoEconomics, [field]: Math.max(0, Number.isFinite(number) ? number : 0) };
@@ -243,9 +256,13 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
         <Button variant="outline" onClick={generateTemplate} disabled={working || agreed}><Sparkles className="mr-2 h-4 w-4" />Générer le modèle</Button>
         <Button variant="outline" onClick={() => void persist(false)} disabled={working}><Save className="mr-2 h-4 w-4" />Enregistrer</Button>
-        <Button onClick={() => void persist(true)} disabled={working || !ready || agreed}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}{published ? "Mettre à jour le lien" : "Générer le lien"}</Button>
+        <Button onClick={() => void persist(true)} disabled={working || !ready || agreed || !canPublish}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}{published ? "Mettre à jour le lien" : "Générer le lien"}</Button>
       </div>
 
+      <label className="mt-4 flex items-start gap-2 text-xs font-semibold text-muted-foreground">
+        <input type="checkbox" className="mt-0.5 h-4 w-4" checked={pricingConfirmed} onChange={event => setPricingConfirmed(event.target.checked)} />
+        Je confirme les tarifs de cette version avant publication. Les valeurs préremplies sont une simulation, pas un tarif accordé avec le client.
+      </label>
       {clientUrl && published ? <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3">
         <div className="mb-2 text-[10px] font-black uppercase tracking-[0.1em] text-primary">Lien de la propal à partager</div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -255,6 +272,45 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">Après l’avoir réellement partagé, renseigne la date et l’heure dans « Propal envoyée » au-dessus.</p>
       </div> : null}
+    </Card>
+
+    <Card className="p-5 lg:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div><div className="text-[10px] font-black uppercase tracking-[0.13em] text-muted-foreground">Contrôle interne · Administration</div>
+          <h2 className="mt-1 text-lg font-black">Validation de la proposition Gando</h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">L’administrateur approuve la version enregistrée. Tout changement de prix ou de contenu annule son accord.</p>
+        </div>
+        <Badge variant="outline" className={approval?.approvedForCurrent ? "border-emerald-500/30 text-emerald-600" : ""}>
+          {approval?.approvedForCurrent ? "Approuvée en interne" : approval?.approval.required ? "Approbation requise" : "Validation optionnelle"}
+        </Badge>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {approval?.canApprove ? <>
+          <Button variant="outline" disabled={approvalWorking || agreed} onClick={() => void changeApproval("set_required", !approval?.approval.required)}>{approval?.approval.required ? "Rendre facultative" : "Exiger l’approbation admin"}</Button>
+          <Button variant="outline" disabled={approvalWorking || agreed} onClick={() => void changeApproval("approve")}>{approvalWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Approuver la version enregistrée</Button>
+          {approval?.approvedForCurrent ? <Button variant="ghost" disabled={approvalWorking || agreed} onClick={() => void changeApproval("revoke")}>Retirer l’approbation</Button> : null}
+        </> : <span className="text-xs text-muted-foreground">Approbation réservée à un administrateur du cockpit.</span>}
+      </div>
+      {approval?.approval.approvedAt && approval.approvedForCurrent ? <p className="mt-3 text-xs text-muted-foreground">Validée par {approval.approval.approvedByEmail} le {new Date(approval.approval.approvedAt).toLocaleString("fr-FR")}.</p> : null}
+      {approval?.approval.required && !approval.approvedForCurrent ? <p className="mt-3 text-xs text-amber-700">Enregistre la proposition, puis demande son approbation avant de publier le lien.</p> : null}
+    </Card>
+
+    <Card className="p-5 lg:p-6">
+      <div className="text-[10px] font-black uppercase tracking-[0.13em] text-primary">Pilotage financier · Interne uniquement</div>
+      <h2 className="mt-1 text-lg font-black">Combien rapporte ce deal à Gando ?</h2>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">Hypothèses modifiables HT, confidentielles et non visibles par le client.</p>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {gandoFields.map(field => <label key={field.key} className="block"><span className="text-xs font-bold">{field.label}</span>
+          <Input className="mt-2" type="number" min="0" step={field.step} value={gandoEconomics[field.key]} onChange={event => setEconomics(field.key, Number(event.target.value))} disabled={agreed} />
+        </label>)}
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">Cautions sécurisées / mois</div><div className="mt-2 text-xl font-black">{euro(gando.securedMonthly)}</div><p className="mt-1 text-[11px] text-muted-foreground">Ce volume n’est pas du CA</p></div>
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="text-[10px] font-bold uppercase text-primary">CA Gando / mois · HT</div><div className="mt-2 text-xl font-black">{euro(gando.monthlyGandoRevenue)}</div></div>
+        <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">CA Gando / an · HT</div><div className="mt-2 text-xl font-black">{euro(gando.annualGandoRevenue)}</div></div>
+        <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">Contribution mensuelle estimée</div><div className="mt-2 text-xl font-black">{euro(gando.monthlyContribution)}</div><p className="mt-1 text-[11px] text-muted-foreground">Après assurance/PSP, hors autres coûts</p></div>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-muted-foreground">Détail mensuel : {euro(gando.monthlyGandoRevenue)} de revenus Gando − {euro(gando.monthlyInsuranceCost)} d’assurance − {euro(gando.monthlyPaymentCost)} de PSP. Marge estimée du loueur : {euro(gando.monthlyPartnerRevenue)} HT/mois (exclue du CA Gando). Hypothèses Top Location à confirmer.</p>
     </Card>
 
     <section className="overflow-hidden rounded-2xl border-2 border-primary/20 bg-background shadow-sm">
@@ -301,7 +357,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
       </Card>
 
       <Card className="space-y-5 p-5 lg:p-6">
-        <Field label="Prix / offre" hint="Une ligne : intitulé | prix | précision"><Area value={pricingDraft} onChange={next => { setPricingDraft(next); set("pricing", parsePricing(next)); }} rows={7} placeholder={'Tarif Gando | [X % HT] | par caution activée\nMarge partenaire | [+X % HT] | optionnelle'} /></Field>
+        <Field label="Autres lignes de prix" hint="Les frais Gando, la marge du loueur et le tarif total sont calculés depuis la grille interne ci-dessus. Autres lignes : intitulé | prix | précision"><Area value={pricingDraft} onChange={next => { setPricingDraft(next); set("pricing", [...quickPricingRows(gandoEconomics), ...parsePricing(next).filter(row => !isQuickPricingRow(row.item))]); setPricingConfirmed(false); }} rows={5} placeholder={'Mise en place | 0 € HT | incluse'} /></Field>
         <Field label="Conditions commerciales" hint="Une condition par ligne"><Area value={value.commercialTerms.join("\n")} onChange={next => set("commercialTerms", draftLines(next))} rows={7} placeholder={'Durée de sécurisation : [XX jours]\nPlafond : [X XXX €]\nFrais d’encaissement : [X % + X € HT]'} /></Field>
         <Field label="Points de valeur / ROI" hint="Une ligne par bénéfice"><Area value={value.proofPoints.join("\n")} onChange={next => set("proofPoints", draftLines(next))} rows={6} placeholder={'Pas de fonds immobilisés\nGain de temps opérationnel\nRevenu additionnel possible'} /></Field>
       </Card>
