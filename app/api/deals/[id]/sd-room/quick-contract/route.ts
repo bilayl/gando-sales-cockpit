@@ -4,7 +4,7 @@ import { getSDRoomBundle, saveSDDocument } from "@/lib/sd-room";
 import { requireSDInternalAccess } from "@/lib/sd-room-access";
 import { createGandoPartnershipTemplate, createGandoRentalTemplate, createGandoSD05Template } from "@/lib/sd05-contract";
 import { contractHtmlToText, sanitizeContractHtml } from "@/lib/contract-rich-text";
-import { createEmptySD05, type SD05Content } from "@/lib/sd-stage-content";
+import { createEmptySD05, normalizeStageContent, type SD04Content, type SD05Content } from "@/lib/sd-stage-content";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +31,36 @@ function storagePath(url: string) {
   const marker = `/storage/v1/object/public/${BUCKET}/`;
   const index = url.indexOf(marker);
   return index < 0 ? null : decodeURIComponent(url.slice(index + marker.length).split(/[?#]/)[0] || "");
+}
+
+function franceRate(value: number) {
+  return value.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+}
+
+function normalizeContractRates(body: string, company: string, gando: string, partner: string, total: string, collection: string) {
+  // The legacy rental template was drafted for LR Location. Do not copy its
+  // client-specific annex and example amounts to another partner unchanged.
+  const start = body.indexOf("ANNEXE 1 : CONDITIONS FINANCIÈRES ET COMMERCIALES");
+  const end = body.indexOf("ANNEXE 2 : MÉCANISME DE STOP-LOSS", start);
+  if (start < 0 || end < start) return body.replace(/LR LOCATION/gi, company);
+  const amounts = [500, 1000, 1500, 2000, 2500];
+  const number = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const gandoNumber = Number(gando.replace(",", "."));
+  const partnerNumber = Number(partner.replace(",", "."));
+  const examples = amounts.map(amount =>
+    amount.toLocaleString("fr-FR") + " € : Gando " + number(amount * gandoNumber / 100) +
+    " € HT ; " + company + " " + number(amount * partnerNumber / 100) + " € HT"
+  ).join("\n");
+  const annex = "ANNEXE 1 : CONDITIONS FINANCIÈRES ET COMMERCIALES\n" +
+    "Tarification client totale : " + total + " % HT (Gando " + gando + " % ; marge " + company + " " + partner + " %).\n" +
+    "Frais d'encaissement : " + collection + ".\n" +
+    "Plafond de caution, durée et conditions de garantie : à confirmer dans les conditions particulières.\n" +
+    "Exemples indicatifs par montant de caution :\n" + examples + "\n";
+  return (body.slice(0, start) + annex + body.slice(end))
+    .replace(/LR LOCATION/gi, company)
+    .replace(/3,4(?=\s*%)/g, total)
+    .replace(/2,7(?=\s*%)/g, gando)
+    .replace(/0,7(?=\s*%)/g, partner);
 }
 
 function currentContent(bundle: Awaited<ReturnType<typeof getSDRoomBundle>>) {
@@ -144,6 +174,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         partnerRate: String(incoming.partnerRate ?? previousRental.partnerRate ?? base.rentalTemplate.partnerRate).trim().slice(0, 30) || "0,70",
         totalRate: String(incoming.totalRate ?? previousRental.totalRate ?? base.rentalTemplate.totalRate).trim().slice(0, 30) || "3,40",
       };
+      const offer = bundle.documents.find(item => item.code === "SD04");
+      const offerContent = offer?.published_content || offer?.content;
+      const terms = offerContent ? (normalizeStageContent("SD04", offerContent) as SD04Content).gandoEconomics : null;
+      // Once the offer has been accepted, its structured rates are authoritative.
+      if (offer?.status === "validated" && terms) {
+        rentalTemplate.gandoRate = franceRate(terms.gandoRatePercent);
+        rentalTemplate.partnerRate = franceRate(terms.partnerMarginPercent);
+        rentalTemplate.totalRate = franceRate(terms.gandoRatePercent + terms.partnerMarginPercent);
+      }
+      const collectionLabel = terms
+        ? franceRate(terms.collectionRatePercent) + " % du montant encaissé + " + franceRate(terms.collectionFixedFee) + " € HT"
+        : "À préciser dans les conditions particulières";
+      const legalItems: SD05Content["legalItems"] = terms ? [
+        { topic: "Frais Gando", status: "in_review", owner: "Gando", notes: rentalTemplate.gandoRate + " % HT de la caution" },
+        { topic: "Marge loueur", status: "in_review", owner: companyName, notes: rentalTemplate.partnerRate + " % HT de la caution" },
+        { topic: "Tarif total client", status: "in_review", owner: companyName, notes: rentalTemplate.totalRate + " % HT de la caution" },
+        { topic: "Frais d'encaissement", status: "in_review", owner: "Gando", notes: collectionLabel },
+      ] : base.legalItems;
       const switchingTemplate = current.contractTemplate !== requestedTemplate;
       const content: SD05Content = {
         ...base,
@@ -154,6 +202,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         signatureState: switchingTemplate ? "not_configured" : current.signatureState,
         signedDocumentUrl: switchingTemplate ? "" : current.signedDocumentUrl,
         rentalTemplate,
+        legalItems,
+        contractSummary: requestedTemplate === "rental_exact" ? normalizeContractRates(base.contractSummary, companyName,
+          rentalTemplate.gandoRate, rentalTemplate.partnerRate, rentalTemplate.totalRate, collectionLabel) : base.contractSummary,
         goLiveDate: String(body?.goLiveDate || current.goLiveDate || base.goLiveDate).trim().slice(0, 40),
         signatureDeadline: String(body?.signatureDeadline || current.signatureDeadline || base.signatureDeadline).trim().slice(0, 40),
         contractStatus: switchingTemplate ? "client_review" : (base.contractStatus === "signed" ? "signed" : (current.signatureUrl ? "ready_to_sign" : "client_review")),
