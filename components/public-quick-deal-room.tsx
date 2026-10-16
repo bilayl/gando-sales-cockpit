@@ -132,6 +132,11 @@ export function PublicQuickDealRoom({ token }: { token: string }) {
 
     <div className="mx-auto max-w-[980px] px-5 py-9 sm:px-7 sm:py-12">
       <section className="rounded-[20px] border border-[#e0e4e6] bg-white p-6 sm:p-8">
+        {proposalContent.proposalFileUrl ? <div className="mb-7 rounded-xl border border-[#dedcf0] bg-[#f8f7ff] p-5">
+          <div className="text-xs font-bold uppercase tracking-wider text-[#7166c7]">Document commercial joint à la proposition</div>
+          <p className="mt-2 text-sm text-[#53536d]">Consultez le fichier de l’offre avant de donner votre accord ci-dessous.</p>
+          <a href={proposalContent.proposalFileUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#211f32] px-4 py-2.5 text-sm font-semibold text-white">Ouvrir {proposalContent.proposalFileName || "la proposition"} <ExternalLink className="h-4 w-4" /></a>
+        </div> : null}
         {proposalContent.pricing.length ? <div><div className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#687277]">Tarification</div><p className="mt-2 max-w-2xl text-[15px] leading-7 text-[#687277]">Les éléments clés sont présentés immédiatement, comme dans une propal commerciale : tarif, marge éventuelle et conditions principales.</p><div className="mt-5"><PricingCards pricing={proposalContent.pricing} /></div></div> : null}
         {revenueExample.enabled && revenueExample.averageDeposit > 0 && revenueExample.monthlyActivations > 0 && revenueExample.partnerMarginRate > 0 ? <div className={proposalContent.pricing.length ? "mt-7 border-t border-[#eceeef] pt-6" : ""}>
           <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#687277]">Exemple de revenu partenaire</div>
