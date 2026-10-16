@@ -20,4 +20,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm install --no-audit --no-fund
+      - run: node --experimental-strip-types --test tests/quick-deal-economics.test.mjs
       - run: npm run build
