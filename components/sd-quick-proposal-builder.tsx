@@ -123,9 +123,10 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
     { key: "monthlySubscription", label: "Abonnement mensuel (€)", step: "1" },
     { key: "collectionRatePercent", label: "Frais encaissement (%)", step: "0.1" },
     { key: "collectionFixedFee", label: "Frais fixes encaissement (€)", step: "0.1" },
-    { key: "expectedCollectionSharePercent", label: "Encaissements estimés (%)", step: "0.1" },
+    { key: "expectedCollectionSharePercent", label: "Demandes encaissées (%)", step: "0.1" },
+    { key: "averageCollectionAmountPercent", label: "Part de caution encaissée (%)", step: "0.1" },
     { key: "insuranceCostPercent", label: "Assurance / caution (%)", step: "0.01" },
-    { key: "paymentCostPercent", label: "PSP / frais Gando (%)", step: "0.1" },
+    { key: "paymentCostPercent", label: "PSP / frais totaux facturés (%)", step: "0.1" },
     { key: "paymentFixedCost", label: "PSP fixe / activation (€)", step: "0.01" },
   ] as const;
 
@@ -349,7 +350,7 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">Cautions sécurisées / mois</div><div className="mt-2 text-xl font-black">{euro(gando.securedMonthly)}</div><p className="mt-1 text-[11px] text-muted-foreground">Ce volume n’est pas du CA</p></div>
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="text-[10px] font-bold uppercase text-primary">CA Gando / mois · HT</div><div className="mt-2 text-xl font-black">{euro(gando.monthlyGandoRevenue)}</div></div>
         <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">CA Gando / an · HT</div><div className="mt-2 text-xl font-black">{euro(gando.annualGandoRevenue)}</div></div>
-        <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">Contribution mensuelle estimée</div><div className="mt-2 text-xl font-black">{euro(gando.monthlyContribution)}</div><p className="mt-1 text-[11px] text-muted-foreground">Après assurance/PSP, hors autres coûts</p></div>
+        <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">Contribution mensuelle estimée</div><div className="mt-2 text-xl font-black">{euro(gando.monthlyContribution)}</div><p className="mt-1 text-[11px] text-muted-foreground">Après assurance/PSP estimés, hors risque et recouvrement</p></div>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">Détail mensuel : {euro(gando.monthlyGandoRevenue)} de revenus Gando − {euro(gando.monthlyInsuranceCost)} d’assurance − {euro(gando.monthlyPaymentCost)} de PSP. Marge estimée du loueur : {euro(gando.monthlyPartnerRevenue)} HT/mois (exclue du CA Gando). Hypothèses pour {companyName} à confirmer.</p>
     </Card>
