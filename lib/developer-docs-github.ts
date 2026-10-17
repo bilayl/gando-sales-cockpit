@@ -267,7 +267,10 @@ async function githubRequest<T>(
         : response.status === 403
           ? "Le token GitHub n’a pas les droits nécessaires."
           : "GitHub n’a pas pu traiter la demande.";
-    throw new DeveloperDocsGithubError(payload?.message || fallback, response.status);
+    const message = response.status === 404 && payload?.message === "Not Found"
+      ? fallback
+      : payload?.message || fallback;
+    throw new DeveloperDocsGithubError(message, response.status);
   }
 
   if (response.status === 204) return undefined as T;
@@ -639,20 +642,42 @@ export async function listDeveloperDocsRepositoryOptions(
     repoConnection,
     `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
   );
-  const branches = await githubRequest<GithubBranchListItem[]>(
-    repoConnection,
-    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`,
-  );
+  let branches: GithubBranchListItem[];
+  try {
+    branches = await githubRequest<GithubBranchListItem[]>(
+      repoConnection,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`,
+    );
+  } catch (error) {
+    if (error instanceof DeveloperDocsGithubError && (error.status === 403 || error.status === 404)) {
+      throw new DeveloperDocsGithubError(
+        `Le compte GitHub voit ${owner}/${repo}, mais ne peut pas lire ses branches. Vérifiez l’accès du token à ce repository et la permission “Contents: Read and write”.`,
+        error.status,
+      );
+    }
+    throw error;
+  }
 
   const branch = cleanBranch(
     input.branch || repository.default_branch || branches[0]?.name || "main",
     repository.default_branch || "main",
   );
 
-  const tree = await githubRequest<GithubTreeResponse>(
-    { ...repoConnection, branch },
-    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
-  );
+  let tree: GithubTreeResponse;
+  try {
+    tree = await githubRequest<GithubTreeResponse>(
+      { ...repoConnection, branch },
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    );
+  } catch (error) {
+    if (error instanceof DeveloperDocsGithubError && (error.status === 403 || error.status === 404)) {
+      throw new DeveloperDocsGithubError(
+        `Le repository ${owner}/${repo} et la branche ${branch} existent, mais GitHub refuse la lecture du contenu. Vérifiez que le token inclut ce repository et “Repository permissions → Contents: Read and write”.`,
+        error.status,
+      );
+    }
+    throw error;
+  }
 
   const directories = (tree.tree || [])
     .filter(item => item.type === "tree" && typeof item.path === "string")
