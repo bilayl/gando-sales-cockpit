@@ -32,8 +32,9 @@ export function proposalFingerprint(value: unknown) {
   const normalized = normalizeStageContent("SD04", value) as SD04Content;
   // Normalize before hashing so clients cannot approve a representation different
   // from what is saved and later displayed to the customer.
-  const { internalApproval: _internalApproval, ...customerTerms } = normalized;
-  void _internalApproval;
+  const { internalApproval: _internalApproval, metricsToConfirm: _clientMetrics, ...customerTerms } = normalized;
+  // Customer metric confirmations must not invalidate approval of the commercial offer.
+  void _internalApproval; void _clientMetrics;
   return createHash("sha256").update(JSON.stringify(customerTerms)).digest("hex");
 }
 

@@ -16,6 +16,8 @@ type DealEconomics = {
   enabled: boolean;
   source: "dealroom" | "live" | "dealroom+live";
   basis: string;
+  metricsRequested?: number;
+  metricsConfirmed?: number;
   monthlyDeposits: number;
   averageDepositAmount: number;
   gandoRatePercent: number;
@@ -169,7 +171,10 @@ export function DealEconomicsDashboard() {
                 </div>
               </div>
             </div>
-            <Badge variant="outline">{stageLabel(topDeal.stage)}</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              {topDeal.metricsRequested ? <Badge variant="outline" className={topDeal.metricsConfirmed === topDeal.metricsRequested ? "border-emerald-500/30 text-emerald-600" : "border-amber-500/30 text-amber-700"}>Données client : {topDeal.metricsConfirmed || 0}/{topDeal.metricsRequested} confirmées</Badge> : null}
+              <Badge variant="outline">{stageLabel(topDeal.stage)}</Badge>
+            </div>
           </div>
 
           <div className="grid sm:grid-cols-2 xl:grid-cols-6">
@@ -206,6 +211,7 @@ export function DealEconomicsDashboard() {
                 <TableHead>Deal</TableHead>
                 <TableHead>Base</TableHead>
                 <TableHead>Stage</TableHead>
+                <TableHead>Données confirmées</TableHead>
                 <TableHead className="text-right">Cautions/mois</TableHead>
                 <TableHead className="text-right">Volume sécurisé</TableHead>
                 <TableHead className="text-right">CA/mois</TableHead>
@@ -230,6 +236,9 @@ export function DealEconomicsDashboard() {
                   <TableCell>
                     <Badge variant="outline" className="text-[9px]">{stageLabel(deal.stage)}</Badge>
                   </TableCell>
+                  <TableCell>
+                    {deal.metricsRequested ? <Badge variant="outline" className={deal.metricsConfirmed === deal.metricsRequested ? "border-emerald-500/30 text-emerald-700" : "border-amber-500/30 text-amber-700"}>{deal.metricsConfirmed || 0}/{deal.metricsRequested} confirmées</Badge> : <span className="text-xs text-muted-foreground">Non demandées</span>}
+                  </TableCell>
                   <TableCell className="text-right">{integer(deal.monthlyDeposits)}</TableCell>
                   <TableCell className="text-right">{euro(deal.monthlySecuredVolume)}</TableCell>
                   <TableCell className="text-right">{euro(deal.monthlyGrossRevenue)}</TableCell>
@@ -250,7 +259,7 @@ export function DealEconomicsDashboard() {
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-24 text-center text-xs text-muted-foreground">
+                  <TableCell colSpan={11} className="h-24 text-center text-xs text-muted-foreground">
                     Aucun dealroom ne contient encore assez de données pour calculer sa valeur.
                   </TableCell>
                 </TableRow>
@@ -263,7 +272,7 @@ export function DealEconomicsDashboard() {
       <div className="flex gap-2 rounded-lg border border-border bg-muted/15 px-3 py-2.5 text-[10px] leading-4 text-muted-foreground">
         <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
         <span>
-          La contribution deal retire l’assurance à 1,14 %, les coûts partenaire connus et une estimation PSP. Les coûts de structure restent dans la page Rentabilité. Pour les clients live comme LR Location, le run-rate réel Gando des 30 derniers jours est utilisé ; pour Atlantis, la proposition/contrat complète le dealroom.
+          Les informations à confirmer sont distinctes des hypothèses de prévision et ne les remplacent pas automatiquement. La contribution deal retire l’assurance à 1,14 %, les coûts partenaire connus et une estimation PSP. Les coûts de structure restent dans la page Rentabilité. Pour les clients live comme LR Location, le run-rate réel Gando des 30 derniers jours est utilisé ; pour Atlantis, la proposition/contrat complète le dealroom.
         </span>
       </div>
     </div>
