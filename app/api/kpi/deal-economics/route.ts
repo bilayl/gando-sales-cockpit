@@ -211,6 +211,16 @@ function proposalFromDocuments(
   const legal05 = Array.isArray(sd05?.legalItems) ? sd05?.legalItems as Row[] : [];
   const rental05 = (sd05?.rentalTemplate || null) as Row | null;
 
+  // Confirmation is reported separately from the forecast. A CRM estimate is
+  // never automatically treated as a customer-verified KPI.
+  const roi01 = (sd01?.roi || null) as Row | null;
+  const sd01Metrics = Array.isArray(roi01?.valueLevers) && Array.isArray(roi01?.estimates)
+    ? roi01.valueLevers as Row[] : [];
+  const quickMetrics = Array.isArray(sd04?.metricsToConfirm) ? sd04.metricsToConfirm as Row[] : [];
+  const clientMetrics = quickMetrics.length ? quickMetrics : sd01Metrics;
+  const metricsRequested = clientMetrics.filter(row => text(row.lever)).length;
+  const metricsConfirmed = clientMetrics.filter(row => text(row.lever) && Boolean(text(row.confirmedAt))).length;
+
   const monthlyDeposits = n(pricing01?.monthlyDeposits) || n(revenue04?.monthlyActivations);
   const averageDepositAmount = n(pricing01?.averageDepositAmount) || n(revenue04?.averageDeposit);
   const partnerMarginPercent = n(pricing01?.partnerMarginPercent) || n(revenue04?.partnerMarginRate);
@@ -247,6 +257,8 @@ function proposalFromDocuments(
     oneTimeCost,
     stage,
     basis,
+    metricsRequested,
+    metricsConfirmed,
   };
 }
 
@@ -430,6 +442,8 @@ export async function GET() {
           enabled: true,
           source: live ? "dealroom+live" : "dealroom",
           basis: live ? `${proposal.basis} + réel Gando` : proposal.basis,
+          metricsRequested: proposal.metricsRequested,
+          metricsConfirmed: proposal.metricsConfirmed,
           hubspotDealId: room.hubspot_deal_id ? String(room.hubspot_deal_id) : null,
           companyHubspotId: room.company_hubspot_id ? String(room.company_hubspot_id) : null,
           monthlyDeposits: proposal.monthlyDeposits,
