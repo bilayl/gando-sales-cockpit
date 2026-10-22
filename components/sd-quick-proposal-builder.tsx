@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Copy, ExternalLink, Link2, Loader2, Save, Sparkles, UploadCloud } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, Link2, Loader2, Plus, Save, Sparkles, Trash2, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,14 @@ import type { SDDocumentRecord, SDRoomRecord } from "@/lib/sd-room-types";
 import { computeQuickDealEconomics, isQuickPricingRow, quickPricingRows } from "@/lib/quick-deal-economics";
 
 const ROOM_BASE_URL = (process.env.NEXT_PUBLIC_ROOM_BASE_URL || "https://room.gando.pro").replace(/\/$/, "");
+
+const SUGGESTED_CLIENT_METRICS = [
+  { lever: "Locations par mois", mechanism: "Volume moyen de contrats de location sur les 12 derniers mois", value: "" },
+  { lever: "Montant moyen de caution", mechanism: "Montant moyen des cautions demandées aux locataires, en euros", value: "" },
+  { lever: "Taux d'adoption de Gando", mechanism: "Part estimée des locations utilisant la caution Gando, en %", value: "" },
+  { lever: "Cautions Gando par mois", mechanism: "Nombre prévisionnel de cautions activées chaque mois", value: "" },
+  { lever: "Taux de sinistralité", mechanism: "Part des locations faisant l'objet d'une demande liée à un dommage, en %", value: "" },
+];
 
 type RoomResponse = {
   deal?: { name?: string | null };
@@ -105,6 +113,13 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
   const dealName = data?.deal?.name || data?.room?.title || "Deal rapide";
   const companyName = data?.room?.company_name || "Client";
   const agreed = document?.status === "validated";
+  const clientMetrics = value.metricsToConfirm || [];
+  const clientMetricsConfirmed = clientMetrics.filter(item => Boolean(item.confirmedAt)).length;
+  const setClientMetrics = (next: SD04Content["metricsToConfirm"]) => setValue(current => ({ ...current, metricsToConfirm: next }));
+  const addSuggestedMetrics = () => {
+    const existing = new Set(clientMetrics.map(item => item.lever.toLocaleLowerCase("fr-FR")));
+    setClientMetrics([...clientMetrics, ...SUGGESTED_CLIENT_METRICS.filter(item => !existing.has(item.lever.toLocaleLowerCase("fr-FR")))]); 
+  };
   const published = document?.status === "published" || agreed;
 
   const ready = useMemo(() => Boolean(value.deckTitle.trim() && value.executiveMessage.trim() && (value.solution.length || value.pricing.length || value.commercialTerms.length || value.proposalFileUrl)), [value]);
@@ -353,6 +368,39 @@ export function SDQuickProposalBuilder({ dealId, onChanged }: { dealId: string; 
         <div className="rounded-xl border border-border bg-muted/15 p-4"><div className="text-[10px] font-bold uppercase text-muted-foreground">Contribution mensuelle estimée</div><div className="mt-2 text-xl font-black">{euro(gando.monthlyContribution)}</div><p className="mt-1 text-[11px] text-muted-foreground">Après assurance/PSP estimés, hors risque et recouvrement</p></div>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">Détail mensuel : {euro(gando.monthlyGandoRevenue)} de revenus Gando − {euro(gando.monthlyInsuranceCost)} d’assurance − {euro(gando.monthlyPaymentCost)} de PSP. Marge estimée du loueur : {euro(gando.monthlyPartnerRevenue)} HT/mois (exclue du CA Gando). Hypothèses pour {companyName} à confirmer.</p>
+    </Card>
+
+    <Card className="p-5 lg:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.13em] text-primary">Données du loueur · Facultatif</div>
+          <h2 className="mt-1 text-lg font-black">Métriques à confirmer avec le client</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">Ces données ne bloquent jamais l'envoi, l'accord ou la signature. Une fois la proposition publiée, le loueur peut confirmer chaque métrique directement depuis son lien. Les hypothèses de CA ci-dessus restent distinctes des valeurs confirmées.</p>
+        </div>
+        <Badge variant="outline">{clientMetricsConfirmed}/{clientMetrics.length} confirmées</Badge>
+      </div>
+      {!agreed ? <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={addSuggestedMetrics} disabled={clientMetrics.length >= 30}><Plus className="mr-1.5 h-3.5 w-3.5" />Ajouter les 5 métriques suggérées</Button>
+        <Button variant="outline" size="sm" onClick={() => setClientMetrics([...clientMetrics, { lever: "", mechanism: "", value: "" }])} disabled={clientMetrics.length >= 30}><Plus className="mr-1.5 h-3.5 w-3.5" />Métrique personnalisée</Button>
+      </div> : null}
+      {clientMetrics.length ? <div className="mt-4 space-y-3">
+        {clientMetrics.map((metric, index) => <div key={index} className="grid gap-2 rounded-xl border border-border bg-muted/10 p-3 lg:grid-cols-[1.1fr_1.4fr_.8fr_auto]">
+          <label className="text-[11px] font-semibold">Métrique
+            <Input className="mt-1.5" value={metric.lever} placeholder="Ex. Locations par mois" onChange={event => setClientMetrics(clientMetrics.map((item, i) => i === index ? { ...item, lever: event.target.value } : item))} disabled={agreed || Boolean(metric.confirmedAt)} />
+          </label>
+          <label className="text-[11px] font-semibold">Contexte / méthode
+            <Input className="mt-1.5" value={metric.mechanism} placeholder="Comment mesurer cette donnée ?" onChange={event => setClientMetrics(clientMetrics.map((item, i) => i === index ? { ...item, mechanism: event.target.value } : item))} disabled={agreed || Boolean(metric.confirmedAt)} />
+          </label>
+          <label className="text-[11px] font-semibold">Valeur communiquée
+            <Input className="mt-1.5" value={metric.value} placeholder="À confirmer par le loueur" onChange={event => setClientMetrics(clientMetrics.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} disabled={agreed || Boolean(metric.confirmedAt)} />
+          </label>
+          <div className="flex items-end gap-2 lg:flex-col lg:items-end lg:justify-end">
+            <span className={metric.confirmedAt ? "text-[11px] font-semibold text-emerald-700" : "text-[11px] font-semibold text-amber-700"}>{metric.confirmedAt ? "Confirmée par le client" : "À confirmer"}</span>
+            {!agreed && !metric.confirmedAt ? <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" aria-label="Supprimer la métrique" onClick={() => setClientMetrics(clientMetrics.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button> : null}
+          </div>
+          {metric.confirmedAt ? <p className="text-[11px] text-muted-foreground lg:col-span-4">Confirmée par {metric.confirmedBy || metric.confirmedEmail || "le client"} · {new Date(metric.confirmedAt).toLocaleDateString("fr-FR")}</p> : null}
+        </div>)}
+      </div> : <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">Aucune métrique demandée pour ce deal rapide. Ajoute-en uniquement si cela t'aide à fiabiliser la prévision.</p>}
     </Card>
 
     <section className="overflow-hidden rounded-2xl border-2 border-primary/20 bg-background shadow-sm">
