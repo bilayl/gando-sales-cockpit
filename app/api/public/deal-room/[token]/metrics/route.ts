@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getPublicSDRoomWithIdentity } from "@/lib/sd-room-public-identity";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import type { SD01Content, SD01Metric } from "@/lib/sd-room-types";
+import type { SD04Content } from "@/lib/sd-stage-content";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,85 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .eq("id", roomData.room.id)
       .single();
     if (roomError) throw roomError;
+    if (room.room_mode === "standard") {
+      // Quick deals hold optional factual metrics in the public SD04 proposal.
+      // They can be confirmed before or after commercial acceptance.
+      const { data: document, error: documentError } = await admin
+        .from("sd_documents")
+        .select("*")
+        .eq("room_id", room.id)
+        .eq("code", "SD04")
+        .single();
+      if (documentError) throw documentError;
+      if (!document.published_at || !document.published_content ||
+          (document.status !== "published" && document.status !== "validated")) {
+        throw Object.assign(new Error("La proposition n’est pas publiée."), { status: 409 });
+      }
+
+      const published = JSON.parse(JSON.stringify(document.published_content)) as SD04Content;
+      const publishedMetrics = Array.isArray(published.metricsToConfirm) ? published.metricsToConfirm : [];
+      const metric = publishedMetrics[metricIndex];
+      if (!metric?.lever?.trim()) {
+        throw Object.assign(new Error("Cette métrique n’existe pas dans la proposition publiée."), { status: 404 });
+      }
+      if (metric.confirmedAt) {
+        throw Object.assign(new Error("Cette métrique a déjà été confirmée."), { status: 409 });
+      }
+
+      const firstName = String(body?.firstName || "").trim().slice(0, 120);
+      const lastName = String(body?.lastName || "").trim().slice(0, 120);
+      const confirmedBy = [firstName, lastName].filter(Boolean).join(" ") || roomData.visitorEmail;
+      const nextMetric: SD01Metric = {
+        ...metric,
+        value,
+        confirmedBy,
+        confirmedEmail: roomData.visitorEmail,
+        confirmedAt: new Date().toISOString(),
+      };
+
+      const applyConfirmation = (content: SD04Content): SD04Content => {
+        const rows = Array.isArray(content.metricsToConfirm) ? [...content.metricsToConfirm] : [];
+        // Match on both index and label: an unpublished edit must never receive
+        // the confirmation for a different question.
+        const matchingIndex = rows[metricIndex]?.lever === metric.lever
+          ? metricIndex
+          : rows.findIndex(row => row.lever === metric.lever && !row.confirmedAt);
+        if (matchingIndex >= 0) rows[matchingIndex] = { ...rows[matchingIndex], ...nextMetric };
+        return { ...content, metricsToConfirm: rows };
+      };
+      const nextPublished = applyConfirmation(published);
+      const currentContent = JSON.parse(JSON.stringify(document.content || document.published_content)) as SD04Content;
+      const nextContent = applyConfirmation(currentContent);
+      const version = Number(document.version || 0) + 1;
+
+      const { error: updateError } = await admin
+        .from("sd_documents")
+        .update({
+          content: nextContent,
+          published_content: nextPublished,
+          version,
+          published_version: version,
+          source_mode: "mixed",
+          updated_by_email: roomData.visitorEmail,
+        })
+        .eq("id", document.id);
+      if (updateError) throw updateError;
+
+      const { error: versionError } = await admin.from("sd_document_versions").insert({
+        document_id: document.id,
+        version,
+        content: nextContent,
+        source_refs: [{ type: "quick_deal_metric_confirmation", metricIndex, lever: metric.lever, visitorEmail: roomData.visitorEmail }],
+        model_name: document.model_name || null,
+        prompt_version: document.prompt_version || null,
+        created_by_email: roomData.visitorEmail,
+        change_summary: `Deal rapide · métrique confirmée par ${confirmedBy} : ${metric.lever} = ${value}`,
+      });
+      if (versionError) throw versionError;
+      // Do not expose confidential Gando economics or internal approval in this response.
+      return Response.json({ metric: nextMetric });
+    }
+
     if (room.room_mode !== "enterprise") {
       throw Object.assign(new Error("Cette action est réservée aux Deal Rooms entreprise."), { status: 403 });
     }
