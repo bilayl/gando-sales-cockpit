@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, CheckCircle2, ExternalLink, FileText, Loader2 } from "lucide-react";
 import { GandoMark } from "@/components/gando-mark";
 import { SDRoomBrandBanner } from "@/components/sd-room-brand-banner";
+import { PublicQuickDealMetrics } from "@/components/public-quick-deal-metrics";
 import type { SD04Content, SD05Content } from "@/lib/sd-stage-content";
-import type { SDDocumentRecord, SDRoomBrandTheme } from "@/lib/sd-room-types";
+import type { SD01Metric, SDDocumentRecord, SDRoomBrandTheme } from "@/lib/sd-room-types";
 
 type PublicDocument = SDDocumentRecord & {
   validated_at?: string | null;
@@ -152,6 +153,27 @@ export function PublicQuickDealRoom({ token }: { token: string }) {
         {proposalContent.commercialTerms.length ? <div className="mt-7 border-t border-[#eceeef] pt-6"><div className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#687277]">Conditions commerciales</div><div className="mt-4"><List items={proposalContent.commercialTerms} /></div></div> : null}
         {proposalContent.proofPoints.length ? <div className="mt-7 border-t border-[#eceeef] pt-6"><div className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#687277]">Pourquoi Gando</div><div className="mt-4"><List items={proposalContent.proofPoints} /></div></div> : null}
       </section>
+
+      <PublicQuickDealMetrics
+        token={token}
+        metrics={proposalContent.metricsToConfirm || []}
+        firstName={firstName}
+        lastName={lastName}
+        email={email}
+        onFirstNameChange={setFirstName}
+        onLastNameChange={setLastName}
+        onEmailChange={setEmail}
+        onConfirmed={(index: number, metric: SD01Metric) => setData(current => current ? {
+          ...current,
+          documents: current.documents.map(document => {
+            if (document.code !== "SD04") return document;
+            const content = document.content as SD04Content;
+            const metrics = [...(content.metricsToConfirm || [])];
+            metrics[index] = metric;
+            return { ...document, content: { ...content, metricsToConfirm: metrics } };
+          }),
+        } : current)}
+      />
 
       <section className="mt-6 rounded-[20px] border border-[#d7dce0] bg-[#202a2f] p-6 text-white sm:p-8">{agreed ? <div className="flex gap-4"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#dff0e3] text-[#376b43]"><CheckCircle2 className="h-5 w-5" /></div><div><h2 className="text-[22px] font-semibold">Accord enregistré</h2><p className="mt-1 text-[15px] leading-6 text-white/70">Votre accord sur cette proposition est enregistré{proposal?.validated_at ? ` le ${formatDate(proposal.validated_at)}` : ""}.</p></div></div> : <div>
         <div className="text-[12px] font-bold uppercase tracking-[0.14em] text-white/50">Accord commercial</div><h2 className="mt-1 text-[25px] font-semibold">{proposalContent.callToAction || "Êtes-vous en accord avec cette proposition ?"}</h2><p className="mt-2 max-w-2xl text-[15px] leading-7 text-white/70">La proposition est consultable librement. Ces informations servent uniquement à enregistrer qui donne l’accord commercial.</p>
