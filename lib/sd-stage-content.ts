@@ -1,4 +1,4 @@
-import type { SDCode } from "@/lib/sd-room-types";
+import type { SD01Metric, SDCode } from "@/lib/sd-room-types";
 
 export type MutualActionItem = {
   milestone: string;
@@ -59,6 +59,8 @@ export type SD04Content = {
   pricing: Array<{ item: string; model: string; price: string; notes: string }>;
   assumptions: string[];
   businessCase: Array<{ metric: string; baseline: string; target: string; value: string }>;
+  /** Optional factual client data to collect and confirm independently of commercial acceptance. */
+  metricsToConfirm: SD01Metric[];
   partnerRevenueExample: {
     enabled: boolean;
     averageDeposit: number;
@@ -184,6 +186,7 @@ export function createEmptySD04(): SD04Content {
     pricing: [],
     assumptions: [],
     businessCase: [],
+    metricsToConfirm: [],
     partnerRevenueExample: {
       enabled: true,
       averageDeposit: 1000,
@@ -339,6 +342,17 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
         const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
         return { metric: text(row.metric, 500), baseline: text(row.baseline, 300), target: text(row.target, 300), value: text(row.value, 500) };
       }).filter(item => item.metric) : [],
+      metricsToConfirm: Array.isArray(source.metricsToConfirm) ? source.metricsToConfirm.slice(0, 30).map(item => {
+        const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
+        return {
+          lever: text(row.lever, 180),
+          mechanism: text(row.mechanism, 500),
+          value: text(row.value, 240),
+          confirmedBy: text(row.confirmedBy, 240) || null,
+          confirmedEmail: text(row.confirmedEmail, 240) || null,
+          confirmedAt: text(row.confirmedAt, 60) || null,
+        } as SD01Metric;
+      }).filter(item => item.lever) : [],
       partnerRevenueExample: (() => {
         const example = source.partnerRevenueExample && typeof source.partnerRevenueExample === "object"
           ? source.partnerRevenueExample as Record<string, unknown>
