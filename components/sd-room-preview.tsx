@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SDRoomBrandBanner } from "@/components/sd-room-brand-banner";
+import { SD04ProposalVisual } from "@/components/sd04-proposal-visual";
 import { SD_CODES, SD_STAGE_META, type SD01Content, type SDCode, type SDDocumentRecord, type SDRoomComment, type SDRoomRecord } from "@/lib/sd-room-types";
 import type { SD02Content, SD03Content, SD04Content, SD05Content } from "@/lib/sd-stage-content";
 
@@ -92,8 +93,7 @@ function PreviewSD03({ content }: { content: SD03Content }) {
 }
 
 function PreviewSD04({ content }: { content: SD04Content }) {
-  const pdfUrl = /^https?:\/\//i.test(content.deckSubtitle || "") ? content.deckSubtitle : "";
-  return <div className="space-y-4">{pdfUrl ? <Section title={content.deckTitle || "Proposition commerciale"}><div className="overflow-hidden rounded-xl border border-[#dfe3e5] bg-[#f5f6f7]"><div className="flex items-center justify-between gap-3 bg-[#202a2f] px-4 py-3 text-white"><div className="flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4" />{content.deckTitle || "Document commercial"}</div><a href={pdfUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold underline">Ouvrir</a></div><iframe src={`${pdfUrl.split("#")[0]}#toolbar=0&navpanes=0&view=FitH`} title="Proposition commerciale" className="h-[650px] w-full bg-white" /></div></Section> : <Section title="Proposition commerciale"><p className="text-sm text-[#566166]">{content.executiveMessage || content.offerSummary || "Aucun document commercial publié."}</p></Section>}</div>;
+  return <SD04ProposalVisual content={content} companyName="Votre partenaire" compact />;
 }
 
 function PreviewSD05({ content }: { content: SD05Content }) {

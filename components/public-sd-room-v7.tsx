@@ -5,6 +5,7 @@ import { ArrowUpRight, CalendarDays, Check, CheckCircle2, ChevronRight, Download
 import { GandoMark } from "@/components/gando-mark";
 import { PublicSD01EnterpriseDocument } from "@/components/public-sd01-enterprise-document";
 import { SDRoomBrandBanner } from "@/components/sd-room-brand-banner";
+import { SD04ProposalVisual } from "@/components/sd04-proposal-visual";
 import { SD_CODES, SD_STAGE_META, type SD01Content, type SD01Metric, type SDCode, type SDDocumentRecord, type SDRoomBrandTheme } from "@/lib/sd-room-types";
 import type { SD02Content, SD03Content, SD04Content, SD05Content } from "@/lib/sd-stage-content";
 
@@ -118,9 +119,8 @@ function SD03Document({ content, language }: { content: SD03Content; language: R
   return <div className="space-y-5"><Section title={tr(language, "Solution retenue", "Selected solution")} kicker="SD03"><p className="text-[18px] font-medium leading-8 text-[#202a2f]">{content.solutionSummary || tr(language, "Solution à finaliser.", "Solution to finalize.")}</p></Section><Section title={tr(language, "Périmètre", "Scope")}><div className="grid gap-7 md:grid-cols-2"><div><Eyebrow>{tr(language, "Inclus", "Included")}</Eyebrow><div className="mt-3"><BulletList items={content.scopeIn} /></div></div><div><Eyebrow>{tr(language, "Hors périmètre", "Out of scope")}</Eyebrow><div className="mt-3"><BulletList items={content.scopeOut} /></div></div></div></Section></div>;
 }
 
-function SD04Document({ content, language }: { content: SD04Content; language: RoomLanguage }) {
-  const pdfUrl = /^https?:\/\//i.test(content.deckSubtitle || "") ? content.deckSubtitle : "";
-  return <Section title={content.deckTitle || tr(language, "Proposition commerciale", "Commercial proposal")} kicker="SD04">{pdfUrl ? <div className="overflow-hidden rounded-[16px] border border-[#d9dee1] bg-[#eef0f2]"><div className="flex items-center gap-3 bg-[#20282d] px-4 py-3 text-white"><FileText className="h-4 w-4" /><div className="min-w-0 flex-1 truncate text-sm font-semibold">{content.deckTitle || "Document commercial"}</div><a href={pdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold"><ExternalLink className="h-3.5 w-3.5" />{tr(language, "Ouvrir", "Open")}</a></div><iframe src={`${pdfUrl.split("#")[0]}#toolbar=0&navpanes=0&view=FitH`} title="PDF" className="hidden h-[780px] w-full bg-white md:block" /></div> : <p className="italic text-[#81898e]">{tr(language, "Aucun PDF publié.", "No PDF published.")}</p>}</Section>;
+function SD04Document({ content, language, companyName }: { content: SD04Content; language: RoomLanguage; companyName: string }) {
+  return <div className="space-y-5"><SD04ProposalVisual content={content} companyName={companyName} language={language} /></div>;
 }
 
 function SD05Document({ content, token, visitorEmail, language, status }: { content: SD05Content; token: string; visitorEmail: string; language: RoomLanguage; status: string }) {
@@ -173,7 +173,7 @@ function DocumentBody({ document, token, visitorEmail, firstName, lastName, comp
   if (document.code === "SD01") return <PublicSD01EnterpriseDocument content={document.content as SD01Content} language={language} token={token} email={visitorEmail} firstName={firstName} lastName={lastName} companyName={companyName} locked={document.status === "validated"} onMetricConfirmed={onMetricConfirmed} />;
   if (document.code === "SD02") return <SD02Document content={document.content as unknown as SD02Content} language={language} />;
   if (document.code === "SD03") return <SD03Document content={document.content as unknown as SD03Content} language={language} />;
-  if (document.code === "SD04") return <SD04Document content={document.content as unknown as SD04Content} language={language} />;
+  if (document.code === "SD04") return <SD04Document content={document.content as unknown as SD04Content} language={language} companyName={companyName} />;
   return <SD05Document content={document.content as unknown as SD05Content} token={token} visitorEmail={visitorEmail} language={language} status={document.status} />;
 }
 
