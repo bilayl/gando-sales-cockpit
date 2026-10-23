@@ -65,7 +65,7 @@ export function SD04ProposalVisual({ content, companyName = "Votre entreprise", 
   const totalRate = readRate(pricing.find(row => /^(tarif total client|prix locataire)$/i.test(row.item.trim())));
   const gandoRate = readRate(pricing.find(row => /^(tarif gando|frais de sécurisation gando)$/i.test(row.item.trim())));
   const partnerRate = readRate(pricing.find(row => /^(marge partenaire|marge loueur)$/i.test(row.item.trim())));
-  const renterRate = totalRate ?? (gandoRate !== null && partnerRate !== null ? gandoRate + partnerRate : null);
+  const renterRate = gandoRate !== null && partnerRate !== null ? gandoRate + partnerRate : totalRate;
   const showPrice = renterRate !== null;
   const collectionLines = [
     ...pricing.filter(row => isCollection(row.item)).map(row => `${row.item} : ${row.price}${row.notes ? ` · ${row.notes}` : ""}`),
