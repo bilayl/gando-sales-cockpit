@@ -60,7 +60,13 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
       };
       const legacyFile = pdf(hydrated.deckSubtitle) || Boolean(hydrated.proposalFileUrl);
       const nextMode = hydrated.presentationMode || (legacyFile ? "file" : "visual");
-      setValue({ ...hydrated, presentationMode: nextMode });
+      setValue({
+        ...hydrated,
+        presentationMode: nextMode,
+        // Migrate legacy PDF-only proposals without deleting their source URL.
+        proposalFileUrl: hydrated.proposalFileUrl || (pdf(hydrated.deckSubtitle) ? hydrated.deckSubtitle : ""),
+        proposalFileName: hydrated.proposalFileName || (pdf(hydrated.deckSubtitle) ? hydrated.deckTitle || "Proposition commerciale.pdf" : ""),
+      });
       setMode(nextMode);
       setDirty(false);
     } catch (error) {
