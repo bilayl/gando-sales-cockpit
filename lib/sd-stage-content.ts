@@ -44,6 +44,8 @@ export type SD03Content = {
 };
 
 export type SD04Content = {
+  /** File upload or online visual proposal. Missing means legacy autodetection. */
+  presentationMode?: "file" | "visual";
   deckTitle: string;
   deckSubtitle: string;
   executiveMessage: string;
@@ -171,6 +173,7 @@ export function createEmptySD03(): SD03Content {
 
 export function createEmptySD04(): SD04Content {
   return {
+    presentationMode: "visual",
     deckTitle: "",
     deckSubtitle: "",
     executiveMessage: "",
@@ -321,6 +324,7 @@ export function normalizeStageContent(code: SDCode, value: unknown): SDStageCont
   if (code === "SD04") {
     const executiveMessage = text(source.executiveMessage || source.offerSummary);
     const result: SD04Content = {
+      presentationMode: source.presentationMode === "file" || source.presentationMode === "visual" ? source.presentationMode : /^https?:\/\//i.test(text(source.deckSubtitle)) || Boolean(text(source.proposalFileUrl)) ? "file" : "visual",
       deckTitle: text(source.deckTitle, 500),
       deckSubtitle: text(source.deckSubtitle, 1000),
       executiveMessage,
