@@ -293,7 +293,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
           {!fileUrl ? <button type="button" disabled={locked || uploading} onClick={() => fileInput.current?.click()} className="mt-5 grid min-h-[210px] w-full place-items-center rounded-2xl border-2 border-dashed border-border bg-muted/15 p-8 text-center text-sm text-muted-foreground transition hover:border-primary/50"><div>{uploading ? <Loader2 className="mx-auto size-8 animate-spin text-primary" /> : <UploadCloud className="mx-auto size-9 text-primary" />}<div className="mt-3 font-semibold text-foreground">Sélectionner un PDF</div><div className="mt-1 text-xs">Le fichier sera visible uniquement après publication.</div></div></button> : <div className="mt-5"><SD04ProposalVisual content={{ ...sanitized, presentationMode: "file" }} companyName={companyName} compact /></div>}
         </Card>
       </div> : <div className={tab === "editor" ? "grid items-start gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]" : "mx-auto max-w-[990px]"}>
-        {tab === "editor" ? <div className="space-y-4">
+        {tab === "editor" ? <fieldset disabled={locked} className="min-w-0 space-y-4">
           <Sections title="Introduction" detail="Ce que le décideur doit comprendre en quelques secondes.">
             <Field label="Titre de la proposition"><Input value={value.deckTitle} onChange={event => set("deckTitle", event.target.value)} disabled={locked} placeholder={`Gando × ${companyName} — Proposition commerciale`} /></Field>
             <Field label="Sous-titre / promesse"><Input value={pdf(value.deckSubtitle) ? "" : value.deckSubtitle} onChange={event => set("deckSubtitle", event.target.value)} disabled={locked} placeholder="Une expérience de caution plus simple pour vos clients" /></Field>
@@ -333,7 +333,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
             <Field label="Étapes de déploiement"><Area value={value.rolloutPlan.join("\n")} onChange={next => set("rolloutPlan", next.split("\n"))} rows={3} placeholder="Validation des conditions\nConfiguration\nLancement pilote" /></Field>
             <Field label="Prochaine étape"><Input value={value.callToAction} onChange={event => set("callToAction", event.target.value)} disabled={locked} placeholder="Valider cette proposition pour préparer le contrat" /></Field>
           </Sections>
-        </div> : null}
+        </fieldset> : null}
         <div className={tab === "editor" ? "xl:sticky xl:top-24" : ""}>
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-[12px] font-semibold"><Eye className="size-4 text-primary" />Aperçu en direct · visible par le client après publication</div>
