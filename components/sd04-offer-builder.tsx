@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SD04ProposalVisual } from "@/components/sd04-proposal-visual";
 import { createEmptySD04, type SD04Content } from "@/lib/sd-stage-content";
-import type { SDDocumentRecord, SDRoomMode } from "@/lib/sd-room-types";
+import type { SD01Content, SDDocumentRecord, SDRoomMode } from "@/lib/sd-room-types";
 
 type RoomResponse = {
   documents: SDDocumentRecord[];
@@ -146,6 +146,38 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     toast.success("Structure de proposition créée. Complétez les tarifs avant publication.");
   }
 
+  function prefillFromSD01() {
+    if (locked) return;
+    const source = data?.documents.find(item => item.code === "SD01")?.content as SD01Content | undefined;
+    if (!source) return toast.error("Complétez d'abord le SD01.");
+    const pricing = source.pricingProposal;
+    const proposedPrices = pricing?.enabled ? [
+      { item: "Frais de sécurisation Gando", model: "commission", price: `${pricing.gandoRatePercent.toLocaleString("fr-FR")} % HT`, notes: pricing.gandoRateNote || "Tarif à valider" },
+      ...(pricing.partnerMarginPercent > 0 ? [{ item: "Marge partenaire", model: "commission", price: `${pricing.partnerMarginPercent.toLocaleString("fr-FR")} % HT`, notes: pricing.partnerMarginNote || "Marge loueur proposée" }] : []),
+    ] : [];
+    setValue(current => ({
+      ...current,
+      presentationMode: "visual",
+      deckTitle: current.deckTitle || `Proposition Gando × ${companyName}`,
+      executiveMessage: current.executiveMessage || source.executiveSummary || "",
+      problem: current.problem.some(Boolean) ? current.problem : (source.painPoints || []).map(pain => pain.title).filter(Boolean),
+      solution: current.solution.some(Boolean) ? current.solution : (source.solutionFit || []).map(item => item.response).filter(Boolean),
+      proofPoints: current.proofPoints.some(Boolean) ? current.proofPoints : source.gandoProposal ? [source.gandoProposal] : [],
+      rolloutPlan: current.rolloutPlan.some(Boolean) ? current.rolloutPlan : (source.nextSteps || []).map(item => item.action).filter(Boolean),
+      pricing: current.pricing.some(row => row.item.trim()) ? current.pricing : proposedPrices,
+      partnerRevenueExample: pricing?.enabled && !current.partnerRevenueExample.enabled ? {
+        enabled: false,
+        averageDeposit: pricing.averageDepositAmount || 0,
+        monthlyActivations: pricing.monthlyDeposits || 0,
+        partnerMarginRate: pricing.partnerMarginPercent || 0,
+      } : current.partnerRevenueExample,
+    }));
+    setMode("visual");
+    setTab("editor");
+    setDirty(true);
+    toast.success("Les éléments disponibles du SD01 ont été repris. Vérifiez les tarifs avant publication.");
+  }
+
   async function upload(file: File) {
     if (locked || working) return;
     if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") return toast.error("Sélectionnez un PDF.");
@@ -266,7 +298,10 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
             <Field label="Titre de la proposition"><Input value={value.deckTitle} onChange={event => set("deckTitle", event.target.value)} disabled={locked} placeholder={`Gando × ${companyName} — Proposition commerciale`} /></Field>
             <Field label="Sous-titre / promesse"><Input value={pdf(value.deckSubtitle) ? "" : value.deckSubtitle} onChange={event => set("deckSubtitle", event.target.value)} disabled={locked} placeholder="Une expérience de caution plus simple pour vos clients" /></Field>
             <Field label="Message exécutif"><Area value={value.executiveMessage} onChange={next => set("executiveMessage", next)} rows={4} placeholder="Votre proposition de valeur et le bénéfice attendu…" /></Field>
-            {!locked ? <Button variant="outline" size="sm" onClick={generateTemplate}><Sparkles className="mr-2 size-4" />Générer une trame Gando</Button> : null}
+            {!locked ? <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={generateTemplate}><Sparkles className="mr-2 size-4" />Générer une trame Gando</Button>
+              <Button variant="outline" size="sm" onClick={prefillFromSD01}><FileText className="mr-2 size-4" />Reprendre le SD01</Button>
+            </div> : null}
           </Sections>
           <Sections title="Problème & solution" detail="Un élément par ligne. Le visuel est automatiquement mis en forme.">
             <Field label="Enjeux du client"><Area value={value.problem.join("\n")} onChange={next => set("problem", next.split("\n"))} rows={3} placeholder="Blocage de cautions trop élevé\nParcours client trop long" /></Field>
