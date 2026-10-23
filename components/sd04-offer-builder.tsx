@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SD04ProposalVisual } from "@/components/sd04-proposal-visual";
 import { createEmptySD04, type SD04Content } from "@/lib/sd-stage-content";
+import { computeQuickDealEconomics, isQuickPricingRow, quickPricingRows } from "@/lib/quick-deal-economics";
 import type { SD01Content, SDDocumentRecord, SDRoomMode } from "@/lib/sd-room-types";
 
 type RoomResponse = {
@@ -21,6 +22,15 @@ const ROOM_BASE_URL = (process.env.NEXT_PUBLIC_ROOM_BASE_URL || "https://room.ga
 const pdf = (value: string) => /^https?:\/\/\S+$/i.test(value || "");
 const cleanRows = (lines: string[]) => lines.map(line => line.trim()).filter(Boolean);
 const money = (value: number) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(value || 0);
+const isManagedPricing = (row: SD04Content["pricing"][number]) => isQuickPricingRow(row.item)
+  || /^(frais de sécurisation gando|marge loueur|prix locataire)$/i.test(row.item.trim());
+function percentFromRows(rows: SD04Content["pricing"], pattern: RegExp): number | null {
+  const row = rows.find(item => pattern.test(item.item.trim()));
+  const matched = row?.price?.match(/(\d+(?:[.,]\d+)?)\s*%/);
+  if (!matched) return null;
+  const n = Number(matched[1].replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return <label className="block"><span className="text-[12px] font-semibold text-foreground">{label}</span>{hint ? <span className="ml-2 text-[11px] font-normal text-muted-foreground">{hint}</span> : null}<div className="mt-2">{children}</div></label>;
@@ -41,6 +51,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
   const [working, setWorking] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [pricesConfirmed, setPricesConfirmed] = useState(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
@@ -60,15 +71,33 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
       };
       const legacyFile = pdf(hydrated.deckSubtitle) || Boolean(hydrated.proposalFileUrl);
       const nextMode = hydrated.presentationMode || (legacyFile ? "file" : "visual");
+      // Older enterprise proposals kept the quoted commercial rates as free-text rows.
+      // Import them into the shared Gando Propal calculation without losing extras.
+      const existingGando = percentFromRows(hydrated.pricing || [], /^(tarif gando|frais de sécurisation gando)$/i);
+      const existingPartner = percentFromRows(hydrated.pricing || [], /^(marge partenaire|marge loueur)$/i);
+      const nextEconomics = {
+        ...empty.gandoEconomics,
+        ...hydrated.gandoEconomics,
+        ...(existingGando !== null ? { gandoRatePercent: existingGando } : {}),
+        ...(existingPartner !== null ? { partnerMarginPercent: existingPartner } : {}),
+      };
       setValue({
         ...hydrated,
         presentationMode: nextMode,
+        gandoEconomics: nextEconomics,
+        partnerRevenueExample: {
+          ...(hydrated.partnerRevenueExample || empty.partnerRevenueExample),
+          averageDeposit: nextEconomics.averageDeposit,
+          monthlyActivations: nextEconomics.monthlyActivations,
+          partnerMarginRate: nextEconomics.partnerMarginPercent,
+        },
         // Migrate legacy PDF-only proposals without deleting their source URL.
         proposalFileUrl: hydrated.proposalFileUrl || (pdf(hydrated.deckSubtitle) ? hydrated.deckSubtitle : ""),
         proposalFileName: hydrated.proposalFileName || (pdf(hydrated.deckSubtitle) ? hydrated.deckTitle || "Proposition commerciale.pdf" : ""),
       });
       setMode(nextMode);
       setDirty(false);
+      setPricesConfirmed(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Chargement impossible.");
     } finally { setLoading(false); }
@@ -85,6 +114,28 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
   const canPublish = Boolean(sd02Validated);
   const fileUrl = value.proposalFileUrl || (pdf(value.deckSubtitle) ? value.deckSubtitle : "");
   const fileName = value.proposalFileName || value.deckTitle || "Proposition commerciale.pdf";
+  const economics = value.gandoEconomics || createEmptySD04().gandoEconomics;
+  const computed = computeQuickDealEconomics(economics);
+  const extraPricing = (value.pricing || []).filter(row => !isManagedPricing(row));
+  const displayedPricing = [...quickPricingRows(economics), ...extraPricing];
+  const clientPricePerDeposit = computed.gandoPerDeposit + computed.partnerPerDeposit;
+  const marginPerDeposit = computed.partnerPerDeposit;
+  const updateEconomic = (field: keyof typeof economics, amount: number) => {
+    const next = { ...economics, [field]: Math.max(0, Number.isFinite(amount) ? amount : 0) };
+    setValue(current => ({
+      ...current,
+      gandoEconomics: next,
+      partnerRevenueExample: {
+        ...(current.partnerRevenueExample || createEmptySD04().partnerRevenueExample),
+        averageDeposit: next.averageDeposit,
+        monthlyActivations: next.monthlyActivations,
+        partnerMarginRate: next.partnerMarginPercent,
+      },
+    }));
+    setDirty(true);
+    setPricesConfirmed(false);
+  };
+  const setExtras = (rows: SD04Content["pricing"]) => set("pricing", [...value.pricing.filter(isManagedPricing), ...rows]);
   const hasVisual = Boolean(value.deckTitle.trim() && value.executiveMessage.trim() && (value.pricing.some(row => row.item.trim()) || value.solution.some(Boolean) || value.proofPoints.some(Boolean)));
   const canSave = mode === "file" ? Boolean(fileUrl) : Boolean(value.deckTitle.trim());
   const canPublishContent = mode === "file" ? Boolean(fileUrl) : hasVisual;
@@ -102,16 +153,23 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     differentiators: cleanRows(value.differentiators),
     rolloutPlan: cleanRows(value.rolloutPlan),
     commercialTerms: cleanRows(value.commercialTerms),
-    pricing: value.pricing.map(row => ({
+    pricing: (mode === "visual" ? displayedPricing : value.pricing).map(row => ({
       item: row.item.trim(), model: row.model.trim(), price: row.price.trim(), notes: row.notes.trim(),
     })).filter(row => row.item),
     proposalFileUrl: fileUrl,
     proposalFileName: fileName,
+    partnerRevenueExample: {
+      ...value.partnerRevenueExample,
+      averageDeposit: economics.averageDeposit,
+      monthlyActivations: economics.monthlyActivations,
+      partnerMarginRate: economics.partnerMarginPercent,
+    },
   };
 
   function set<K extends keyof SD04Content>(key: K, next: SD04Content[K]) {
     setValue(current => ({ ...current, [key]: next }));
     setDirty(true);
+    if (key === "pricing") setPricesConfirmed(false);
   }
   function switchMode(next: ProposalMode) {
     if (locked) return;
@@ -143,6 +201,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     setMode("visual");
     setTab("editor");
     setDirty(true);
+    setPricesConfirmed(false);
     toast.success("Structure de proposition créée. Complétez les tarifs avant publication.");
   }
 
@@ -151,10 +210,8 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     const source = data?.documents.find(item => item.code === "SD01")?.content as SD01Content | undefined;
     if (!source) return toast.error("Complétez d'abord le SD01.");
     const pricing = source.pricingProposal;
-    const proposedPrices = pricing?.enabled ? [
-      { item: "Frais de sécurisation Gando", model: "commission", price: `${pricing.gandoRatePercent.toLocaleString("fr-FR")} % HT`, notes: pricing.gandoRateNote || "Tarif à valider" },
-      ...(pricing.partnerMarginPercent > 0 ? [{ item: "Marge partenaire", model: "commission", price: `${pricing.partnerMarginPercent.toLocaleString("fr-FR")} % HT`, notes: pricing.partnerMarginNote || "Marge loueur proposée" }] : []),
-    ] : [];
+    // Same split as Gando Propal: Gando base rate + loueur margin = renter fee.
+    // The published pricing rows will be generated from these shared economics.
     setValue(current => ({
       ...current,
       presentationMode: "visual",
@@ -164,17 +221,24 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
       solution: current.solution.some(Boolean) ? current.solution : (source.solutionFit || []).map(item => item.response).filter(Boolean),
       proofPoints: current.proofPoints.some(Boolean) ? current.proofPoints : source.gandoProposal ? [source.gandoProposal] : [],
       rolloutPlan: current.rolloutPlan.some(Boolean) ? current.rolloutPlan : (source.nextSteps || []).map(item => item.action).filter(Boolean),
-      pricing: current.pricing.some(row => row.item.trim()) ? current.pricing : proposedPrices,
-      partnerRevenueExample: pricing?.enabled && !current.partnerRevenueExample.enabled ? {
-        enabled: false,
-        averageDeposit: pricing.averageDepositAmount || 0,
-        monthlyActivations: pricing.monthlyDeposits || 0,
-        partnerMarginRate: pricing.partnerMarginPercent || 0,
+      gandoEconomics: pricing?.enabled ? {
+        ...current.gandoEconomics,
+        gandoRatePercent: pricing.gandoRatePercent,
+        partnerMarginPercent: pricing.partnerMarginPercent,
+        averageDeposit: pricing.averageDepositAmount || current.gandoEconomics.averageDeposit,
+        monthlyActivations: pricing.monthlyDeposits || current.gandoEconomics.monthlyActivations,
+      } : current.gandoEconomics,
+      partnerRevenueExample: pricing?.enabled ? {
+        ...current.partnerRevenueExample,
+        averageDeposit: pricing.averageDepositAmount || current.gandoEconomics.averageDeposit,
+        monthlyActivations: pricing.monthlyDeposits || current.gandoEconomics.monthlyActivations,
+        partnerMarginRate: pricing.partnerMarginPercent,
       } : current.partnerRevenueExample,
     }));
     setMode("visual");
     setTab("editor");
     setDirty(true);
+    setPricesConfirmed(false);
     toast.success("Les éléments disponibles du SD01 ont été repris. Vérifiez les tarifs avant publication.");
   }
 
@@ -209,6 +273,8 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     if (!canSave) return toast.error(mode === "file" ? "Importez d'abord votre PDF." : "Ajoutez au minimum un titre.");
     if (publish && !canPublish) return toast.error("Le SD02 doit être validé avant la publication du SD04.");
     if (publish && !canPublishContent) return toast.error("Complétez au moins le titre, le message et le contenu de la proposition.");
+    if (publish && mode === "visual" && economics.gandoRatePercent <= 0) return toast.error("Renseignez le tarif Gando pour calculer le prix locataire.");
+    if (publish && mode === "visual" && !pricesConfirmed) return toast.error("Confirmez les tarifs Gando et la marge du loueur avant publication.");
     if (publish && mode === "visual" && sanitized.pricing.some(row => !row.price || /^(à définir|a definir|tbd|\[.*\])$/i.test(row.price))) {
       return toast.error("Renseignez tous les tarifs affichés avant publication.");
     }
@@ -223,6 +289,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
       setData(current => current ? { ...current, documents: current.documents.map(item => item.code === "SD04" ? payload.document : item) } : current);
       setValue(current => ({ ...current, ...(payload.document.content as SD04Content) }));
       setDirty(false);
+      setPricesConfirmed(false);
       toast.success(publish ? "Proposition publiée dans la Deal Room." : "Brouillon enregistré.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
@@ -257,7 +324,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setTab(tab === "editor" ? "preview" : "editor")}><Eye className="mr-2 size-4" />{tab === "editor" ? "Aperçu client" : "Revenir à l'édition"}</Button>
             <Button variant="outline" disabled={working || uploading || locked || !canSave} onClick={() => void save(false)}><Save className="mr-2 size-4" />Enregistrer</Button>
-            <Button disabled={working || uploading || locked || !canPublish || !canPublishContent} onClick={() => void save(true)}>{working ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}{published ? "Republier" : "Publier"}</Button>
+            <Button disabled={working || uploading || locked || !canPublish || !canPublishContent || (mode === "visual" && !pricesConfirmed)} onClick={() => void save(true)}>{working ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}{published ? "Republier" : "Publier"}</Button>
           </div>
         </div>
         {!canPublish && !locked ? <div className="border-t border-amber-500/15 bg-amber-500/[0.06] px-5 py-3 text-[12px] leading-5 text-amber-700 lg:px-6">Vous pouvez préparer et enregistrer le SD04 dès maintenant. La publication nécessite la validation du SD02 par le client.</div> : null}
@@ -308,25 +375,56 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
             <Field label="Ce que propose Gando"><Area value={value.solution.join("\n")} onChange={next => set("solution", next.split("\n"))} rows={4} placeholder="Caution sans blocage de fonds\nParcours digitalisé" /></Field>
             <Field label="Points forts / résultats attendus"><Area value={value.proofPoints.join("\n")} onChange={next => set("proofPoints", next.split("\n"))} rows={3} placeholder="Gain de temps au comptoir\nRéduction des frictions à la réservation" /></Field>
           </Sections>
-          <Sections title="Tarification · HT" detail="Chaque tarif devient une carte visuelle dans la proposition. Utilisez des montants validés, jamais des tarifs fictifs.">
-            {value.pricing.map((row, index) => <div key={index} className="rounded-xl border border-border bg-muted/10 p-3">
-              <div className="grid gap-3 sm:grid-cols-[1fr_.75fr_auto]">
-                <Field label="Intitulé"><Input value={row.item} disabled={locked} placeholder="Ex. Frais de sécurisation" onChange={event => set("pricing", value.pricing.map((item, i) => i === index ? { ...item, item: event.target.value } : item))} /></Field>
-                <Field label="Prix"><Input value={row.price} disabled={locked} placeholder="Ex. 2,5 % HT" onChange={event => set("pricing", value.pricing.map((item, i) => i === index ? { ...item, price: event.target.value } : item))} /></Field>
-                {!locked ? <button type="button" aria-label="Supprimer ce tarif" className="mt-7 h-10 w-10 rounded-lg text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive" onClick={() => set("pricing", value.pricing.filter((_, i) => i !== index))}><Trash2 className="mx-auto size-4" /></button> : <span />}
+          <Sections title="Tarification Gando · prix locataire et marge loueur" detail="Même logique que Gando Propal : tarif Gando + marge du loueur = prix affiché au locataire, calculés sur le montant de sa caution.">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Tarif Gando (%) · HT"><Input type="number" min={0} max={100} step="0.1" value={economics.gandoRatePercent} onChange={event => updateEconomic("gandoRatePercent", Number(event.target.value))} /></Field>
+              <Field label="Marge du loueur (%) · HT"><Input type="number" min={0} max={100} step="0.1" value={economics.partnerMarginPercent} onChange={event => updateEconomic("partnerMarginPercent", Number(event.target.value))} /></Field>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-primary/20 bg-primary/[0.07] p-4">
+                <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-primary">Prix facturé au locataire</div>
+                <div className="mt-2 text-3xl font-bold tracking-tight">{computed.customerPricePercent.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} % <span className="text-sm font-medium">HT</span></div>
+                <p className="mt-1 text-xs text-muted-foreground">{money(clientPricePerDeposit)} HT pour une caution de {money(economics.averageDeposit)}</p>
               </div>
-              <Field label="Précision"><Input value={row.notes} disabled={locked} placeholder="Ex. Frais appliqués par caution activée" onChange={event => set("pricing", value.pricing.map((item, i) => i === index ? { ...item, notes: event.target.value } : item))} /></Field>
-            </div>)}
-            {!locked ? <Button variant="outline" size="sm" onClick={() => set("pricing", [...value.pricing, { item: "", price: "", model: "commission", notes: "" }])}><Plus className="mr-2 size-4" />Ajouter un tarif</Button> : null}
+              <div className="rounded-2xl border border-border bg-muted/[0.12] p-4">
+                <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Marge du loueur</div>
+                <div className="mt-2 text-3xl font-bold tracking-tight">+ {economics.partnerMarginPercent.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} % <span className="text-sm font-medium">HT</span></div>
+                <p className="mt-1 text-xs text-muted-foreground">{money(marginPerDeposit)} HT par caution de {money(economics.averageDeposit)}</p>
+              </div>
+            </div>
+            <p className="text-[12px] leading-5 text-muted-foreground">Les frais du locataire comprennent la part Gando et la marge du loueur. Le taux est HT ; la TVA éventuelle dépend du régime applicable.</p>
+            <label className="flex items-start gap-2 text-xs font-semibold text-muted-foreground"><input type="checkbox" checked={pricesConfirmed} onChange={event => setPricesConfirmed(event.target.checked)} className="mt-0.5 size-4 accent-violet-600" />Je confirme les tarifs et la marge de cette proposition. Les taux préremplis sont des hypothèses et ne doivent pas être publiés sans vérification.</label>
           </Sections>
-          <Sections title="Projection de marge partenaire" detail="Facultatif : les hypothèses sont indicatives et présentées HT.">
-            <label className="flex items-center gap-2 text-[12px] font-semibold"><input type="checkbox" className="size-4 accent-violet-600" checked={value.partnerRevenueExample.enabled} disabled={locked} onChange={event => set("partnerRevenueExample", { ...value.partnerRevenueExample, enabled: event.target.checked })} />Afficher un exemple de revenu pour le loueur</label>
-            {value.partnerRevenueExample.enabled ? <>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {([["averageDeposit", "Caution moyenne (€)", 50], ["monthlyActivations", "Cautions / mois", 1], ["partnerMarginRate", "Marge loueur (%)", 0.1]] as const).map(([key, label, step]) => <Field key={key} label={label}><Input type="number" min={0} step={step} value={value.partnerRevenueExample[key]} disabled={locked} onChange={event => set("partnerRevenueExample", { ...value.partnerRevenueExample, [key]: Math.max(0, Number(event.target.value) || 0) })} /></Field>)}
-              </div>
-              <p className="rounded-xl bg-primary/[0.05] px-4 py-3 text-[12px] text-muted-foreground">Projection : <strong className="text-foreground">{money(value.partnerRevenueExample.averageDeposit * value.partnerRevenueExample.monthlyActivations * value.partnerRevenueExample.partnerMarginRate / 100)} HT / mois</strong>, à volume constant.</p>
-            </> : null}
+          <Sections title="Exemple concret pour le loueur" detail="Le prix locataire et la marge sont calculés automatiquement avec les mêmes paramètres que Gando Propal.">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Caution moyenne (€)"><Input type="number" min={0} step="50" value={economics.averageDeposit} onChange={event => updateEconomic("averageDeposit", Number(event.target.value))} /></Field>
+              <Field label="Cautions activées / mois"><Input type="number" min={0} step="1" value={economics.monthlyActivations} onChange={event => updateEconomic("monthlyActivations", Number(event.target.value))} /></Field>
+            </div>
+            <label className="flex items-center gap-2 text-[12px] font-semibold"><input type="checkbox" className="size-4 accent-violet-600" checked={value.partnerRevenueExample.enabled} onChange={event => set("partnerRevenueExample", { ...value.partnerRevenueExample, enabled: event.target.checked })} />Montrer la projection mensuelle et annuelle au loueur</label>
+            {value.partnerRevenueExample.enabled ? <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl bg-muted/20 p-4"><div className="text-[10px] font-bold text-muted-foreground">Marge / caution</div><div className="mt-2 text-xl font-bold">{money(marginPerDeposit)} HT</div></div>
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="text-[10px] font-bold text-primary">Marge / mois</div><div className="mt-2 text-xl font-bold">{money(computed.monthlyPartnerRevenue)} HT</div></div>
+              <div className="rounded-xl bg-muted/20 p-4"><div className="text-[10px] font-bold text-muted-foreground">Marge / an</div><div className="mt-2 text-xl font-bold">{money(computed.monthlyPartnerRevenue * 12)} HT</div></div>
+            </div> : null}
+            <p className="text-[11px] text-muted-foreground">Projection illustrative, sans engagement sur le volume réel de cautions.</p>
+          </Sections>
+          <Sections title="Frais d'encaissement & autres conditions" detail="Mention secondaire sur le visuel client : ces frais ne sont pas mis en avant dans les cartes principales.">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Encaissement (%) · HT"><Input type="number" min={0} max={100} step="0.1" value={economics.collectionRatePercent} onChange={event => updateEconomic("collectionRatePercent", Number(event.target.value))} /></Field>
+              <Field label="Frais fixes d'encaissement (€) · HT"><Input type="number" min={0} step="0.1" value={economics.collectionFixedFee} onChange={event => updateEconomic("collectionFixedFee", Number(event.target.value))} /></Field>
+            </div>
+            <p className="text-[11px] leading-5 text-muted-foreground">Ces frais seront mentionnés en petit dans les conditions, uniquement en cas d'encaissement.</p>
+            <div className="border-t border-border pt-3"><div className="mb-3 text-xs font-semibold">Autres éléments tarifaires (facultatif)</div>
+              {extraPricing.map((row, index) => <div key={index} className="mb-3 rounded-xl border border-border bg-muted/10 p-3">
+                <div className="grid gap-3 sm:grid-cols-[1fr_.7fr_auto]">
+                  <Field label="Intitulé"><Input value={row.item} placeholder="Ex. Abonnement" onChange={event => setExtras(extraPricing.map((item, i) => i === index ? { ...item, item: event.target.value } : item))} /></Field>
+                  <Field label="Prix"><Input value={row.price} placeholder="Ex. 39 € / mois HT" onChange={event => setExtras(extraPricing.map((item, i) => i === index ? { ...item, price: event.target.value } : item))} /></Field>
+                  <button type="button" aria-label="Retirer le tarif" className="mt-7 size-9 rounded-lg text-muted-foreground hover:text-destructive" onClick={() => setExtras(extraPricing.filter((_, i) => i !== index))}><Trash2 className="mx-auto size-4" /></button>
+                </div>
+                <Field label="Précision"><Input value={row.notes} onChange={event => setExtras(extraPricing.map((item, i) => i === index ? { ...item, notes: event.target.value } : item))} /></Field>
+              </div>)}
+              <Button variant="outline" size="sm" onClick={() => setExtras([...extraPricing, { item: "", price: "", model: "commission", notes: "" }])}><Plus className="mr-2 size-4" />Ajouter une condition tarifaire</Button>
+            </div>
           </Sections>
           <Sections title="Conditions & déploiement" detail="Ajoutez les conditions utiles, sans surcharger la proposition.">
             <Field label="Conditions commerciales"><Area value={value.commercialTerms.join("\n")} onChange={next => set("commercialTerms", next.split("\n"))} rows={4} placeholder="Durée de la caution : 60 jours\nConditions d'encaissement selon le contrat" /></Field>
