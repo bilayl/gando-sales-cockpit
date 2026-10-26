@@ -1,5 +1,6 @@
 import { ExternalLink, FileText } from "lucide-react";
 import type { SD04Content } from "@/lib/sd-stage-content";
+import { SD04PartnerRevenueSimulator } from "@/components/sd04-partner-revenue-simulator";
 
 type Props = {
   content: Partial<SD04Content>;
@@ -7,12 +8,6 @@ type Props = {
   compact?: boolean;
   language?: "fr" | "en";
 };
-
-function euro(value: number) {
-  return new Intl.NumberFormat("fr-FR", {
-    style: "currency", currency: "EUR", maximumFractionDigits: 2,
-  }).format(Number.isFinite(value) ? value : 0);
-}
 
 // The enterprise SD04 body deliberately reuses the exact visual vocabulary of
 // the quick-deal public proposal. The enterprise page's header and banner stay
@@ -64,10 +59,9 @@ export function SD04ProposalVisual({ content, compact = false, language = "fr" }
   ];
   const collectionLines = Array.from(new Set(collectionDetails));
   const revenueExample = content.partnerRevenueExample;
-  const partnerReady = Boolean(revenueExample?.enabled && revenueExample.averageDeposit > 0 && revenueExample.monthlyActivations > 0 && revenueExample.partnerMarginRate > 0);
-  const revenuePerDeposit = revenueExample ? revenueExample.averageDeposit * (revenueExample.partnerMarginRate / 100) : 0;
-  const monthlyRevenue = revenueExample ? revenuePerDeposit * revenueExample.monthlyActivations : 0;
-  const annualRevenue = monthlyRevenue * 12;
+  // Keep the interactive revenue example visible even if an older enterprise
+  // proposal stored the legacy optional flag as disabled.
+  const partnerReady = Boolean(revenueExample && Number.isFinite(revenueExample.partnerMarginRate));
   const solution = (content.solution || []).filter(Boolean);
   const proofPoints = (content.proofPoints || []).filter(Boolean);
   const problem = (content.problem || []).filter(Boolean);
@@ -87,18 +81,13 @@ export function SD04ProposalVisual({ content, compact = false, language = "fr" }
       <div className="mt-5"><PricingCards pricing={primaryPricing} compact={compact} /></div>
     </div> : null}
 
-    {partnerReady && revenueExample ? <div className={primaryPricing.length ? "mt-7 border-t border-[#eceeef] pt-6" : ""}>
-      <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#687277]">{tr("Exemple de revenu partenaire", "Partner revenue example")}</div>
-      <div className="mt-2 max-w-2xl text-[15px] leading-7 text-[#687277]">{tr("Une illustration concrète de ce que la marge partenaire peut représenter. Cette projection dépend du volume réel de cautions activées. Tous les revenus indiqués sont hors taxes (HT).", "An illustrative calculation of the partner's margin, dependent on actual activated deposits. Revenue is shown excluding VAT.")}</div>
-      <div className={compact ? "mt-5 grid gap-3 sm:grid-cols-2" : "mt-5 grid gap-3 sm:grid-cols-3"}>
-        <div className="rounded-[16px] border border-[#e0e4e6] bg-[#f8f9f9] p-4"><div className="text-[11px] font-bold uppercase tracking-[0.11em] text-[#687277]">{tr("Par caution · HT", "Per deposit · excl. VAT")}</div><div className="mt-2 text-[27px] font-semibold tracking-[-0.035em] text-[#211f32]">{euro(revenuePerDeposit)} HT</div><div className="mt-1 text-[13px] leading-5 text-[#687277]">{euro(revenueExample.averageDeposit)} × {revenueExample.partnerMarginRate.toLocaleString("fr-FR")} %</div></div>
-        <div className="rounded-[16px] border border-[#dedcf0] bg-[#f8f7ff] p-4"><div className="text-[11px] font-bold uppercase tracking-[0.11em] text-[#7166c7]">{tr("Revenu estimé / mois · HT", "Estimated monthly revenue · excl. VAT")}</div><div className="mt-2 text-[27px] font-semibold tracking-[-0.035em] text-[#6257b8]">{euro(monthlyRevenue)} HT</div><div className="mt-1 text-[13px] leading-5 text-[#687277]">{revenueExample.monthlyActivations.toLocaleString("fr-FR")} {tr("cautions activées / mois", "activated deposits / month")}</div></div>
-        <div className="rounded-[16px] border border-[#e0e4e6] bg-[#f8f9f9] p-4"><div className="text-[11px] font-bold uppercase tracking-[0.11em] text-[#687277]">{tr("Projection annuelle · HT", "Annual projection · excl. VAT")}</div><div className="mt-2 text-[27px] font-semibold tracking-[-0.035em] text-[#211f32]">{euro(annualRevenue)} HT</div><div className="mt-1 text-[13px] leading-5 text-[#687277]">{tr("à volume mensuel constant", "at constant monthly volume")}</div></div>
-      </div>
-      <div className="mt-4 rounded-xl bg-[#f8f9f9] px-4 py-3.5 text-[15px] leading-7 text-[#59646a]">
-        {tr("Exemple : avec une caution moyenne de", "Example: with an average deposit of")} <strong className="text-[#1c2529]">{euro(revenueExample.averageDeposit)}</strong> {tr("et une marge partenaire de", "and a partner margin of")} <strong className="text-[#1c2529]">{revenueExample.partnerMarginRate.toLocaleString("fr-FR")} %</strong>, {tr("chaque caution activée génère", "each activated deposit generates")} <strong className="text-[#1c2529]">{euro(revenuePerDeposit)} HT</strong>. {tr("À", "At")} <strong className="text-[#1c2529]">{revenueExample.monthlyActivations.toLocaleString("fr-FR")} {tr("cautions/mois", "deposits/month")}</strong>, {tr("cela représente environ", "this represents approximately")} <strong className="text-[#6257b8]">{euro(monthlyRevenue)} HT/{tr("mois", "month")}</strong>.
-      </div>
-    </div> : null}
+    {partnerReady && revenueExample ? <SD04PartnerRevenueSimulator
+      averageDeposit={revenueExample.averageDeposit}
+      monthlyActivations={revenueExample.monthlyActivations}
+      partnerMarginRate={revenueExample.partnerMarginRate}
+      compact={compact}
+      language={language}
+    /> : null}
 
     {solution.length ? <div className={primaryPricing.length || partnerReady ? "mt-7 border-t border-[#eceeef] pt-6" : ""}>
       <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#687277]">{tr("Ce que comprend l’offre", "What's included")}</div>
