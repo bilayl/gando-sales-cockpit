@@ -30,6 +30,13 @@ function isCollection(text: string) {
   return /encaissement/i.test(text);
 }
 
+function percentFromRow(row?: SD04Content["pricing"][number]): number | null {
+  const match = row?.price.match(/(?:^|\s)\+?\s*(\d+(?:[.,]\d+)?)\s*%/);
+  if (!match) return null;
+  const rate = Number(match[1].replace(",", "."));
+  return Number.isFinite(rate) && rate >= 0 ? rate : null;
+}
+
 export function SD04ProposalVisual({ content, compact = false, language = "fr" }: Props) {
   const tr = (fr: string, en: string) => language === "en" ? en : fr;
   const legacyPdf = /^https?:\/\/\S+$/i.test(content.deckSubtitle || "") ? content.deckSubtitle || "" : "";
@@ -53,12 +60,19 @@ export function SD04ProposalVisual({ content, compact = false, language = "fr" }
   const primaryPricing = pricing.filter(row => !isCollection(row.item));
   const terms = (content.commercialTerms || []).filter(Boolean);
   const mainTerms = terms.filter(item => !isCollection(item));
-  const collectionDetails = [
-    ...pricing.filter(row => isCollection(row.item)).map(row => [row.item, row.price, row.notes].filter(Boolean).join(" · ")),
-    ...terms.filter(item => isCollection(item)),
-  ];
-  const collectionLines = Array.from(new Set(collectionDetails));
+  const collectionRows = pricing.filter(row => isCollection(row.item));
+  const collectionTerms = Array.from(new Set(terms.filter(item => isCollection(item)))).filter(
+    item => !collectionRows.some(row => item.includes(row.price) && row.price.trim()),
+  );
   const revenueExample = content.partnerRevenueExample;
+  // The public API intentionally excludes gandoEconomics. Read the agreed renter
+  // rate exclusively from the published, customer-visible pricing rows.
+  const quotedCustomerRate = percentFromRow(pricing.find(row => /^(tarif total client|prix locataire|frais (?:totaux? )?(?:pour le )?locataire)$/i.test(row.item.trim())));
+  const gandoRate = percentFromRow(pricing.find(row => /^(tarif gando|frais de sécurisation gando)$/i.test(row.item.trim())));
+  const quotedPartnerRate = percentFromRow(pricing.find(row => /^(marge partenaire|marge loueur)$/i.test(row.item.trim())));
+  const clientRate = quotedCustomerRate ?? (gandoRate !== null
+    ? gandoRate + (quotedPartnerRate ?? revenueExample?.partnerMarginRate ?? 0)
+    : null);
   // Keep the interactive revenue example visible even if an older enterprise
   // proposal stored the legacy optional flag as disabled.
   const partnerReady = Boolean(revenueExample && Number.isFinite(revenueExample.partnerMarginRate));
@@ -81,10 +95,18 @@ export function SD04ProposalVisual({ content, compact = false, language = "fr" }
       <div className="mt-5"><PricingCards pricing={primaryPricing} compact={compact} /></div>
     </div> : null}
 
+    {(collectionRows.length > 0 || collectionTerms.length > 0) ? <div className="mt-4 rounded-[24px] bg-[#f6f6f7] px-5 py-4 text-[14px] leading-7 text-[#65707d] sm:px-6 sm:py-5 sm:text-[15px]">
+      <p><strong className="font-semibold text-[#222b34]">{tr("Frais d’encaissement", "Collection fees")} :</strong>{" "}
+        {collectionRows.map((row, index) => <span key={`${row.item}-${index}`}>{index > 0 ? " · " : ""}<strong className="font-semibold text-[#222b34]">{row.price}</strong>{row.notes ? <> · {row.notes}</> : null}</span>)}
+        {collectionTerms.map((item, index) => <span key={index}>{collectionRows.length || index > 0 ? " · " : ""}{item}</span>)}
+      </p>
+    </div> : null}
+
     {partnerReady && revenueExample ? <SD04PartnerRevenueSimulator
       averageDeposit={revenueExample.averageDeposit}
       monthlyActivations={revenueExample.monthlyActivations}
       partnerMarginRate={revenueExample.partnerMarginRate}
+      customerRatePercent={clientRate}
       compact={compact}
       language={language}
     /> : null}
@@ -119,9 +141,5 @@ export function SD04ProposalVisual({ content, compact = false, language = "fr" }
       <div className="mt-4"><ProposalList items={rollout} /></div>
     </div> : null}
 
-    {collectionLines.length ? <div className="mt-7 border-t border-[#eceeef] pt-4 text-[12px] leading-5 text-[#848b91]">
-      <div className="font-semibold">{tr("Informations complémentaires · Frais d’encaissement", "Additional information · Collection fees")}</div>
-      {collectionLines.map((line,index) => <p key={index} className="mt-1">{line}</p>)}
-    </div> : null}
   </section>;
 }
