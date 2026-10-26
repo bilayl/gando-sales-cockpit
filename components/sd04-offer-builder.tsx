@@ -405,13 +405,11 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
               <div className="mt-1 text-[20px] font-bold">{money(economics.averageDeposit * economics.monthlyActivations)}</div>
               <p className="mt-1 text-[11px] text-muted-foreground">Montant de caution × nombre de cautions envisagées par mois. Ce volume n’est pas du chiffre d’affaires.</p>
             </div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Frais cumulés payés par les locataires · HT</div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-muted/20 p-4"><div className="text-[10px] font-bold text-muted-foreground">Par locataire / caution</div><div className="mt-2 text-xl font-bold">{money(clientPricePerDeposit)} HT</div></div>
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="text-[10px] font-bold text-primary">Total / mois</div><div className="mt-2 text-xl font-bold">{money(clientPricePerDeposit * economics.monthlyActivations)} HT</div></div>
-              <div className="rounded-xl bg-muted/20 p-4"><div className="text-[10px] font-bold text-muted-foreground">Total / an</div><div className="mt-2 text-xl font-bold">{money(clientPricePerDeposit * economics.monthlyActivations * 12)} HT</div></div>
+            <div className="rounded-xl border border-primary/15 bg-primary/[0.04] px-4 py-3">
+              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-primary">Frais locataire · par caution · HT</div>
+              <div className="mt-1 text-xl font-bold">{money(clientPricePerDeposit)} HT</div>
+              <p className="mt-1 text-[11px] text-muted-foreground">Pour une caution de {money(economics.averageDeposit)}, au tarif total de {computed.customerPricePercent.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} % HT, marge loueur incluse. Pas de cumul mensuel ou annuel.</p>
             </div>
-            <p className="text-[11px] text-muted-foreground">Ces montants correspondent aux frais facturés à l’ensemble des locataires simulés, et non à une seule personne. Hors frais d’encaissement.</p>
             <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Revenu du loueur · HT</div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-muted/20 p-4"><div className="text-[10px] font-bold text-muted-foreground">Marge / caution</div><div className="mt-2 text-xl font-bold">{money(marginPerDeposit)} HT</div></div>
