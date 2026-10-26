@@ -83,10 +83,8 @@ export function SD04ProposalVisual({ content, compact = false, language = "fr" }
   const businessCase = (content.businessCase || []).filter(item => item.metric?.trim());
 
   return <section className="rounded-[20px] border border-[#e0e4e6] bg-white p-6 sm:p-8">
-    {(content.deckTitle?.trim() || (!legacyPdf && content.deckSubtitle?.trim()) || content.executiveMessage?.trim()) ? <div className="mb-7 border-b border-[#eceeef] pb-6">
-      {content.deckTitle?.trim() ? <h3 className="text-[22px] font-semibold tracking-[-0.035em] text-[#211f32]">{content.deckTitle}</h3> : null}
-      {!legacyPdf && content.deckSubtitle?.trim() ? <p className="mt-2 text-[14px] leading-6 text-[#6c697c]">{content.deckSubtitle}</p> : null}
-      {content.executiveMessage?.trim() ? <p className="mt-3 whitespace-pre-line text-[15px] leading-7 text-[#59646a]">{content.executiveMessage}</p> : null}
+    {content.deckTitle?.trim() ? <div className="mb-7 border-b border-[#eceeef] pb-6">
+      <h3 className="text-[22px] font-semibold tracking-[-0.035em] text-[#211f32]">{content.deckTitle}</h3>
     </div> : null}
 
     {primaryPricing.length ? <div>
