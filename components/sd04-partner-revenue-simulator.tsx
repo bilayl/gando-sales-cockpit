@@ -55,8 +55,6 @@ export function SD04PartnerRevenueSimulator({
   const renterRate = customerRatePercent !== null && Number.isFinite(customerRatePercent) && customerRatePercent >= 0
     ? customerRatePercent : null;
   const feePerRenter = renterRate !== null ? deposit * renterRate / 100 : null;
-  const cumulativeFeesMonthly = feePerRenter !== null ? feePerRenter * volume : null;
-  const cumulativeFeesYearly = cumulativeFeesMonthly !== null ? cumulativeFeesMonthly * 12 : null;
   const monthlySecured = deposit * volume;
   const volumeSliderMax = Math.max(200, Math.ceil(volume / 100) * 100);
 
@@ -124,27 +122,14 @@ export function SD04PartnerRevenueSimulator({
       </div>
     </div>
 
-    <div className="mt-7">
-      <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#687277]">{t("Ce que paient les locataires · frais HT", "What renters pay · fees excl. VAT")}</div>
-      <p className="mt-2 text-[14px] leading-6 text-[#687277]">{t("Frais de sécurisation facturés aux locataires, marge du loueur comprise. Les montants mensuels et annuels sont les sommes cumulées pour l’ensemble des cautions simulées, et non une facture à un locataire unique. Hors frais d’encaissement.", "Deposit security fees paid by renters, including partner margin. Monthly and yearly figures add fees across all simulated renters, not one renter's bill. Collection fees excluded.")}</p>
-      {feePerRenter !== null && cumulativeFeesMonthly !== null && cumulativeFeesYearly !== null ? <div className={compact ? "mt-4 grid gap-3 sm:grid-cols-2" : "mt-4 grid gap-3 sm:grid-cols-3"}>
-        <div className="rounded-[16px] border border-[#e0e4e6] bg-[#f8f9f9] p-4">
-          <div className="text-[11px] font-bold uppercase tracking-[0.11em] text-[#687277]">{t("Frais locataire / caution · HT", "Renter fee / deposit · excl. VAT")}</div>
-          <div className="mt-2 text-[27px] font-semibold tracking-[-0.035em] text-[#211f32]">{formatMoney(feePerRenter)} HT</div>
-          <p className="mt-1 text-[13px] leading-5 text-[#687277]">{formatMoney(deposit)} × {renterRate?.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</p>
-        </div>
-        <div className="rounded-[16px] border border-[#dedcf0] bg-[#f8f7ff] p-4">
-          <div className="text-[11px] font-bold uppercase tracking-[0.11em] text-[#7166c7]">{t("Frais locataires cumulés / mois · HT", "Total renter fees / month · excl. VAT")}</div>
-          <div className="mt-2 text-[27px] font-semibold tracking-[-0.035em] text-[#6257b8]">{formatMoney(cumulativeFeesMonthly)} HT</div>
-          <p className="mt-1 text-[13px] leading-5 text-[#687277]">{formatVolume(volume)} {t("cautions activées / mois", "activated deposits / month")}</p>
-        </div>
-        <div className="rounded-[16px] border border-[#e0e4e6] bg-[#f8f9f9] p-4">
-          <div className="text-[11px] font-bold uppercase tracking-[0.11em] text-[#687277]">{t("Frais locataires cumulés / an · HT", "Total renter fees / year · excl. VAT")}</div>
-          <div className="mt-2 text-[27px] font-semibold tracking-[-0.035em] text-[#211f32]">{formatMoney(cumulativeFeesYearly)} HT</div>
-          <p className="mt-1 text-[13px] leading-5 text-[#687277]">{t("à volume mensuel constant", "at constant monthly volume")}</p>
-        </div>
-      </div> : <p className="mt-4 rounded-xl bg-[#f8f9f9] px-4 py-3 text-[13px] text-[#687277]">{t("Le tarif total payé par le locataire n’est pas indiqué dans cette proposition. Les frais cumulés ne peuvent pas être calculés.", "The total renter rate is not specified in this proposal. Cumulative fees cannot be calculated.")}</p>}
-    </div>
+    {feePerRenter !== null && renterRate !== null ? <div className="mt-7 rounded-[18px] border border-[#dedcf0] bg-[#f8f7ff] p-4 sm:p-5">
+      <div className="text-[12px] font-bold uppercase tracking-[0.1em] text-[#7166c7]">{t("Frais payés par le locataire · par caution", "Fees paid by renter · per deposit")}</div>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <strong className="text-[25px] font-semibold tracking-[-0.035em] text-[#302940]">{formatMoney(feePerRenter)} HT</strong>
+        <span className="text-[13px] text-[#687277]">{formatMoney(deposit)} × {renterRate.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</span>
+      </div>
+      <p className="mt-1 text-[12px] leading-5 text-[#687277]">{t("Montant payé pour une seule caution, marge du loueur comprise et hors frais d’encaissement.", "Fee for a single deposit, including partner margin and excluding collection fees.")}</p>
+    </div> : null}
 
     <div className="mt-7 text-[12px] font-bold uppercase tracking-[0.1em] text-[#687277]">{t("Ce que gagne le loueur · marge partenaire HT", "What the partner earns · margin excl. VAT")}</div>
     <div className={compact ? "mt-4 grid gap-3 sm:grid-cols-2" : "mt-4 grid gap-3 sm:grid-cols-3"}>
@@ -169,7 +154,7 @@ export function SD04PartnerRevenueSimulator({
       {t("Exemple : avec une caution moyenne de", "Example: with an average deposit of")} <strong className="text-[#1c2529]">{formatMoney(deposit)}</strong>
       {feePerRenter !== null && renterRate !== null ? <> {t("et des frais locataire de", "and renter fees of")} <strong className="text-[#1c2529]">{renterRate.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</strong>, {t("chaque locataire paie", "each renter pays")} <strong className="text-[#1c2529]">{formatMoney(feePerRenter)} HT</strong>.</> : <>.</>}
       {" "}{t("Avec une marge partenaire de", "With a partner margin of")} <strong className="text-[#1c2529]">{margin.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</strong>, {t("chaque caution activée génère", "each activated deposit generates")} <strong className="text-[#1c2529]">{formatMoney(revenuePerDeposit)} HT</strong> {t("pour le loueur.", "for the partner.")}
-      {" "}{t("À", "At")} <strong className="text-[#1c2529]">{formatVolume(volume)} {t("cautions/mois", "deposits/month")}</strong>, {feePerRenter !== null && cumulativeFeesMonthly !== null ? <>{t("cela représente", "that represents")} <strong className="text-[#6257b8]">{formatMoney(cumulativeFeesMonthly)} HT/{t("mois", "month")}</strong> {t("de frais locataires cumulés et", "in total renter fees and")} </> : <>{t("cela représente", "that represents")} </>}<strong className="text-[#6257b8]">{formatMoney(monthlyRevenue)} HT/{t("mois", "month")}</strong> {t("de revenu pour le loueur.", "in partner revenue.")}
+      {" "}{t("À", "At")} <strong className="text-[#1c2529]">{formatVolume(volume)} {t("cautions/mois", "deposits/month")}</strong>, {t("cela représente environ", "that represents approximately")} <strong className="text-[#6257b8]">{formatMoney(monthlyRevenue)} HT/{t("mois", "month")}</strong> {t("de revenu pour le loueur.", "in partner revenue.")}
     </p>
     <p className="mt-2 text-[11px] leading-5 text-[#868b92]">{t("Simulation indicative : les curseurs ne modifient pas les tarifs de la proposition ni un éventuel engagement contractuel. Le volume réel dépend des cautions activées.", "Illustrative simulation: the sliders do not change quoted rates or any contractual commitment. Actual revenue depends on activated deposits.")}</p>
   </section>;
