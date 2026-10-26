@@ -395,18 +395,22 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
             <p className="text-[12px] leading-5 text-muted-foreground">Les frais du locataire comprennent la part Gando et la marge du loueur. Le taux est HT ; la TVA éventuelle dépend du régime applicable.</p>
             <label className="flex items-start gap-2 text-xs font-semibold text-muted-foreground"><input type="checkbox" checked={pricesConfirmed} onChange={event => setPricesConfirmed(event.target.checked)} className="mt-0.5 size-4 accent-violet-600" />Je confirme les tarifs et la marge de cette proposition. Les taux préremplis sont des hypothèses et ne doivent pas être publiés sans vérification.</label>
           </Sections>
-          <Sections title="Exemple concret pour le loueur" detail="Le prix locataire et la marge sont calculés automatiquement avec les mêmes paramètres que Gando Propal.">
+          <Sections title="Simulation publique · Caution et engagement mensuel" detail="La proposition publique affichera un simulateur interactif. Définissez ici ses valeurs de départ ; le loueur pourra ensuite tester d’autres scénarios.">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Caution moyenne (€)"><Input type="number" min={0} step="50" value={economics.averageDeposit} onChange={event => updateEconomic("averageDeposit", Number(event.target.value))} /></Field>
-              <Field label="Cautions activées / mois"><Input type="number" min={0} step="1" value={economics.monthlyActivations} onChange={event => updateEconomic("monthlyActivations", Number(event.target.value))} /></Field>
+              <Field label="Caution de référence (€) · 100 à 2 500"><Input type="number" min={100} max={2500} step={50} value={economics.averageDeposit} onChange={event => updateEconomic("averageDeposit", Math.min(2500, Math.max(100, Number(event.target.value) || 100)))} /></Field>
+              <Field label="Volume d’engagement mensuel · cautions / mois"><Input type="number" min={0} max={100000} step={1} value={economics.monthlyActivations} onChange={event => updateEconomic("monthlyActivations", Math.min(100000, Number(event.target.value) || 0))} /></Field>
             </div>
-            <label className="flex items-center gap-2 text-[12px] font-semibold"><input type="checkbox" className="size-4 accent-violet-600" checked={value.partnerRevenueExample.enabled} onChange={event => set("partnerRevenueExample", { ...value.partnerRevenueExample, enabled: event.target.checked })} />Montrer la projection mensuelle et annuelle au loueur</label>
-            {value.partnerRevenueExample.enabled ? <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-primary/15 bg-primary/[0.04] px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.09em] text-primary">Volume mensuel de cautions sécurisées</div>
+              <div className="mt-1 text-[20px] font-bold">{money(economics.averageDeposit * economics.monthlyActivations)}</div>
+              <p className="mt-1 text-[11px] text-muted-foreground">Montant de caution × nombre de cautions envisagées par mois. Ce volume n’est pas du chiffre d’affaires.</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-muted/20 p-4"><div className="text-[10px] font-bold text-muted-foreground">Marge / caution</div><div className="mt-2 text-xl font-bold">{money(marginPerDeposit)} HT</div></div>
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><div className="text-[10px] font-bold text-primary">Marge / mois</div><div className="mt-2 text-xl font-bold">{money(computed.monthlyPartnerRevenue)} HT</div></div>
               <div className="rounded-xl bg-muted/20 p-4"><div className="text-[10px] font-bold text-muted-foreground">Marge / an</div><div className="mt-2 text-xl font-bold">{money(computed.monthlyPartnerRevenue * 12)} HT</div></div>
-            </div> : null}
-            <p className="text-[11px] text-muted-foreground">Projection illustrative, sans engagement sur le volume réel de cautions.</p>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Les valeurs modifiées par le visiteur dans le simulateur public restent locales : elles ne remplacent pas les tarifs convenus ni un engagement contractuel.</p>
           </Sections>
           <Sections title="Frais d'encaissement & autres conditions" detail="Mention secondaire sur le visuel client : ces frais ne sont pas mis en avant dans les cartes principales.">
             <div className="grid gap-3 sm:grid-cols-2">
