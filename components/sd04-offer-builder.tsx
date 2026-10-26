@@ -136,7 +136,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     setPricesConfirmed(false);
   };
   const setExtras = (rows: SD04Content["pricing"]) => set("pricing", [...value.pricing.filter(isManagedPricing), ...rows]);
-  const hasVisual = Boolean(value.deckTitle.trim() && value.executiveMessage.trim() && (value.pricing.some(row => row.item.trim()) || value.solution.some(Boolean) || value.proofPoints.some(Boolean)));
+  const hasVisual = Boolean(value.deckTitle.trim() && (displayedPricing.some(row => row.item.trim()) || value.solution.some(Boolean) || value.proofPoints.some(Boolean)));
   const canSave = mode === "file" ? Boolean(fileUrl) : Boolean(value.deckTitle.trim());
   const canPublishContent = mode === "file" ? Boolean(fileUrl) : hasVisual;
   const roomUrl = room?.share_token ? `${ROOM_BASE_URL}/r/${room.share_token}` : "";
@@ -190,8 +190,6 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     setValue(current => ({
       ...current,
       deckTitle: current.deckTitle || `Gando × ${companyName} — Proposition de collaboration`,
-      deckSubtitle: current.deckSubtitle || "Simplifier la caution et faciliter la réservation",
-      executiveMessage: current.executiveMessage || `Accompagner ${companyName} avec une caution digitale sans immobiliser les fonds du locataire, tout en sécurisant le parcours du loueur.`,
       problem: current.problem.some(Boolean) ? current.problem : ["La caution traditionnelle peut immobiliser une partie du budget du locataire.", "Le blocage de fonds ou les limitations de carte compliquent la réservation."],
       solution: current.solution.some(Boolean) ? current.solution : ["Un parcours de caution entièrement digitalisé", "Aucun blocage de fonds pour le locataire", "Une garantie d'encaissement soumise aux conditions contractuelles"],
       proofPoints: current.proofPoints.some(Boolean) ? current.proofPoints : ["Fluidifier l'expérience de réservation", "Réduire les contraintes au comptoir", "Permettre le suivi des cautions depuis un espace dédié"],
@@ -216,7 +214,6 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
       ...current,
       presentationMode: "visual",
       deckTitle: current.deckTitle || `Proposition Gando × ${companyName}`,
-      executiveMessage: current.executiveMessage || source.executiveSummary || "",
       problem: current.problem.some(Boolean) ? current.problem : (source.painPoints || []).map(pain => pain.title).filter(Boolean),
       solution: current.solution.some(Boolean) ? current.solution : (source.solutionFit || []).map(item => item.response).filter(Boolean),
       proofPoints: current.proofPoints.some(Boolean) ? current.proofPoints : source.gandoProposal ? [source.gandoProposal] : [],
@@ -272,7 +269,7 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
     if (working || locked) return;
     if (!canSave) return toast.error(mode === "file" ? "Importez d'abord votre PDF." : "Ajoutez au minimum un titre.");
     if (publish && !canPublish) return toast.error("Le SD02 doit être validé avant la publication du SD04.");
-    if (publish && !canPublishContent) return toast.error("Complétez au moins le titre, le message et le contenu de la proposition.");
+    if (publish && !canPublishContent) return toast.error("Complétez le titre et les éléments commerciaux de la proposition.");
     if (publish && mode === "visual" && economics.gandoRatePercent <= 0) return toast.error("Renseignez le tarif Gando pour calculer le prix locataire.");
     if (publish && mode === "visual" && !pricesConfirmed) return toast.error("Confirmez les tarifs Gando et la marge du loueur avant publication.");
     if (publish && mode === "visual" && sanitized.pricing.some(row => !row.price || /^(à définir|a definir|tbd|\[.*\])$/i.test(row.price))) {
@@ -361,10 +358,8 @@ export function SD04OfferBuilder({ dealId }: { dealId: string }) {
         </Card>
       </div> : <div className={tab === "editor" ? "grid items-start gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]" : "mx-auto max-w-[990px]"}>
         {tab === "editor" ? <fieldset disabled={locked} className="min-w-0 space-y-4">
-          <Sections title="Introduction" detail="Ce que le décideur doit comprendre en quelques secondes.">
+          <Sections title="Introduction" detail="Seul le titre de la proposition est demandé. Aucun sous-titre ni message à renseigner.">
             <Field label="Titre de la proposition"><Input value={value.deckTitle} onChange={event => set("deckTitle", event.target.value)} disabled={locked} placeholder={`Gando × ${companyName} — Proposition commerciale`} /></Field>
-            <Field label="Sous-titre / promesse"><Input value={pdf(value.deckSubtitle) ? "" : value.deckSubtitle} onChange={event => set("deckSubtitle", event.target.value)} disabled={locked} placeholder="Une expérience de caution plus simple pour vos clients" /></Field>
-            <Field label="Message exécutif"><Area value={value.executiveMessage} onChange={next => set("executiveMessage", next)} rows={4} placeholder="Votre proposition de valeur et le bénéfice attendu…" /></Field>
             {!locked ? <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={generateTemplate}><Sparkles className="mr-2 size-4" />Générer une trame Gando</Button>
               <Button variant="outline" size="sm" onClick={prefillFromSD01}><FileText className="mr-2 size-4" />Reprendre le SD01</Button>
