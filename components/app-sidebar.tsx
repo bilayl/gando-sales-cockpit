@@ -3,11 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BadgeEuro,
-  BriefcaseBusiness,
   CalendarCheck2,
   CalendarDays,
-  ChartSpline,
   CircleHelp,
   ContactRound,
   Home,
@@ -18,8 +15,6 @@ import {
   PanelLeftOpen,
   PhoneCall,
   Search,
-  UsersRound,
-  WalletCards,
 } from "lucide-react";
 import {
   Sidebar,
@@ -115,14 +110,6 @@ export function AppSidebar({
     { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
   ];
 
-  const finance: NavItem[] = [
-    { href: "/finance/profitability", label: "Rentabilité", icon: BadgeEuro, visible: role === "admin" },
-    { href: "/finance/treasury", label: "Trésorerie", icon: WalletCards, visible: role === "admin" },
-    { href: "/finance/forecast", label: "Prévisionnel", icon: ChartSpline, visible: role === "admin" },
-    { href: "/finance/deals", label: "Deals", icon: BriefcaseBusiness, visible: role === "admin" },
-    { href: "/finance/team", label: "Équipe", icon: UsersRound, visible: role === "admin" },
-  ];
-
   const tools: NavItem[] = [
     { href: "/sourcing", label: "Sourcing", icon: Search },
     { href: "/segments", label: "Segments", icon: ListFilter, visible: role !== "commercial" },
@@ -157,7 +144,6 @@ export function AppSidebar({
 
       <SidebarContent className="gap-1 pt-1">
         <NavGroup items={primary} pathname={pathname} />
-        <NavGroup label="Finance" items={finance} pathname={pathname} />
         <NavGroup label="Outils" items={tools} pathname={pathname} />
       </SidebarContent>
 
