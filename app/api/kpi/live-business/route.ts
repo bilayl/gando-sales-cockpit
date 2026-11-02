@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { readGandoKpiSourceRecords } from "@/lib/gando-kpi-source";
 
 export const dynamic = "force-dynamic";
 
@@ -55,13 +56,7 @@ function rewardForDeposit(amountCents: number, tiers: Tier[]) {
 }
 
 async function readSourceTable(table: string): Promise<MirrorRow[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("gando_source_records")
-    .select("source_id,payload,synced_at")
-    .eq("source_table", table)
-    .order("source_id", { ascending: true });
-  if (error) throw error;
-  return (data || []) as MirrorRow[];
+  return readGandoKpiSourceRecords(table);
 }
 
 function buildDeposits(rows: MirrorRow[]): Deposit[] {
