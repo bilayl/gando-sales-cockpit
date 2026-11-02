@@ -65,7 +65,7 @@ export type KpiScorecard = {
     basis: string;
     isProxy: boolean;
   };
-  source?: { lastSyncedAt: string | null };
+  source?: { lastSyncedAt: string | null; isStale?: boolean; incompleteTables?: string[] };
 };
 
 export type KpiLiveBusiness = {
