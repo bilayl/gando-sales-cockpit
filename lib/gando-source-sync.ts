@@ -11,7 +11,7 @@ import {
 
 type Row = Record<string, unknown>;
 
-const PAGE_SIZE = 250;
+const PAGE_SIZE = 500;
 const SENSITIVE_KEY_PATTERN = /(password|passwd|secret|access[_-]?token|refresh[_-]?token|api[_-]?key|private[_-]?key|authorization)/i;
 
 function toIsoTimestamp(value: unknown) {
@@ -221,16 +221,30 @@ function resolveRequestedTables(requestedTables?: string[]) {
   return selected;
 }
 
-export async function syncGandoSourceTables(requestedTables?: string[]) {
+export async function syncGandoSourceTables(
+  requestedTables?: string[],
+  options?: { concurrency?: number },
+) {
   const selected = resolveRequestedTables(requestedTables);
   const startedAt = new Date().toISOString();
-  const results = [];
 
-  // Séquentiel volontairement : évite de saturer la source et rend les erreurs
-  // plus faciles à diagnostiquer table par table.
-  for (const table of selected) {
-    results.push(await syncOneTable(table));
+  // La route cron possède une durée d'exécution bornée. Trois workers
+  // indépendants accélèrent le miroir sans synchroniser simultanément
+  // la même table. Les synchronisations manuelles restent séquentielles.
+  const concurrency = Math.min(3, Math.max(1, Math.floor(options?.concurrency ?? 1)));
+  const results = new Array<Awaited<ReturnType<typeof syncOneTable>>>(selected.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < selected.length) {
+      const index = cursor++;
+      results[index] = await syncOneTable(selected[index]);
+    }
   }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, selected.length) }, () => worker()),
+  );
 
   return {
     sourceProject: getGandoSourceProjectRef(),
