@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { parisMonthKey, readGandoKpiSourceRecords } from "@/lib/gando-kpi-source";
 
 export const dynamic = "force-dynamic";
