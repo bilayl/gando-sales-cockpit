@@ -36,7 +36,7 @@ export function KpiGrowthUsage() {
 
   const activationShare = live.metadata.accounts > 0 ? scorecard.mau.activatedEver / live.metadata.accounts : null
   const cards = [
-    { label: "Cautions MTD", value: integer(scorecard.cautions.current), detail: scorecard.cautions.mom == null ? "Comparaison indisponible" : `${scorecard.cautions.mom >= 0 ? "+" : ""}${percent(scorecard.cautions.mom)} vs même période M-1` },
+    { label: "Cautions MTD", value: integer(scorecard.cautions.current), detail: scorecard.cautions.mom == null ? "Comparaison indisponible" : `${scorecard.cautions.mom >= 0 ? "+" : ""}${percent(scorecard.cautions.mom)} vs mêmes jours M-1` },
     { label: "Volume MTD", value: euroCents(scorecard.cautions.tdvCents), detail: `Garantie moyenne ${euroCents(scorecard.guarantee.averagePerCautionCents)}` },
     { label: "MAU", value: integer(scorecard.mau.current), detail: `${decimal(scorecard.mau.cautionsPerMau)} cautions / MAU` },
     { label: "Loueurs déjà activés", value: integer(scorecard.mau.activatedEver), detail: activationShare == null ? "—" : `${percent(activationShare)} des comptes source ont déjà généré une caution` },
@@ -47,6 +47,12 @@ export function KpiGrowthUsage() {
 
   return (
     <div className="space-y-5">
+      {scorecard.source?.isStale ? (
+        <div className="rounded-lg border border-amber-300/60 bg-amber-50/60 px-3 py-2 text-xs text-amber-900">
+          Synchronisation Gando partiellement ancienne : les données peuvent évoluer après le prochain cycle terminé.
+          {scorecard.source.lastSyncedAt ? ` Dernière fin de cycle vérifiée : ${new Date(scorecard.source.lastSyncedAt).toLocaleString("fr-FR", { timeZone: "Europe/Paris" })}.` : ""}
+        </div>
+      ) : null}
       <Card className="overflow-hidden">
         <div className="border-b border-border bg-muted/20 px-4 py-3">
           <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary">Croissance</div>

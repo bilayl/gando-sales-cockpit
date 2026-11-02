@@ -98,7 +98,7 @@ export function KpiActivatedRentersTable() {
               <TableHead className="text-right">Cautions totales</TableHead>
               <TableHead className="text-right">Ce mois</TableHead>
               <TableHead className="text-right">Volume total</TableHead>
-              <TableHead className="text-right">Frais encaissés</TableHead>
+              <TableHead className="text-right">Frais rapprochés</TableHead>
               <TableHead className="text-right">Dernière activation</TableHead>
               <TableHead className="text-right">Inactivité</TableHead>
             </TableRow>
@@ -129,7 +129,7 @@ export function KpiActivatedRentersTable() {
         </Table>
       </div>
       <div className="border-t border-border bg-muted/10 px-4 py-2 text-[10px] text-muted-foreground">
-        Une activation correspond ici à une caution gagnée avec frais de sécurisation encaissés et rapprochés. Le tableau est trié par dernière activation, de la plus récente à la plus ancienne.
+        Une activation correspond à une caution avec date start_at, indépendamment de son statut actuel. Les frais rapprochés sont une estimation, basée sur le rapprochement disponible. Tri par dernière activation réelle.
       </div>
     </Card>
   )

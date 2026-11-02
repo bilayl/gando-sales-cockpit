@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     .eq("id", "default");
 
   try {
-    const result = await syncGandoSourceTables(CONTINUOUS_TABLES);
+    const result = await syncGandoSourceTables(CONTINUOUS_TABLES, { concurrency: 3 });
     const completedAt = new Date().toISOString();
 
     await admin

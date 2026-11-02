@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { parisMonthKey, readGandoKpiSourceRecords } from "@/lib/gando-kpi-source";
 
 export const dynamic = "force-dynamic";
 
 type Row = Record<string, unknown>;
 type MirrorRow = { source_id: string; payload: Row };
-type Deposit = { id: string; clientId: string; accountId: string; status: string; amountCents: number; createdAt: number | null; updatedAt: number | null; archived: boolean };
+type Deposit = { id: string; clientId: string; accountId: string; status: string; amountCents: number; startAt: number | null; createdAt: number | null; updatedAt: number | null; archived: boolean };
 type Fee = { id: string; clientId: string; amountCents: number; createdAt: number | null };
 
-const SUCCESSFUL = new Set(["active", "close", "captured"]);
 const MATCH_WINDOW_MS = 14 * 86400000;
 
 function str(value: unknown) { return typeof value === "string" ? value : value == null ? "" : String(value); }
@@ -18,13 +17,7 @@ function bool(value: unknown) { return value === true || value === "true"; }
 function ts(value: unknown) { if (typeof value !== "string" || !value) return null; const parsed = Date.parse(value); return Number.isFinite(parsed) ? parsed : null; }
 
 async function read(table: string): Promise<MirrorRow[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("gando_source_records")
-    .select("source_id,payload")
-    .eq("source_table", table)
-    .order("source_id", { ascending: true });
-  if (error) throw error;
-  return (data || []) as MirrorRow[];
+  return readGandoKpiSourceRecords(table);
 }
 
 function buildDeposits(rows: MirrorRow[]): Deposit[] {
@@ -34,6 +27,7 @@ function buildDeposits(rows: MirrorRow[]): Deposit[] {
     accountId: str(row.payload.account_id),
     status: str(row.payload.status),
     amountCents: num(row.payload.amount_cents),
+    startAt: ts(row.payload.start_at),
     createdAt: ts(row.payload.created_at),
     updatedAt: ts(row.payload.updated_at),
     archived: bool(row.payload.is_archived),
@@ -84,11 +78,12 @@ export async function GET() {
       .map(row => ({ id: row.source_id, clientId: str(row.payload.client_id), amountCents: num(row.payload.amount), createdAt: ts(row.payload.created_at) }))
       .filter(row => row.clientId && row.amountCents > 0 && row.createdAt != null);
     const feeByDeposit = matchFees(deposits, fees);
-    const wonDeposits = deposits.filter(deposit => SUCCESSFUL.has(deposit.status) && !deposit.archived && feeByDeposit.has(deposit.id));
+    // L’activation est ancrée sur start_at, indépendamment du statut courant et du rapprochement du frais.
+    const wonDeposits = deposits.filter(deposit => !deposit.archived && deposit.startAt != null);
 
     const accounts = new Map(accountRows.map(row => [row.source_id, row.payload]));
     const now = Date.now();
-    const currentStart = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), 1);
+    const currentMonth = parisMonthKey(now);
     const grouped = new Map<string, {
       accountId: string
       name: string
@@ -104,7 +99,8 @@ export async function GET() {
 
     for (const deposit of wonDeposits) {
       const fee = feeByDeposit.get(deposit.id);
-      if (!fee?.createdAt || !deposit.accountId) continue;
+      if (!deposit.accountId || deposit.startAt == null) continue;
+      const activationAt = deposit.startAt;
       const account = accounts.get(deposit.accountId) || {};
       const displayName = str(account.display_name).trim();
       const companyName = str(account.company_name).trim();
@@ -118,16 +114,16 @@ export async function GET() {
         totalRevenueCents: 0,
         currentMonthDeposits: 0,
         currentMonthVolumeCents: 0,
-        firstActivationAt: fee.createdAt,
-        lastActivationAt: fee.createdAt,
+        firstActivationAt: activationAt,
+        lastActivationAt: activationAt,
       };
 
       current.totalDeposits += 1;
       current.totalVolumeCents += deposit.amountCents;
-      current.totalRevenueCents += fee.amountCents;
-      current.firstActivationAt = Math.min(current.firstActivationAt, fee.createdAt);
-      current.lastActivationAt = Math.max(current.lastActivationAt, fee.createdAt);
-      if (fee.createdAt >= currentStart && fee.createdAt <= now) {
+      current.totalRevenueCents += fee?.amountCents || 0;
+      current.firstActivationAt = Math.min(current.firstActivationAt, activationAt);
+      current.lastActivationAt = Math.max(current.lastActivationAt, activationAt);
+      if (activationAt <= now && parisMonthKey(activationAt) === currentMonth) {
         current.currentMonthDeposits += 1;
         current.currentMonthVolumeCents += deposit.amountCents;
       }
