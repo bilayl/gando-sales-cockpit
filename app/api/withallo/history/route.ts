@@ -21,7 +21,9 @@ export async function GET(request: NextRequest) {
       const email = (access.email || "").trim().toLowerCase();
       items = email ? items.filter(call => call.ownerEmail?.toLowerCase() === email) : [];
     }
-    return NextResponse.json({ items, total: items.length }, { headers: { "cache-control": "private, no-store" } });
+    // Never return Allo's raw/signed recording links to the browser. Use the authenticated proxy.
+    const safeItems = items.map(({ recordingUrl: _recordingUrl, ...call }) => call);
+    return NextResponse.json({ items: safeItems, total: safeItems.length }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     const status = Number((error as { status?: number }).status || 500);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Historique Allo indisponible." }, { status });
