@@ -50,7 +50,20 @@ export function WithAlloHistoryView({ compact = false, phone, limit = 80 }: { co
     }
   }, [phone, limit]);
 
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    void reload();
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+    const onCallEnded = () => {
+      // Allo may publish AI summaries a short time after hang-up.
+      timeouts.push(setTimeout(() => void reload(), 7000));
+      timeouts.push(setTimeout(() => void reload(), 35000));
+    };
+    window.addEventListener("gando:withallo-call-ended", onCallEnded);
+    return () => {
+      window.removeEventListener("gando:withallo-call-ended", onCallEnded);
+      timeouts.forEach(clearTimeout);
+    };
+  }, [reload]);
 
   const stats = useMemo(() => ({
     total: calls.length,
