@@ -1,2 +1,2 @@
-import { WithAlloHistoryView } from "@/components/withallo-history-view";
-export default function Page() { return <WithAlloHistoryView />; }
+import { redirect } from "next/navigation";
+export default function HistoriquePage() { redirect("/phone"); }

@@ -78,6 +78,7 @@ function iso(value: unknown) {
 export type WithAlloNumber = { number: string; name: string };
 export type WithAlloCall = {
   id: string; startedAt: string | null; direction: string | null; status: string | null;
+  title: string | null; contactName: string | null; tags: string[];
   from: string | null; to: string | null; externalNumber: string | null;
   durationSeconds: number | null; ownerEmail: string | null; ownerId: string | null; summary: string | null;
   transcript: string | null; recordingUrl: string | null; recordingAvailable: boolean;
@@ -124,19 +125,23 @@ function parseCall(value: unknown, lineNumber: string): WithAlloCall | null {
   const to = text(first(call, ["to", "to_number", "toNumber", "callee", "callee_number", "calleeNumber"]));
   const contact = record(first(call, ["contact", "person", "customer"]));
   const contactPhone = text(first(call, ["contact_number", "contactNumber"])) || text(first(contact, ["phone", "phone_number", "phoneNumber", "number"]));
+  const contactName = text(first(contact, ["name", "full_name", "display_name"])) || text(first(call, ["contact_name", "person_name", "customer_name"]));
+  const tags = (Array.isArray(call.tags) ? call.tags : []).map(item => typeof item === "string" ? item : text(first(record(item), ["name", "label", "key"]))).filter((item): item is string => Boolean(item)).slice(0, 20);
   const explicitExternal = text(first(call, ["external_number", "externalNumber", "contact_number", "contactNumber"]));
   const inbound = /inbound|incoming|entrant/i.test(direction || "");
   const other = explicitExternal || contactPhone || (inbound ? from : to) || (from === lineNumber ? to : from);
   const owner = record(first(call, ["user", "agent", "owner", "team_member", "teamMember"]));
   const email = text(first(call, ["user_email", "agent_email", "agentEmail", "userEmail", "owner_email"])) || text(first(owner, ["email"]));
   const summarySource = first(call, ["summary", "ai_summary", "aiSummary", "call_summary", "callSummary"]);
-  const summary = text(summarySource) || text(first(record(summarySource), ["text", "content", "summary"]));
+  const summary = text(summarySource) || text(first(record(summarySource), ["text", "content", "summary", "markdown"]));
+  const title = text(first(call, ["title", "subject", "call_title", "ai_title", "topic"])) || text(first(record(summarySource), ["title", "subject"]));
   const transcript = transcriptValue(first(call, ["concatenated_transcript", "transcript", "transcriptions", "transcription", "transcript_text", "transcriptText"]));
   const recording = text(first(call, ["recording_url", "recordingUrl", "recording", "audio_url", "audioUrl", "recording_download_url"]));
   const durationRaw = first(call, ["duration_seconds", "durationSeconds", "duration", "call_duration", "callDuration"]);
   const duration = Number(durationRaw);
   return {
     id,
+    title, contactName, tags,
     startedAt: iso(first(call, ["date", "start_date", "started_at", "startedAt", "created_at", "createdAt", "timestamp"])),
     direction,
     status: text(first(call, ["result", "status", "outcome", "call_status", "callStatus"])),

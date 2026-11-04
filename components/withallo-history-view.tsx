@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock3, PhoneIncoming, PhoneOutgoing, RefreshCw, Sparkles } from "lucide-react";
 import { WithAlloCallButton } from "@/components/withallo-call-button";
+import Link from "next/link";
 import { WithAlloRecordingPlayer } from "@/components/withallo-recording-player";
 
 type Call = {
@@ -107,7 +108,7 @@ export function WithAlloHistoryView({ compact = false, phone, limit = 80 }: { co
                   {call.transcript ? <details className="mt-2 rounded-lg border border-border"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold">Lire la transcription</summary><div className="max-h-72 overflow-auto border-t border-border p-3 whitespace-pre-wrap text-xs leading-5">{call.transcript}</div></details> : null}
                   {(call.recordingAvailable || (call.status === "ANSWERED" && /^cll[-_]/.test(call.id))) ? <WithAlloRecordingPlayer callId={call.id} /> : null}
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2">{call.externalNumber ? <WithAlloCallButton phone={call.externalNumber} label="Rappeler" className="h-8 bg-muted text-foreground hover:bg-accent" /> : null}</div>
+                <div className="flex shrink-0 flex-wrap gap-2"><Link href={"/phone?call=" + encodeURIComponent(call.id)} className="inline-flex h-8 items-center rounded-lg border border-border px-2 text-xs font-semibold hover:bg-muted">Détails</Link>{call.externalNumber ? <WithAlloCallButton phone={call.externalNumber} label="Rappeler" className="h-8 bg-muted text-foreground hover:bg-accent" /> : null}</div>
               </div>;
             })}
           </div>
