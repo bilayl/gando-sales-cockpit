@@ -19,6 +19,7 @@ type ListCall = {
   durationSeconds: number | null;
   ownerEmail: string | null;
   summary: string | null;
+  transcript?: string | null;
   recordingAvailable: boolean;
 };
 
@@ -166,7 +167,7 @@ export function WithAlloCallsWorkspace() {
       setCalls(rows);
       setSelectedId(current => {
         const fromUrl = new URLSearchParams(window.location.search).get("call");
-        if (fromUrl && rows.some((c:ListCall)=>c.id===fromUrl)) return fromUrl;
+        if (fromUrl && /^cll[-_][a-zA-Z0-9_-]{3,120}$/.test(fromUrl)) return fromUrl;
         if (current && rows.some((c:ListCall)=>c.id===current)) return current;
         return rows[0]?.id || null;
       });
@@ -200,7 +201,7 @@ export function WithAlloCallsWorkspace() {
     if(direction==="out" && !isOutbound(call.direction))return false;
     if(direction==="in" && isOutbound(call.direction))return false;
     if(recordingsOnly && !call.recordingAvailable)return false;
-    const hay=[call.contactName,call.title,call.externalNumber,call.from,call.to,call.ownerEmail,call.summary].filter(Boolean).join(" ").toLocaleLowerCase("fr-FR");
+    const hay=[call.contactName,call.title,call.externalNumber,call.from,call.to,call.ownerEmail,call.summary,call.transcript].filter(Boolean).join(" ").toLocaleLowerCase("fr-FR");
     return !query || hay.includes(query.toLocaleLowerCase("fr-FR"));
   }),[calls,direction,query,recordingsOnly]);
   const outbound=calls.filter(call=>isOutbound(call.direction)).length;
