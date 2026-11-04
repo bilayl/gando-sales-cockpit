@@ -110,7 +110,7 @@ function transcriptValue(value: unknown): string | null {
   if (!Array.isArray(value)) return null;
   const lines = value.map(item => {
     const line = record(item);
-    return [text(first(line, ["speaker", "role", "name"])), text(first(line, ["text", "content", "transcript"]))].filter(Boolean).join(" : ");
+    return [text(first(line, ["speaker", "role", "source", "name"])), text(first(line, ["text", "content", "transcript"]))].filter(Boolean).join(" : ");
   }).filter(Boolean);
   return lines.join("\n").slice(0, 60000) || null;
 }
@@ -123,7 +123,7 @@ function parseCall(value: unknown, lineNumber: string): WithAlloCall | null {
   const from = text(first(call, ["from_number", "from", "fromNumber", "caller", "caller_number", "callerNumber"]));
   const to = text(first(call, ["to", "to_number", "toNumber", "callee", "callee_number", "calleeNumber"]));
   const contact = record(first(call, ["contact", "person", "customer"]));
-  const contactPhone = text(first(contact, ["phone", "phone_number", "phoneNumber", "number"]));
+  const contactPhone = text(first(call, ["contact_number", "contactNumber"])) || text(first(contact, ["phone", "phone_number", "phoneNumber", "number"]));
   const explicitExternal = text(first(call, ["external_number", "externalNumber", "contact_number", "contactNumber"]));
   const inbound = /inbound|incoming|entrant/i.test(direction || "");
   const other = explicitExternal || contactPhone || (inbound ? from : to) || (from === lineNumber ? to : from);
@@ -137,7 +137,7 @@ function parseCall(value: unknown, lineNumber: string): WithAlloCall | null {
   const duration = Number(durationRaw);
   return {
     id,
-    startedAt: iso(first(call, ["start_date", "started_at", "startedAt", "created_at", "createdAt", "timestamp", "date"])),
+    startedAt: iso(first(call, ["date", "start_date", "started_at", "startedAt", "created_at", "createdAt", "timestamp"])),
     direction,
     status: text(first(call, ["result", "status", "outcome", "call_status", "callStatus"])),
     from, to,
@@ -152,6 +152,23 @@ function parseCall(value: unknown, lineNumber: string): WithAlloCall | null {
 
 export async function getWithAlloCalls(limit = 80) {
   const size = Math.min(Math.max(Math.floor(limit), 1), 100);
+  // Allo v2 returns canonical cll-* identifiers which are required by
+  // /conversations/items/{id}/recording. Keep v1 as an explicit compatibility fallback.
+  try {
+    const response = await withAlloRequest<{ data?: unknown[] }>(
+      "/v2/api/conversations/items/search",
+      { method: "POST", body: JSON.stringify({ type: "CALL", sort: "DATE_DESC", size, page: 1, extend: "transcript" }) },
+    );
+    if (Array.isArray(response.data)) {
+      return response.data
+        .map(item => parseCall(item, ""))
+        .filter((item): item is WithAlloCall => Boolean(item && /^cll[-_]/.test(item.id)))
+        .sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""))
+        .slice(0, size);
+    }
+  } catch (error) {
+    console.warn("Allo v2 history unavailable, trying legacy list:", error instanceof Error ? error.message : "unknown");
+  }
   const lines = await listWithAlloNumbers();
   const selectedLines = lines.slice(0, 8);
   const requests = selectedLines.length ? selectedLines.map(line => ({
