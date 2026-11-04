@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   CalendarCheck2,
   CalendarDays,
+  BarChart3,
   CircleHelp,
   ContactRound,
   Headphones,
@@ -48,6 +49,7 @@ type NavItem = {
 
 function isActive(pathname: string, href: string) {
   if (href === "/today") return pathname === "/today";
+  if (href === "/phone") return pathname === "/phone";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -108,6 +110,7 @@ export function AppSidebar({
     { href: "/prospection", label: "Prospection", icon: PhoneCall },
     { href: "/contacts", label: "Contacts", icon: ContactRound },
     { href: "/phone", label: "Appels", icon: Headphones },
+    { href: "/phone/stats", label: "Statistiques d’appels", icon: BarChart3 },
     { href: "/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
   ];
