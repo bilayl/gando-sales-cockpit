@@ -31,6 +31,22 @@ export async function POST(request: NextRequest) {
     const call = payload.data || {};
     const id = Number(call.id);
     if (!Number.isSafeInteger(id) || id <= 0) return NextResponse.json({ error: "Identifiant d’appel invalide." }, { status: 400 });
+    const supabase = getSupabaseAdmin();
+    if (payload.event === "call.tagged") {
+      const tags = Array.isArray(call.tags) ? call.tags.map(tag => typeof tag === "string" ? tag : tag && typeof tag === "object" ? String((tag as Record<string, unknown>).name || "") : "").filter(Boolean).slice(0, 30) : [];
+      const { error } = await supabase.from("aircall_calls").update({ tags, updated_at: new Date().toISOString() }).eq("call_id", id);
+      if (error) throw error;
+      return NextResponse.json({ ok: true });
+    }
+    if (payload.event === "call.comm_assets_generated") {
+      const recording = typeof call.recording === "string" && call.recording.startsWith("https://") ? call.recording : null;
+      if (recording) {
+        const { error } = await supabase.from("aircall_calls").update({ recording_url: recording, updated_at: new Date().toISOString() }).eq("call_id", id);
+        if (error) throw error;
+      }
+      return NextResponse.json({ ok: true });
+    }
+    if (payload.event === "call.commented") return NextResponse.json({ ok: true });
     const user = (call.user || {}) as Record<string, unknown>;
     const from = typeof call.raw_digits === "string" ? call.raw_digits : "";
     const externalNumber = normalizeAircallPhone(from);
@@ -53,7 +69,7 @@ export async function POST(request: NextRequest) {
       tags,
       updated_at: new Date().toISOString(),
     };
-    const { error } = await getSupabaseAdmin().from("aircall_calls").upsert(row, { onConflict: "call_id" });
+    const { error } = await supabase.from("aircall_calls").upsert(row, { onConflict: "call_id" });
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error) {
