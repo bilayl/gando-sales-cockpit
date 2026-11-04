@@ -9,7 +9,7 @@ import {
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getBestCallTimeForProperties } from "@/lib/call-timing"
 import { claimCockpitCompanies, listCockpitCompanyAssignments } from "@/lib/cockpit-company-assignment"
-import { getOnoffDirectApiStatus } from "@/lib/onoff"
+import { getAircallStatus } from "@/lib/aircall"
 
 export async function createFilteredSalesCallSession(input?: {
   owner?: string
@@ -136,23 +136,12 @@ export async function createFilteredSalesCallSession(input?: {
     if (error) throw error
   }
 
-  const onoff = await getOnoffDirectApiStatus().catch(error => ({
-    configured: false,
-    connected: false,
-    source: "onoff_api" as const,
-    latestCallId: null,
-    latestEventName: null,
-    latestReceivedAt: null,
-    latestProcessingStatus: null,
-    webhookAuthenticated: false,
-    checkedAt: new Date().toISOString(),
-    error: error instanceof Error ? error.message : "Impossible de vérifier Onoff.",
-  }))
+  const aircall = await getAircallStatus()
 
   return {
     ...(await getSalesCallSession(String(session.id))),
     appliedFilters: filters,
     filterSummary: summaries,
-    onoff,
+    aircall,
   }
 }

@@ -4,7 +4,7 @@ export type CRMActivityRecord = {
   sourceContactName?: string | null
   createdAt?: string | null
   transcript?: string | null
-  onoffAiAnalysis?: Record<string, unknown> | null
+  aircallAiAnalysis?: Record<string, unknown> | null
 }
 
 export type ObjectionInsight = {
@@ -146,11 +146,11 @@ function limited(value: string, max = 12000) {
 }
 
 function aiText(call: CRMActivityRecord) {
-  const analysis = call.onoffAiAnalysis
+  const analysis = call.aircallAiAnalysis
   if (!analysis) return ""
   const parts: string[] = []
   const summary = analysis.summary
-  if (typeof summary === "string" && summary.trim()) parts.push(`Synthèse Onoff: ${summary.trim()}`)
+  if (typeof summary === "string" && summary.trim()) parts.push(`Synthèse d’appel: ${summary.trim()}`)
   for (const [label, key] of [["Points clés", "key_points"], ["Objections", "objections"], ["Prochaines étapes", "next_steps"]] as const) {
     const raw = analysis[key]
     if (Array.isArray(raw) && raw.length) parts.push(`${label}: ${raw.map(String).join("; ")}`)

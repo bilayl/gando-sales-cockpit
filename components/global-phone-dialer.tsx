@@ -1,167 +1,155 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Delete, ExternalLink, Phone, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ExternalLink, Loader2, Phone, PhoneCall, X } from "lucide-react";
 
-const ONOFF_CHROME_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
-
-type Country = {
-  code: string;
-  label: string;
-  flag: string;
-  prefix: string;
+type AircallLine = { id: number; name: string; digits?: string | null };
+type Workspace = {
+  on: (event: string, handler: (data: Record<string, unknown>) => void) => void;
+  send: (event: string, payload: Record<string, string>, callback?: (success: boolean, data?: { code?: string; message?: string }) => void) => void;
 };
-
-const COUNTRIES: Country[] = [
-  { code: "FR", label: "France", flag: "🇫🇷", prefix: "+33" },
-  { code: "GP", label: "Guadeloupe", flag: "🇬🇵", prefix: "+590" },
-  { code: "MQ", label: "Martinique", flag: "🇲🇶", prefix: "+596" },
-  { code: "GF", label: "Guyane", flag: "🇬🇫", prefix: "+594" },
-  { code: "RE", label: "La Réunion", flag: "🇷🇪", prefix: "+262" },
-  { code: "BE", label: "Belgique", flag: "🇧🇪", prefix: "+32" },
-  { code: "CH", label: "Suisse", flag: "🇨🇭", prefix: "+41" },
-  { code: "GB", label: "Royaume-Uni", flag: "🇬🇧", prefix: "+44" },
-  { code: "US", label: "États-Unis / Canada", flag: "🇺🇸", prefix: "+1" },
-];
-
-const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
-
-function normalizeNumber(raw: string, prefix: string) {
-  const compact = raw.trim().replace(/[\s().-]/g, "");
-  if (!compact) return "";
-  if (compact.includes("*") || compact.includes("#")) return compact;
-  if (compact.startsWith("+")) return `+${compact.slice(1).replace(/\D/g, "")}`;
-  const digits = compact.replace(/\D/g, "");
-  if (!digits) return "";
-  if (digits.startsWith("00")) return `+${digits.slice(2)}`;
-  if (digits.startsWith("0")) return `${prefix}${digits.slice(1)}`;
-  return `${prefix}${digits}`;
+function normalizedPhone(source: string) {
+  const value = source.replace(/[\s().-]/g, "");
+  return value.startsWith("00") ? `+${value.slice(2)}` : value;
 }
+const isValidPhone = (source: string) => /^\+[1-9]\d{7,14}$/.test(normalizedPhone(source));
 
 export function GlobalPhoneDialer() {
   const [open, setOpen] = useState(false);
   const [number, setNumber] = useState("");
-  const [countryCode, setCountryCode] = useState("FR");
+  const [loading, setLoading] = useState(false);
+  const [lines, setLines] = useState<AircallLine[]>([]);
+  const [numberId, setNumberId] = useState("");
+  const [configured, setConfigured] = useState(false);
+  const [agentName, setAgentName] = useState("");
+  const [ready, setReady] = useState(false);
+  const [sdkError, setSdkError] = useState("");
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-
-  const country = useMemo(() => COUNTRIES.find(item => item.code === countryCode) || COUNTRIES[0], [countryCode]);
-  const normalized = useMemo(() => normalizeNumber(number, country.prefix), [number, country.prefix]);
-  const callable = Boolean(normalized && !normalized.includes("*") && !normalized.includes("#"));
+  const workspaceRef = useRef<Workspace | null>(null);
+  const sdkStartedRef = useRef(false);
+  const previousDialRef = useRef("");
 
   useEffect(() => {
-    function openFromEvent(event: Event) {
-      const custom = event as CustomEvent<{ phone?: string }>;
-      setNumber(custom.detail?.phone || "");
-      setError("");
+    const openFromCRM = (event: Event) => {
+      const detail = (event as CustomEvent<{ phone?: string }>).detail;
+      setNumber(detail?.phone || "");
       setOpen(true);
-    }
-
-    window.addEventListener("gando:open-dialer", openFromEvent as EventListener);
-    return () => window.removeEventListener("gando:open-dialer", openFromEvent as EventListener);
+      setError("");
+      setMessage("");
+      previousDialRef.current = "";
+    };
+    window.addEventListener("gando:open-dialer", openFromCRM);
+    return () => window.removeEventListener("gando:open-dialer", openFromCRM);
   }, []);
 
-  function append(value: string) {
-    setNumber(current => `${current}${value}`);
-    setError("");
-  }
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void fetch("/api/aircall/me", { cache: "no-store" }).then(async response => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Profil Aircall inaccessible");
+      if (cancelled) return;
+      setConfigured(Boolean(data.connected));
+      setLines(Array.isArray(data.numbers) ? data.numbers : []);
+      setAgentName(data.user?.name || data.user?.email || "");
+      if (data.numbers?.length === 1) setNumberId(String(data.numbers[0].id));
+      if (!data.connected) setError(data.error || "Connectez Aircall dans les paramètres du Cockpit.");
+    }).catch(cause => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Aircall indisponible"); });
+    return () => { cancelled = true; };
+  }, [open]);
 
-  function erase() {
-    setNumber(current => current.slice(0, -1));
-    setError("");
-  }
+  useEffect(() => {
+    if (!open || sdkStartedRef.current) return;
+    sdkStartedRef.current = true;
+    let cancelled = false;
+    void import("aircall-everywhere").then(module => {
+      if (cancelled) { sdkStartedRef.current = false; return; }
+      const AircallWorkspace = module.default;
+      const workspace: Workspace = new AircallWorkspace({
+        domToLoadWorkspace: "#gando-aircall-workspace",
+        size: "big",
+        debug: false,
+        onLogin: () => setReady(true),
+        onLogout: () => setReady(false),
+      });
+      workspace.on("call_ended", () => {
+        window.dispatchEvent(new Event("gando:aircall-updated"));
+      });
+      workspaceRef.current = workspace;
+    }).catch(() => {
+      sdkStartedRef.current = false;
+      setSdkError("Impossible de charger le téléphone intégré Aircall. Le démarrage par API reste disponible.");
+    });
+    return () => { cancelled = true; };
+  }, [open]);
 
-  function launchFromKeyboard() {
-    if (!callable) {
-      setError("Entrez un numéro de téléphone valide.");
-      return;
+  useEffect(() => {
+    const normalized = normalizedPhone(number);
+    if (!open || !ready || !isValidPhone(number) || previousDialRef.current === normalized || !workspaceRef.current) return;
+    previousDialRef.current = normalized;
+    workspaceRef.current.send("dial_number", { phone_number: normalized }, (success, data) => {
+      if (!success) setSdkError(data?.message || "Le numéro n’a pas été prérempli dans Aircall.");
+    });
+  }, [number, open, ready]);
+
+  async function startCall() {
+    if (!isValidPhone(number)) { setError("Indiquez un numéro international (+33, +590, etc.)."); return; }
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/aircall/dial", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ to: normalizedPhone(number), numberId: numberId || undefined }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Appel non démarré.");
+      setMessage("Aircall a accepté la demande d’appel. Suivez la conversation dans Workspace.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Impossible de démarrer l’appel.");
+    } finally {
+      setLoading(false);
     }
-    setOpen(false);
-    window.location.href = `tel:${normalized}`;
   }
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => { setOpen(true); setError(""); }}
-        className="fixed bottom-6 right-6 z-[55] grid h-12 w-12 place-items-center rounded-full border border-border bg-card text-foreground shadow-[0_8px_28px_rgba(0,0,0,0.14)] transition hover:-translate-y-0.5 hover:bg-muted"
-        aria-label="Ouvrir le dialer"
-        title="Dialer"
-      >
-        <Phone className="h-5 w-5" strokeWidth={1.8} />
+      <button type="button" onClick={() => setOpen(true)} className="fixed bottom-6 right-6 z-[55] grid h-12 w-12 place-items-center rounded-full border border-border bg-card shadow-lg transition hover:-translate-y-0.5 hover:bg-muted" aria-label="Ouvrir le téléphone Aircall" title="Aircall">
+        <Phone className="h-5 w-5" />
       </button>
+      <div className={open ? "fixed inset-0 z-[75] flex items-center justify-center bg-black/50 p-3 backdrop-blur-sm" : "hidden"} role="dialog" aria-modal={open} aria-label="Téléphonie Aircall">
+        <div className="flex max-h-[96svh] w-full max-w-[960px] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl lg:flex-row">
+          <div className="w-full shrink-0 border-b border-border p-5 lg:w-[450px] lg:border-b-0 lg:border-r">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div><div className="text-lg font-semibold">Appeler avec Aircall</div><div className="mt-1 text-xs text-muted-foreground">{agentName || "Téléphonie connectée au CRM Gando"}</div></div>
+              <button type="button" onClick={() => setOpen(false)} aria-label="Fermer" className="grid h-9 w-9 place-items-center rounded-lg hover:bg-muted"><X size={18} /></button>
+            </div>
+            <label htmlFor="gando-aircall-number" className="text-xs font-semibold">Numéro du contact</label>
+            <input id="gando-aircall-number" value={number} onChange={event => { setNumber(event.target.value); setError(""); setMessage(""); }} placeholder="+33612345678" inputMode="tel" className="mt-2 h-12 w-full rounded-xl border border-input bg-background px-3 text-lg outline-none focus:ring-2 focus:ring-ring" />
+            <p className="mt-1.5 text-[11px] text-muted-foreground">Format international requis : +33 pour la métropole, +590 pour la Guadeloupe.</p>
 
-      {open ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Dialer">
-          <div className="relative w-full max-w-[520px] rounded-[26px] border border-border bg-card px-8 pb-8 pt-7 text-card-foreground shadow-[0_24px_80px_rgba(0,0,0,0.24)] sm:px-12 sm:pb-10">
-            <button type="button" onClick={() => setOpen(false)} className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Fermer">
-              <X className="h-5 w-5" />
+            <label htmlFor="gando-aircall-line" className="mt-5 block text-xs font-semibold">Ligne sortante</label>
+            <select id="gando-aircall-line" value={numberId} onChange={event => setNumberId(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm" disabled={!lines.length}>
+              <option value="">{lines.length ? "Choisir une ligne" : "Aucune ligne Aircall disponible"}</option>
+              {lines.map(line => <option key={line.id} value={line.id}>{line.name}{line.digits ? ` · ${line.digits}` : ""}</option>)}
+            </select>
+            <button type="button" onClick={() => void startCall()} disabled={!configured || loading || !isValidPhone(number) || (lines.length > 1 && !numberId)} className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <PhoneCall size={16} />} Appeler maintenant via l’API
             </button>
-
-            <div className="mb-7 pr-10">
-              <div className="text-[18px] font-semibold tracking-[-0.02em] text-foreground">Téléphone</div>
-              <div className="mt-1 text-[12px] text-muted-foreground">Composez ici, puis laissez Onoff Click2Call prendre en charge l’appel.</div>
-            </div>
-
-            <div className="flex h-[58px] overflow-hidden rounded-[14px] border border-border bg-background">
-              <div className="relative flex w-[116px] shrink-0 items-center border-r border-border px-4">
-                <span className="text-[26px] leading-none">{country.flag}</span>
-                <ChevronDown className="ml-auto h-4 w-4 text-foreground" />
-                <select value={countryCode} onChange={event => setCountryCode(event.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Indicatif pays">
-                  {COUNTRIES.map(item => <option key={item.code} value={item.code}>{item.label} {item.prefix}</option>)}
-                </select>
-              </div>
-              <input
-                value={number}
-                onChange={event => setNumber(event.target.value)}
-                onKeyDown={event => { if (event.key === "Enter") launchFromKeyboard(); }}
-                autoFocus
-                inputMode="tel"
-                placeholder="Entrer un nom ou numéro"
-                className="min-w-0 flex-1 bg-background px-5 text-[20px] font-normal text-foreground outline-none placeholder:text-muted-foreground sm:text-[22px]"
-              />
-              {number ? <button type="button" onClick={erase} className="grid w-12 shrink-0 place-items-center text-muted-foreground hover:text-foreground" aria-label="Effacer"><Delete className="h-5 w-5" /></button> : null}
-            </div>
-
-            <div className="mx-auto mt-8 grid max-w-[310px] grid-cols-3 gap-x-7 gap-y-5">
-              {KEYS.map(key => (
-                <button key={key} type="button" onClick={() => append(key)} className="grid aspect-square w-full max-w-[76px] place-items-center justify-self-center rounded-full bg-muted text-[30px] font-normal text-foreground transition hover:bg-accent active:scale-95">
-                  {key === "0" ? <span className="flex flex-col items-center leading-none"><span>0</span><span className="mt-1 text-[13px] font-semibold text-muted-foreground">+</span></span> : key}
-                </button>
-              ))}
-            </div>
-
-            {error ? <div className="mx-auto mt-5 max-w-[390px] rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-2.5 text-center text-[12px] leading-5 text-destructive">{error}</div> : null}
-
-            {callable ? (
-              <a
-                href={`tel:${normalized}`}
-                onClick={() => window.setTimeout(() => setOpen(false), 0)}
-                className="mx-auto mt-8 flex h-[58px] w-full max-w-[250px] items-center justify-center rounded-[18px] bg-[#79ca72] text-white transition hover:bg-[#6fc268]"
-                aria-label={`Appeler ${normalized} avec Onoff`}
-              >
-                <Phone className="h-6 w-6 fill-current" />
-              </a>
-            ) : (
-              <button type="button" disabled className="mx-auto mt-8 flex h-[58px] w-full max-w-[250px] cursor-not-allowed items-center justify-center rounded-[18px] bg-[#79ca72] text-white opacity-45">
-                <Phone className="h-6 w-6 fill-current" />
-              </button>
-            )}
-
-            <div className="mx-auto mt-4 max-w-[390px] text-center text-[11px] leading-5 text-muted-foreground">
-              Le click-to-call s’appuie sur <strong className="font-semibold text-foreground">Onoff Business Click2Call</strong>. Pour le softphone complet, ouvre la rubrique Appels du Cockpit.
-              <div className="mt-2 flex flex-wrap justify-center gap-3">
-                <a href={ONOFF_CHROME_EXTENSION_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4">
-                  Installer Onoff Click2Call <ExternalLink className="h-3 w-3" />
-                </a>
-                <a href="/phone" className="inline-flex items-center gap-1 font-medium text-foreground underline underline-offset-4">
-                  Ouvrir le webphone Gando
-                </a>
-              </div>
-            </div>
+            {message ? <p className="mt-3 rounded-lg border border-border bg-muted px-3 py-2 text-xs">{message}</p> : null}
+            {error ? <p className="mt-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</p> : null}
+            <p className="mt-5 text-xs leading-5 text-muted-foreground">Le téléphone intégré permet aussi de composer depuis Aircall Workspace. Les appels terminés sont ajoutés à l’historique via le webhook.</p>
+            <a href="https://workspace.aircall.io/" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">Ouvrir Aircall Workspace <ExternalLink size={12} /></a>
+            {sdkError ? <p className="mt-2 text-xs text-muted-foreground">{sdkError}</p> : null}
+          </div>
+          <div className="mx-auto min-h-0 w-full overflow-auto bg-muted/30 p-3 lg:w-[420px]">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Aircall Workspace intégré {ready ? "· connecté" : "· connexion requise"}</div>
+            <div id="gando-aircall-workspace" className="mx-auto min-h-[666px] w-[376px] max-w-full overflow-hidden rounded-xl bg-background shadow-sm" />
           </div>
         </div>
-      ) : null}
+      </div>
     </>
   );
 }

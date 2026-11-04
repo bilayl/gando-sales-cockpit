@@ -361,7 +361,7 @@ export function AnalyticsView() {
                 <h2 className="section-title">Historique des appels</h2>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Tous les logs d’appels HubSpot récupérés sur la période sélectionnée, y compris les appels Onoff synchronisés.
+                Tous les logs d’appels HubSpot récupérés sur la période sélectionnée, y compris les appels de téléphonie synchronisés.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">{callsLoaded.toLocaleString("fr-FR")}</span>
