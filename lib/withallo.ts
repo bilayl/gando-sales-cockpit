@@ -79,8 +79,8 @@ export type WithAlloNumber = { number: string; name: string };
 export type WithAlloCall = {
   id: string; startedAt: string | null; direction: string | null; status: string | null;
   from: string | null; to: string | null; externalNumber: string | null;
-  durationSeconds: number | null; ownerEmail: string | null; summary: string | null;
-  transcript: string | null; recordingUrl: string | null;
+  durationSeconds: number | null; ownerEmail: string | null; ownerId: string | null; summary: string | null;
+  transcript: string | null; recordingUrl: string | null; recordingAvailable: boolean;
 };
 
 export async function getWithAlloStatus() {
@@ -110,7 +110,7 @@ function transcriptValue(value: unknown): string | null {
   if (!Array.isArray(value)) return null;
   const lines = value.map(item => {
     const line = record(item);
-    return [text(first(line, ["speaker", "role", "name"])), text(first(line, ["text", "content", "transcript"]))].filter(Boolean).join(" : ");
+    return [text(first(line, ["speaker", "role", "source", "name"])), text(first(line, ["text", "content", "transcript"]))].filter(Boolean).join(" : ");
   }).filter(Boolean);
   return lines.join("\n").slice(0, 60000) || null;
 }
@@ -119,38 +119,72 @@ function parseCall(value: unknown, lineNumber: string): WithAlloCall | null {
   const call = record(value);
   const id = text(first(call, ["id", "call_id", "callId", "uuid", "conversation_id", "conversationId"]));
   if (!id) return null;
-  const direction = text(first(call, ["direction", "call_direction", "callDirection"]));
-  const from = text(first(call, ["from", "from_number", "fromNumber", "caller", "caller_number", "callerNumber"]));
+  const direction = text(first(call, ["direction", "call_direction", "callDirection", "type"]));
+  const from = text(first(call, ["from_number", "from", "fromNumber", "caller", "caller_number", "callerNumber"]));
   const to = text(first(call, ["to", "to_number", "toNumber", "callee", "callee_number", "calleeNumber"]));
   const contact = record(first(call, ["contact", "person", "customer"]));
-  const contactPhone = text(first(contact, ["phone", "phone_number", "phoneNumber", "number"]));
+  const contactPhone = text(first(call, ["contact_number", "contactNumber"])) || text(first(contact, ["phone", "phone_number", "phoneNumber", "number"]));
   const explicitExternal = text(first(call, ["external_number", "externalNumber", "contact_number", "contactNumber"]));
   const inbound = /inbound|incoming|entrant/i.test(direction || "");
   const other = explicitExternal || contactPhone || (inbound ? from : to) || (from === lineNumber ? to : from);
   const owner = record(first(call, ["user", "agent", "owner", "team_member", "teamMember"]));
-  const email = text(first(call, ["agent_email", "agentEmail", "user_email", "userEmail", "owner_email"])) || text(first(owner, ["email"]));
+  const email = text(first(call, ["user_email", "agent_email", "agentEmail", "userEmail", "owner_email"])) || text(first(owner, ["email"]));
   const summarySource = first(call, ["summary", "ai_summary", "aiSummary", "call_summary", "callSummary"]);
   const summary = text(summarySource) || text(first(record(summarySource), ["text", "content", "summary"]));
-  const transcript = transcriptValue(first(call, ["transcript", "transcription", "transcript_text", "transcriptText"]));
-  const recording = text(first(call, ["recording_url", "recordingUrl", "recording", "audio_url", "audioUrl"]));
+  const transcript = transcriptValue(first(call, ["concatenated_transcript", "transcript", "transcriptions", "transcription", "transcript_text", "transcriptText"]));
+  const recording = text(first(call, ["recording_url", "recordingUrl", "recording", "audio_url", "audioUrl", "recording_download_url"]));
   const durationRaw = first(call, ["duration_seconds", "durationSeconds", "duration", "call_duration", "callDuration"]);
   const duration = Number(durationRaw);
   return {
     id,
-    startedAt: iso(first(call, ["started_at", "startedAt", "created_at", "createdAt", "timestamp", "date"])),
+    startedAt: iso(first(call, ["date", "start_date", "started_at", "startedAt", "created_at", "createdAt", "timestamp"])),
     direction,
-    status: text(first(call, ["status", "outcome", "call_status", "callStatus"])),
+    status: text(first(call, ["result", "status", "outcome", "call_status", "callStatus"])),
     from, to,
     externalNumber: other,
     durationSeconds: durationRaw != null && Number.isFinite(duration) ? Math.max(0, Math.round(duration)) : null,
     ownerEmail: email,
+    ownerId: text(first(owner, ["id"])) || text(first(call, ["user_id", "agent_id"])),
     summary, transcript,
     recordingUrl: recording && /^https:\/\//.test(recording) ? recording : null,
+    recordingAvailable: Boolean(recording) || Number(call.recording_duration || 0) > 0 || Boolean(call.recording === true),
   };
+}
+
+export async function listWithAlloUserEmails() {
+  const payload = await withAlloRequest<{ data?: Array<{ id?: string; email?: string }> }>("/v2/api/users");
+  const users = Array.isArray(payload.data) ? payload.data : [];
+  return new Map(users
+    .filter((user): user is { id: string; email: string } => typeof user.id === "string" && typeof user.email === "string")
+    .map(user => [user.id, user.email.trim().toLowerCase()]));
 }
 
 export async function getWithAlloCalls(limit = 80) {
   const size = Math.min(Math.max(Math.floor(limit), 1), 100);
+  // Allo v2 returns canonical cll-* identifiers which are required by
+  // /conversations/items/{id}/recording. Keep v1 as an explicit compatibility fallback.
+  try {
+    const response = await withAlloRequest<{ data?: unknown[] }>(
+      "/v2/api/conversations/items/search",
+      { method: "POST", body: JSON.stringify({ type: "CALL", sort: "DATE_DESC", size, page: 1, extend: "transcript" }) },
+    );
+    if (Array.isArray(response.data)) {
+      const calls = response.data
+        .map(item => parseCall(item, ""))
+        .filter((item): item is WithAlloCall => Boolean(item && /^cll[-_]/.test(item.id)))
+        .sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""))
+        .slice(0, size);
+      if (calls.some(call => !call.ownerEmail && call.ownerId)) {
+        const users = await listWithAlloUserEmails().catch(() => new Map<string, string>());
+        calls.forEach(call => {
+          if (!call.ownerEmail && call.ownerId) call.ownerEmail = users.get(call.ownerId) || null;
+        });
+      }
+      return calls;
+    }
+  } catch (error) {
+    console.warn("Allo v2 history unavailable, trying legacy list:", error instanceof Error ? error.message : "unknown");
+  }
   const lines = await listWithAlloNumbers();
   const selectedLines = lines.slice(0, 8);
   const requests = selectedLines.length ? selectedLines.map(line => ({

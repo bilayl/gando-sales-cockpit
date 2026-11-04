@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Clock3, ExternalLink, PhoneIncoming, PhoneOutgoing, RefreshCw, Sparkles } from "lucide-react";
+import { Clock3, PhoneIncoming, PhoneOutgoing, RefreshCw, Sparkles } from "lucide-react";
 import { WithAlloCallButton } from "@/components/withallo-call-button";
+import { WithAlloRecordingPlayer } from "@/components/withallo-recording-player";
 
 type Call = {
   id: string;
@@ -16,7 +17,7 @@ type Call = {
   ownerEmail: string | null;
   summary: string | null;
   transcript: string | null;
-  recordingUrl: string | null;
+  recordingAvailable: boolean;
 };
 
 function dateText(value: string | null) {
@@ -32,6 +33,7 @@ export function WithAlloHistoryView({ compact = false, phone, limit = 80 }: { co
   const [calls, setCalls] = useState<Call[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [recordingsOnly, setRecordingsOnly] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -65,6 +67,8 @@ export function WithAlloHistoryView({ compact = false, phone, limit = 80 }: { co
     };
   }, [reload]);
 
+  const filteredCalls = useMemo(() => recordingsOnly ? calls.filter(call => call.recordingAvailable || (call.status === "ANSWERED" && /^cll[-_]/.test(call.id))) : calls, [calls, recordingsOnly]);
+
   const stats = useMemo(() => ({
     total: calls.length,
     outbound: calls.filter(call => /outbound|outgoing|sortant/i.test(call.direction || "")).length,
@@ -76,7 +80,7 @@ export function WithAlloHistoryView({ compact = false, phone, limit = 80 }: { co
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><div className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary">Allo · CRM Gando</div>
           <h2 className="mt-1 text-lg font-semibold">{phone ? "Appels Allo du contact" : "Historique des appels Allo"}</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Données consultées directement sur l’API Allo, sans import manuel.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Appels, enregistrements, synthèses et transcriptions récupérés directement depuis Allo. Les fichiers audio ne sont pas rendus publics.</p>
         </div>
         <button type="button" onClick={() => void reload()} disabled={loading} className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs hover:bg-muted disabled:opacity-50"><RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Actualiser</button>
       </div>
@@ -85,12 +89,13 @@ export function WithAlloHistoryView({ compact = false, phone, limit = 80 }: { co
         <div className="rounded-xl border border-border bg-card p-4"><div className="text-xs text-muted-foreground">Sortants</div><div className="mt-2 text-xl font-semibold">{stats.outbound}</div></div>
         <div className="rounded-xl border border-border bg-card p-4"><div className="text-xs text-muted-foreground">Durée cumulée</div><div className="mt-2 text-xl font-semibold">{duration(stats.duration)}</div></div>
       </div> : null}
+      <div className="mb-3 flex items-center justify-between gap-2"><label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium"><input type="checkbox" checked={recordingsOnly} onChange={event => setRecordingsOnly(event.target.checked)} /> Afficher les appels enregistrés</label><span className="text-[11px] text-muted-foreground">{filteredCalls.length} appel(s) affiché(s)</span></div>
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         {error ? <div className="border-b border-destructive/30 px-4 py-4 text-sm text-destructive">{error}</div> : null}
         {loading ? <div className="p-8 text-center text-sm text-muted-foreground">Chargement de l’historique Allo…</div> :
-          !calls.length ? <div className="p-8 text-center text-sm text-muted-foreground">Aucun appel Allo disponible pour cette sélection. Vérifie les droits de la clé API et l’adresse e-mail du commercial.</div> :
+          !filteredCalls.length ? <div className="p-8 text-center text-sm text-muted-foreground">Aucun appel correspondant. Actualisez après la fin de l’appel, ou vérifiez les permissions de lecture Allo.</div> :
           <div className="divide-y divide-border">
-            {calls.map(call => {
+            {filteredCalls.map(call => {
               const outgoing = /outbound|outgoing|sortant/i.test(call.direction || "");
               const Icon = outgoing ? PhoneOutgoing : PhoneIncoming;
               return <div key={call.id} className="flex flex-wrap items-start gap-3 px-4 py-4">
@@ -100,8 +105,9 @@ export function WithAlloHistoryView({ compact = false, phone, limit = 80 }: { co
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground"><span>{dateText(call.startedAt)}</span><Clock3 size={11}/><span>{duration(call.durationSeconds)}</span>{call.ownerEmail ? <span>· {call.ownerEmail}</span> : null}</div>
                   {call.summary ? <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3 text-xs leading-5"><div className="mb-1 flex items-center gap-1 font-semibold"><Sparkles size={12} /> Résumé IA Allo</div><div className="whitespace-pre-wrap">{call.summary}</div></div> : null}
                   {call.transcript ? <details className="mt-2 rounded-lg border border-border"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold">Lire la transcription</summary><div className="max-h-72 overflow-auto border-t border-border p-3 whitespace-pre-wrap text-xs leading-5">{call.transcript}</div></details> : null}
+                  {(call.recordingAvailable || (call.status === "ANSWERED" && /^cll[-_]/.test(call.id))) ? <WithAlloRecordingPlayer callId={call.id} /> : null}
                 </div>
-                <div className="flex shrink-0 flex-wrap gap-2">{call.externalNumber ? <WithAlloCallButton phone={call.externalNumber} label="Rappeler" className="h-8 bg-muted text-foreground hover:bg-accent" /> : null}{call.recordingUrl ? <a href={call.recordingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-xs hover:bg-muted">Écouter <ExternalLink size={11} /></a> : null}</div>
+                <div className="flex shrink-0 flex-wrap gap-2">{call.externalNumber ? <WithAlloCallButton phone={call.externalNumber} label="Rappeler" className="h-8 bg-muted text-foreground hover:bg-accent" /> : null}</div>
               </div>;
             })}
           </div>
