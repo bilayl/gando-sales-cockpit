@@ -79,8 +79,7 @@ export function GlobalPhoneDialer() {
   }
 
   function openAllo() {
-    const tab = window.open(ALLO_URL, "_blank", "noopener,noreferrer");
-    if (!tab) setFeedbackError("Votre navigateur a bloqué l’ouverture d’Allo. Utilisez le lien « Ouvrir Allo » ci-dessous.");
+    window.open(ALLO_URL, "_blank", "noopener,noreferrer");
     // Copy is optional: this action must still open Allo if clipboard permission is denied.
     void copyNumber();
   }
@@ -91,8 +90,7 @@ export function GlobalPhoneDialer() {
     setFeedback("");
     setFeedbackError("");
     // Opening during the click gesture avoids pop-up blockers for the Allo tab.
-    const alloTab = window.open(ALLO_URL, "_blank", "noopener,noreferrer");
-    if (!alloTab) setFeedback("Utilisez le lien « Ouvrir Allo » si le nouvel onglet a été bloqué.");
+    window.open(ALLO_URL, "_blank", "noopener,noreferrer");
     try {
       const response = await fetch("/api/withallo/queue", {
         method: "POST",
@@ -116,7 +114,7 @@ export function GlobalPhoneDialer() {
         <Phone className="h-5 w-5" />
       </button>
       {open ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Téléphonie Allo">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" style={{ pointerEvents: "auto" }} role="dialog" aria-modal="true" aria-label="Téléphonie Allo">
           <div className="w-full max-w-[520px] overflow-auto rounded-2xl border border-border bg-background shadow-2xl" style={{ maxHeight: "92vh" }}>
             <div className="flex items-center justify-between border-b border-border p-5">
               <div>
