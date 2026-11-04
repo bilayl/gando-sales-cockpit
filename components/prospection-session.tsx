@@ -337,6 +337,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
   const [done, setDone] = useState<Set<string>>(new Set());
   const [finishOpen, setFinishOpen] = useState(false);
+  const [phonePanelOpen, setPhonePanelOpen] = useState(false);
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
   const [reminderAt, setReminderAt] = useState(reminderPreset(1));
   const [note, setNote] = useState("");
@@ -352,6 +353,14 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
       .map(company => company.id)
       .slice(0, 100);
   }, [companies, evaluationTime]);
+
+  useEffect(() => {
+    const onPanelToggle = (event: Event) => {
+      setPhonePanelOpen(Boolean((event as CustomEvent<{ open?: boolean }>).detail?.open));
+    };
+    window.addEventListener("gando:allo-panel-toggled", onPanelToggle);
+    return () => window.removeEventListener("gando:allo-panel-toggled", onPanelToggle);
+  }, []);
 
   const sessionQuery = useProspectionSessionData(activeIds, open);
   const summaries = sessionQuery.data?.summaries ?? {};
@@ -540,7 +549,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={onOpenChange} modal={!phonePanelOpen}>
         <DialogContent className="h-[92vh] w-[96vw] max-w-[1500px] overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-6 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -582,10 +591,10 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                   <div className="grid grid-cols-2 gap-2"><div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Dernier résultat</div><div className="mt-1 truncate text-sm font-semibold">{p.statut_de_lappel || STAGE_LABELS[current.stage]}</div></div><div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Échéance</div><div className="mt-1 truncate text-sm font-semibold">{formatDateTime(currentReminder)}</div></div></div>
 
                   <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-xs leading-5">
-                    <div className="font-semibold text-primary">Téléphonie Allo</div>
-                    <div className="mt-0.5 text-muted-foreground">{withalloReady ? "Allo est connecté. Utilisez l’extension Allo ou ouvrez son application web pour passer l’appel." : "Vérifiez WITHALLO_API_KEY et ses permissions dans les paramètres."}</div>
+                    <div className="font-semibold text-primary">Téléphone Allo intégré</div>
+                    <div className="mt-0.5 text-muted-foreground">{withalloReady ? "Utilisez le téléphone Allo intégré au Cockpit pour appeler directement depuis cette session." : "Le composeur Allo nécessite l’autorisation d’intégration de room.gando.pro par Allo. La clé API ne suffit pas."}</div>
                   </div>
-                  {p.phone || task?.sourceContactPhone ? <WithAlloCallButton phone={String(task?.sourceContactPhone || p.phone)} label="Appeler le prospect avec Allo" className="h-11 w-full" /> : <Button asChild className="w-full" variant="outline"><a href="/phone">Ouvrir Allo</a></Button>}
+                  {p.phone || task?.sourceContactPhone ? <WithAlloCallButton phone={String(task?.sourceContactPhone || p.phone)} label="Appeler depuis le Cockpit" className="h-11 w-full" /> : <Button asChild className="w-full" variant="outline"><a href="/phone">Ouvrir Allo</a></Button>}
 
                   <div className="space-y-2 border-t border-border pt-4">
                     <Button className="w-full" size="lg" onClick={openFinish}><CheckCircle2 size={17} /> Terminer l’appel</Button>

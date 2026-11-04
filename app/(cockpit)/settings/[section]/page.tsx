@@ -57,12 +57,12 @@ export default async function SettingsSectionPage({
     <PageHeader title="Intégrations" description="Allo pour les appels et leurs résumés IA ; HubSpot pour les contacts, entreprises et suivi commercial." />
     <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle className="flex flex-wrap items-center gap-2 text-base">Allo <Badge variant={allo.connected ? "default" : "outline"}>{state}</Badge></CardTitle><CardDescription>Intégration native avec la clé WITHALLO_API_KEY déjà présente sur Vercel.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex flex-wrap items-center gap-2 text-base">Allo <Badge variant={allo.connected ? "default" : "outline"}>{state}</Badge></CardTitle><CardDescription>API Allo déjà configurée ; composeur intégré au Cockpit via l’iframe officiel Allo.</CardDescription></CardHeader>
         <CardContent className="space-y-4 text-sm">
           <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Connexion API</div><div className="mt-1 font-semibold">{state}</div></div><div className="rounded-xl border border-border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Permissions disponibles</div><div className="mt-1 break-words text-xs">{allo.scopes.length ? allo.scopes.join(" · ") : "Non communiquées par Allo"}</div></div></div>
           {allo.error ? <p className="rounded-lg border border-destructive/40 p-3 text-xs text-destructive">{allo.error}</p> : null}
-          <div className="flex flex-wrap gap-2"><Button asChild><a href="/phone">Voir les appels Allo</a></Button><Button asChild variant="outline"><a href={DASHBOARD_URL} target="_blank" rel="noopener noreferrer">Ouvrir Allo <ExternalLink size={13}/></a></Button><Button asChild variant="outline"><a href="https://www.withallo.com/fr/telecharger" target="_blank" rel="noopener noreferrer">Extension Chrome <ExternalLink size={13}/></a></Button></div>
-          <p className="text-xs text-muted-foreground">Aucune clé Aircall n’est requise. Le navigateur peut utiliser l’extension Chrome Allo pour le clic-pour-appeler ; l’historique et les résumés sont lus via l’API.</p>
+          <div className="flex flex-wrap gap-2"><Button asChild><a href="/phone">Voir les appels Allo</a></Button><Button asChild variant="outline"><a href={DASHBOARD_URL} target="_blank" rel="noopener noreferrer">Ouvrir Allo <ExternalLink size={13}/></a></Button><Button asChild variant="outline"><a href="https://help.withallo.com/en/integrations/dialer/embedded-dialer" target="_blank" rel="noopener noreferrer">Activation du domaine <ExternalLink size={13}/></a></Button></div>
+          <p className="text-xs text-muted-foreground">Le téléphone intégré est indépendant de la clé API : Allo doit autoriser le domaine room.gando.pro. Les commerciaux se connectent directement dans le composeur embarqué. Les activités peuvent continuer à être synchronisées automatiquement par l’intégration native Allo–HubSpot.</p>
         </CardContent>
       </Card>
       <Card>
