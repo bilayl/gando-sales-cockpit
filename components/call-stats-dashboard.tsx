@@ -127,6 +127,7 @@ export function CallStatsDashboard() {
     });
     setLoading(true);
     setError("");
+    setData(null);
     void fetch("/api/call-analytics?"+params.toString(),{cache:"no-store",signal:abort.signal})
       .then(async response=>{
         const body=await response.json().catch(()=>({}));
