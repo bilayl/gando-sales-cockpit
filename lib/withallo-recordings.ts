@@ -1,5 +1,5 @@
 import "server-only";
-import { withAlloRequest, WithAlloError } from "@/lib/withallo";
+import { withAlloRequest, WithAlloError, listWithAlloUserEmails } from "@/lib/withallo";
 import type { CockpitAccess } from "@/lib/cockpit-access";
 
 // Recording links never leave this server module. Allo's download API returns
@@ -13,7 +13,7 @@ type AlloCallDetail = {
   recording_download_url?: string | null;
   recording_duration?: number | null;
   user_email?: string | null;
-  user?: { email?: string | null } | null;
+  user?: { email?: string | null; id?: string | null } | null;
 };
 
 function safeCallId(id: string) {
@@ -31,7 +31,13 @@ export async function getAuthorizedAlloCall(id: string, access: CockpitAccess): 
     throw new WithAlloError("Appel introuvable.", 404);
   }
   // Do not expose the team-wide Allo service key's recordings to other reps.
-  const userEmail = String(call.user?.email || call.user_email || "").trim().toLowerCase();
+  let userEmail = String(call.user?.email || call.user_email || "").trim().toLowerCase();
+  // Some Allo API versions omit user.email on the item but include user.id.
+  // Only resolve the ID with the official team roster; never trust caller input.
+  if (!userEmail && call.user?.id && access.role !== "admin") {
+    const users = await listWithAlloUserEmails().catch(() => new Map<string, string>());
+    userEmail = users.get(call.user.id) || "";
+  }
   if (access.role !== "admin" && (!access.email || userEmail !== access.email.trim().toLowerCase())) {
     throw new WithAlloError("Cet enregistrement est réservé au commercial concerné.", 403);
   }

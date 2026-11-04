@@ -79,7 +79,7 @@ export type WithAlloNumber = { number: string; name: string };
 export type WithAlloCall = {
   id: string; startedAt: string | null; direction: string | null; status: string | null;
   from: string | null; to: string | null; externalNumber: string | null;
-  durationSeconds: number | null; ownerEmail: string | null; summary: string | null;
+  durationSeconds: number | null; ownerEmail: string | null; ownerId: string | null; summary: string | null;
   transcript: string | null; recordingUrl: string | null; recordingAvailable: boolean;
 };
 
@@ -144,10 +144,19 @@ function parseCall(value: unknown, lineNumber: string): WithAlloCall | null {
     externalNumber: other,
     durationSeconds: durationRaw != null && Number.isFinite(duration) ? Math.max(0, Math.round(duration)) : null,
     ownerEmail: email,
+    ownerId: text(first(owner, ["id"])) || text(first(call, ["user_id", "agent_id"])),
     summary, transcript,
     recordingUrl: recording && /^https:\/\//.test(recording) ? recording : null,
     recordingAvailable: Boolean(recording) || Number(call.recording_duration || 0) > 0 || Boolean(call.recording === true),
   };
+}
+
+export async function listWithAlloUserEmails() {
+  const payload = await withAlloRequest<{ data?: Array<{ id?: string; email?: string }> }>("/v2/api/users");
+  const users = Array.isArray(payload.data) ? payload.data : [];
+  return new Map(users
+    .filter((user): user is { id: string; email: string } => typeof user.id === "string" && typeof user.email === "string")
+    .map(user => [user.id, user.email.trim().toLowerCase()]));
 }
 
 export async function getWithAlloCalls(limit = 80) {
@@ -160,11 +169,18 @@ export async function getWithAlloCalls(limit = 80) {
       { method: "POST", body: JSON.stringify({ type: "CALL", sort: "DATE_DESC", size, page: 1, extend: "transcript" }) },
     );
     if (Array.isArray(response.data)) {
-      return response.data
+      const calls = response.data
         .map(item => parseCall(item, ""))
         .filter((item): item is WithAlloCall => Boolean(item && /^cll[-_]/.test(item.id)))
         .sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""))
         .slice(0, size);
+      if (calls.some(call => !call.ownerEmail && call.ownerId)) {
+        const users = await listWithAlloUserEmails().catch(() => new Map<string, string>());
+        calls.forEach(call => {
+          if (!call.ownerEmail && call.ownerId) call.ownerEmail = users.get(call.ownerId) || null;
+        });
+      }
+      return calls;
     }
   } catch (error) {
     console.warn("Allo v2 history unavailable, trying legacy list:", error instanceof Error ? error.message : "unknown");
