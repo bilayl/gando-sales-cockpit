@@ -49,7 +49,12 @@ export function AircallHistoryView({ compact = false, phone, limit = 80 }: { com
     }
   }, [phone, limit]);
 
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    void reload();
+    const refresh = () => { void reload(); };
+    window.addEventListener("gando:aircall-updated", refresh);
+    return () => window.removeEventListener("gando:aircall-updated", refresh);
+  }, [reload]);
 
   const stats = useMemo(() => ({
     total: calls.length,
@@ -90,7 +95,7 @@ export function AircallHistoryView({ compact = false, phone, limit = 80 }: { com
                   {call.tags?.length ? <div className="mt-1 text-[11px] text-muted-foreground">{call.tags.join(" · ")}</div> : null}
                 </div>
                 {call.external_number ? <AircallCallButton phone={call.external_number} label="Rappeler" className="h-8 bg-muted text-foreground hover:bg-accent" /> : null}
-                {call.recording_url ? <a href={call.recording_url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-xs hover:bg-muted"><PhoneCall size={12} /> Écouter <ExternalLink size={11} /></a> : null}
+                {call.recording_url ? <a href={`/api/aircall/calls/${call.call_id}/recording`} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-xs hover:bg-muted"><PhoneCall size={12} /> Écouter <ExternalLink size={11} /></a> : null}
               </div>;
             })}
           </div>}
