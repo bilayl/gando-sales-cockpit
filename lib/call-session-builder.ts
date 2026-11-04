@@ -9,7 +9,7 @@ import {
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 import { getBestCallTimeForProperties } from "@/lib/call-timing"
 import { claimCockpitCompanies, listCockpitCompanyAssignments } from "@/lib/cockpit-company-assignment"
-import { getAircallStatus } from "@/lib/aircall"
+import { getWithAlloStatus } from "@/lib/withallo"
 
 export async function createFilteredSalesCallSession(input?: {
   owner?: string
@@ -136,12 +136,12 @@ export async function createFilteredSalesCallSession(input?: {
     if (error) throw error
   }
 
-  const aircall = await getAircallStatus()
+  const withallo = await getWithAlloStatus()
 
   return {
     ...(await getSalesCallSession(String(session.id))),
     appliedFilters: filters,
     filterSummary: summaries,
-    aircall,
+    withallo,
   }
 }
