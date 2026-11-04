@@ -24,9 +24,12 @@ async function roster():Promise<AlloUser[]> {
   }).filter(u=>u.id.length>0);
 }
 const cmp = (r:CallAnalyticsRange)=>({date:{from:r.from,to:r.to},compare_date:{from:r.previousFrom,to:r.previousTo}});
-const filters = (breakdown:CallAnalyticsBreakdown,filterId:string|null,forcedUser:string|null)=> forcedUser?{user_ids:[forcedUser]}:
-  breakdown==="user"&&filterId?{user_ids:[filterId]}:
-  breakdown==="phone"&&filterId?{allo_numbers:[filterId]}:{};
+function filters(breakdown:CallAnalyticsBreakdown,filterId:string|null,forcedUser:string|null):Record<string,string[]> {
+  if(forcedUser)return {user_ids:[forcedUser]};
+  if(breakdown==="user"&&filterId)return {user_ids:[filterId]};
+  if(breakdown==="phone"&&filterId)return {allo_numbers:[filterId]};
+  return {};
+}
 function toMetrics(data:AlloOverview):CallMetrics {
   const s=obj(data.summary);
   return {
