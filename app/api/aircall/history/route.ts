@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    await requireCockpitAccess();
+    const access = await requireCockpitAccess();
     const url = new URL(request.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 80, 1), 200);
     const phone = url.searchParams.get("phone");
@@ -19,6 +19,10 @@ export async function GET(request: NextRequest) {
       .order("started_at", { ascending: false })
       .limit(limit);
     if (international) query = query.eq("external_number", international);
+    if (access.role !== "admin") {
+      if (!access.email) return NextResponse.json({ error: "Votre compte doit être associé à un e-mail." }, { status: 403 });
+      query = query.ilike("agent_email", access.email);
+    }
     const { data, error } = await query;
     if (error) throw error;
     return NextResponse.json({ items: data || [], total: data?.length || 0 }, { headers: { "cache-control": "private, no-store" } });
