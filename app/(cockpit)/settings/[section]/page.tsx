@@ -2,44 +2,23 @@ import { redirect } from "next/navigation";
 import { ExternalLink, PhoneCall, Radio, ShieldCheck, Webhook } from "lucide-react";
 import { getHubSpotIdentity, isHubSpotAuthenticated, isHubSpotOAuthConfigured } from "@/lib/hubspot";
 import { getCockpitAccess } from "@/lib/cockpit-access";
-import { getOnoffDirectApiStatus } from "@/lib/onoff";
+import { getAircallStatus } from "@/lib/aircall";
 import { SettingsTeam } from "@/components/settings-team";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const ONOFF_WEBPHONE_URL = "https://phone.onoffbusiness.com/";
-const ONOFF_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
+const WORKSPACE_URL = "https://workspace.aircall.io/";
+const DASHBOARD_URL = "https://dashboard.aircall.io/";
+const WEBHOOK_URL = "https://room.gando.pro/api/aircall/webhook";
 
 const VALID_SECTIONS = new Set([
-  "numbers",
-  "members",
-  "billing",
-  "usage",
-  "tags",
-  "models",
-  "profile",
-  "email-notifications",
-  "integrations",
-  "api-keys",
-  "webhooks",
-  "compliance",
+  "numbers", "members", "billing", "usage", "tags", "models", "profile",
+  "email-notifications", "integrations", "api-keys", "webhooks", "compliance",
 ]);
 
-function formatDate(value?: string | null) {
-  if (!value) return "Aucun événement reçu";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(date);
-}
-
 function PageHeader({ title, description }: { title: string; description?: string }) {
-  return (
-    <div className="mb-6">
-      <h1 className="text-[22px] font-semibold tracking-[-0.035em]">{title}</h1>
-      {description ? <p className="mt-1 max-w-2xl text-[12px] leading-5 text-muted-foreground">{description}</p> : null}
-    </div>
-  );
+  return <div className="mb-6"><h1 className="text-[22px] font-semibold tracking-[-0.035em]">{title}</h1>{description ? <p className="mt-1 max-w-2xl text-[12px] leading-5 text-muted-foreground">{description}</p> : null}</div>;
 }
 
 function EmptySetting({ title, description }: { title: string; description: string }) {
@@ -49,74 +28,30 @@ function EmptySetting({ title, description }: { title: string; description: stri
 export const dynamic = "force-dynamic";
 
 export default async function SettingsSectionPage({
-  params,
-  searchParams,
+  params, searchParams,
 }: {
   params: Promise<{ section: string }>;
   searchParams?: Promise<{ hubspot?: string }>;
 }) {
   const { section } = await params;
   if (!VALID_SECTIONS.has(section)) redirect("/settings/integrations");
-
   const access = await getCockpitAccess();
-  const onoff = await getOnoffDirectApiStatus().catch(error => ({
-    configured: false,
-    connected: false,
-    source: "onoff_api" as const,
-    latestCallId: null,
-    latestEventName: null,
-    latestReceivedAt: null,
-    latestProcessingStatus: null,
-    webhookAuthenticated: false,
-    checkedAt: new Date().toISOString(),
-    error: error instanceof Error ? error.message : "Impossible de vérifier Onoff.",
-  }));
-  const apiState = !onoff.configured ? "À configurer" : onoff.connected === true ? "Connectée" : onoff.connected === false ? "À vérifier" : "Configurée";
+  const aircall = await getAircallStatus();
+  const apiState = aircall.connected ? "Connectée" : aircall.configured ? "À vérifier" : "À configurer";
 
   if (section === "numbers") {
-    return <><PageHeader title="Numéros" description="Lignes professionnelles utilisées par l’équipe commerciale." /><Card><CardContent className="flex flex-wrap items-center justify-between gap-4 p-5"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-[13px] bg-muted"><PhoneCall className="h-4 w-4" /></div><div><div className="text-sm font-semibold">Onoff Business</div><div className="mt-0.5 text-xs text-muted-foreground">Les lignes restent administrées dans Onoff.</div></div></div><Button variant="outline" size="sm" asChild><a href={ONOFF_WEBPHONE_URL} target="_blank" rel="noreferrer">Gérer dans Onoff <ExternalLink className="ml-1.5 h-3.5 w-3.5" /></a></Button></CardContent></Card></>;
+    return <><PageHeader title="Numéros Aircall" description="Lignes professionnelles attribuées aux commerciaux." /><Card><CardContent className="flex flex-wrap items-center justify-between gap-4 p-5"><div className="flex items-center gap-3"><PhoneCall size={18} /><div><div className="text-sm font-semibold">Lignes Aircall</div><div className="mt-0.5 text-xs text-muted-foreground">Gérées dans le tableau de bord Aircall.</div></div></div><Button variant="outline" asChild><a href={DASHBOARD_URL} target="_blank" rel="noopener noreferrer">Gérer les numéros <ExternalLink size={13} /></a></Button></CardContent></Card></>;
   }
-
-  if (section === "members") {
-    return <><PageHeader title="Membres" description="Accès au Cockpit et rôles de l’équipe." /><SettingsTeam initialCanManage={Boolean(access?.canManageTeam)} /></>;
-  }
-
-  if (section === "billing") {
-    return <><PageHeader title="Facturation" /><EmptySetting title="Facturation" description="La facturation téléphonie reste gérée depuis Onoff Business." /></>;
-  }
-
-  if (section === "usage") {
-    return <><PageHeader title="Utilisation" description="Suivi de l’usage téléphonique synchronisé avec le Cockpit." /><Card><CardContent className="grid gap-3 p-5 sm:grid-cols-2"><div className="rounded-[14px] border border-border bg-muted/35 p-3"><span className="text-xs text-muted-foreground">API Onoff</span><div className="mt-1 font-medium">{apiState}</div></div><div className="rounded-[14px] border border-border bg-muted/35 p-3"><span className="text-xs text-muted-foreground">Dernier traitement</span><div className="mt-1 font-medium">{onoff.latestProcessingStatus || "—"}</div></div></CardContent></Card></>;
-  }
-
-  if (section === "tags") {
-    return <><PageHeader title="Tags" /><EmptySetting title="Tags d’appel" description="Les tags Onoff sont conservés avec les métadonnées d’appel et pourront être exploités dans le CRM." /></>;
-  }
-
-  if (section === "models") {
-    return <><PageHeader title="Modèles" /><EmptySetting title="Modèles de compte rendu" description="Les transcriptions et métadonnées Onoff alimentent les modèles Gando après l’appel." /></>;
-  }
-
-  if (section === "profile") {
-    return <><PageHeader title="Profil" /><EmptySetting title={access?.email || "Compte Gando"} description="Profil utilisé pour attribuer les actions et sessions commerciales." /></>;
-  }
-
-  if (section === "email-notifications") {
-    return <><PageHeader title="Notifications par e-mail" /><EmptySetting title="Notifications" description="Les préférences de notification sont centralisées dans cette rubrique." /></>;
-  }
-
-  if (section === "api-keys") {
-    return <><PageHeader title="Clés API" description="Les secrets restent exclusivement côté serveur." /><Card><CardContent className="flex items-center justify-between gap-4 p-5"><div><div className="text-sm font-semibold">Onoff API</div><div className="mt-1 text-xs text-muted-foreground">Clé stockée côté serveur dans Supabase Vault.</div></div><Badge variant={onoff.configured ? "default" : "outline"}>{onoff.configured ? "Protégée" : "Manquante"}</Badge></CardContent></Card></>;
-  }
-
-  if (section === "webhooks") {
-    const webhookState = onoff.latestCallId ? "Flux reçu" : "En attente";
-    return <><PageHeader title="Webhooks" description="Synchronisation Onoff → Gando." /><Card><CardContent className="space-y-4 p-5"><div className="flex items-start gap-3"><div className="grid h-9 w-9 place-items-center rounded-[13px] bg-muted"><Webhook className="h-4 w-4" /></div><div><div className="text-sm font-semibold">CDR / RECORDING Onoff</div><div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">https://gando-sales-cockpit-web.vercel.app/v1/onoff/cdr</div></div></div><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-[14px] border border-border bg-muted/35 p-3"><span className="text-xs text-muted-foreground">État du flux</span><div className="mt-1 font-medium">{webhookState}</div></div><div className="rounded-[14px] border border-border bg-muted/35 p-3"><span className="text-xs text-muted-foreground">Dernier type</span><div className="mt-1 font-medium">{onoff.latestEventName || "—"}</div></div></div><p className="text-xs leading-5 text-muted-foreground">Le webhook signale l’événement. Gando vérifie ensuite le call ID avec l’API Onoff avant de réconcilier l’appel avec le prospect et la session commerciale.</p></CardContent></Card></>;
-  }
-
-  if (section === "compliance") {
-    return <><PageHeader title="Conformité" /><Card><CardContent className="flex items-start gap-3 p-5"><ShieldCheck className="mt-0.5 h-5 w-5 text-muted-foreground" /><div><div className="text-sm font-semibold">Séparation des responsabilités</div><div className="mt-1 text-xs leading-5 text-muted-foreground">Onoff gère le média téléphonique. Gando conserve la logique commerciale et les métadonnées nécessaires au suivi. HubSpot reste le CRM de référence.</div></div></CardContent></Card></>;
-  }
+  if (section === "members") return <><PageHeader title="Membres" description="Accès au Cockpit et rôles de l’équipe." /><SettingsTeam initialCanManage={Boolean(access?.canManageTeam)} /></>;
+  if (section === "billing") return <><PageHeader title="Facturation" /><EmptySetting title="Facturation téléphonique" description="Les abonnements et consommations Aircall sont consultables depuis Aircall Dashboard." /></>;
+  if (section === "usage") return <><PageHeader title="Utilisation" description="Données d’appels et performances synchronisées." /><Card><CardContent className="grid gap-3 p-5 sm:grid-cols-2"><div className="rounded-xl border border-border bg-muted/35 p-3"><div className="text-xs text-muted-foreground">API Aircall</div><div className="mt-1 font-semibold">{apiState}</div></div><div className="rounded-xl border border-border bg-muted/35 p-3"><div className="text-xs text-muted-foreground">Webhook Aircall</div><div className="mt-1 font-semibold">{aircall.webhookConfigured ? "Secret configuré" : "À configurer"}</div></div></CardContent></Card></>;
+  if (section === "tags") return <><PageHeader title="Tags d’appel" /><EmptySetting title="Tags Aircall" description="Les tags transmis par le webhook Aircall sont visibles dans l’historique Gando." /></>;
+  if (section === "models") return <><PageHeader title="Modèles" /><EmptySetting title="Comptes rendus" description="La synchronisation native des appels Aircall fournit la base des comptes rendus et du suivi commercial." /></>;
+  if (section === "profile") return <><PageHeader title="Profil" /><EmptySetting title={access?.email || "Compte Gando"} description="Votre adresse e-mail Gando doit être identique à celle de votre utilisateur Aircall." /></>;
+  if (section === "email-notifications") return <><PageHeader title="Notifications" /><EmptySetting title="Notifications par e-mail" description="Préférences de notification du Cockpit." /></>;
+  if (section === "api-keys") return <><PageHeader title="Clés API" description="Les identifiants Aircall restent exclusivement côté serveur." /><Card><CardContent className="flex flex-wrap items-center justify-between gap-4 p-5"><div><div className="text-sm font-semibold">Aircall API</div><div className="mt-1 text-xs text-muted-foreground">Variables serveur AIRCALL_API_ID et AIRCALL_API_TOKEN dans Vercel, jamais exposées au navigateur.</div></div><Badge variant={aircall.connected ? "default" : "outline"}>{apiState}</Badge></CardContent></Card></>;
+  if (section === "webhooks") return <><PageHeader title="Webhooks" description="Synchronisation Aircall → Gando après la fin de chaque appel." /><Card><CardContent className="space-y-4 p-5"><div className="flex items-start gap-3"><Webhook size={17} /><div><div className="text-sm font-semibold">Aircall · appels terminés</div><div className="mt-1 break-all font-mono text-xs text-muted-foreground">{WEBHOOK_URL}</div></div></div><Badge variant={aircall.webhookConfigured ? "default" : "outline"}>{aircall.webhookConfigured ? "Secret de vérification présent" : "À configurer dans Aircall"}</Badge><p className="text-xs text-muted-foreground">Événements : call.ended, call.tagged, call.commented, call.comm_assets_generated. Les événements sont authentifiés par le token unique du webhook.</p></CardContent></Card></>;
+  if (section === "compliance") return <><PageHeader title="Conformité" /><Card><CardContent className="flex items-start gap-3 p-5"><ShieldCheck size={18} /><div><div className="text-sm font-semibold">Sécurité des communications</div><div className="mt-1 text-xs text-muted-foreground">Aircall assure la téléphonie. Gando n’expose ni les clés API ni les enregistrements sans authentification du Cockpit. Vérifiez les obligations d’information et de conservation avant d’activer les enregistrements.</div></div></CardContent></Card></>;
 
   const oauthConfigured = isHubSpotOAuthConfigured();
   const connected = await isHubSpotAuthenticated().catch(() => false);
@@ -125,38 +60,29 @@ export default async function SettingsSectionPage({
   const mode = identity?.mode === "oauth" ? "OAuth HubSpot" : identity?.mode === "service_token" ? "Connexion serveur Gando" : configured ? "OAuth configuré" : "Non configuré";
   const state = connected ? "Opérationnel" : configured ? "À reconnecter" : "Non configuré";
   const query = searchParams ? await searchParams : {};
-  const reconnectStatus = query?.hubspot;
 
-  return (
-    <>
-      <PageHeader title="Intégrations" description="Onoff porte la téléphonie. Gando orchestre la prospection, le prospect, le résultat et HubSpot." />
-      <div className="space-y-4">
-        <Card className="overflow-hidden">
-          <CardHeader><CardTitle className="flex flex-wrap items-center gap-2 text-base">Onoff Business <Badge variant={onoff.configured && onoff.connected !== false ? "default" : "outline"}>{apiState}</Badge></CardTitle><CardDescription>API Onoff côté serveur et webhooks pour réconcilier les appels dans le Cockpit.</CardDescription></CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[14px] border border-border bg-muted/35 p-3"><span className="text-xs text-muted-foreground">API directe Onoff</span><div className="mt-1 font-medium">{apiState}</div></div>
-              <div className="rounded-[14px] border border-border bg-muted/35 p-3"><span className="text-xs text-muted-foreground">Dernier événement</span><div className="mt-1 font-medium">{formatDate(onoff.latestReceivedAt)}</div></div>
-              <div className="rounded-[14px] border border-border bg-muted/35 p-3"><span className="text-xs text-muted-foreground">Traitement Gando</span><div className="mt-1 font-medium">{onoff.latestProcessingStatus || "—"}</div></div>
-            </div>
-            {onoff.error ? <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{onoff.error}</div> : null}
-            <div className="flex flex-wrap gap-2"><Button asChild><a href={ONOFF_WEBPHONE_URL} target="_blank" rel="noreferrer">Ouvrir Onoff <ExternalLink className="ml-1.5 h-3.5 w-3.5" /></a></Button><Button variant="outline" asChild><a href={ONOFF_EXTENSION_URL} target="_blank" rel="noreferrer">Click2Call Onoff <ExternalLink className="ml-1.5 h-3.5 w-3.5" /></a></Button></div>
-            <p className="text-xs leading-5 text-muted-foreground">La clé API reste dans Supabase Vault. Le navigateur ne la reçoit jamais. Les webhooks ferment la boucle après l’appel.</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-base">HubSpot <Badge variant={connected ? "default" : "outline"}>{state}</Badge></CardTitle><CardDescription>Source CRM du Cockpit : contacts, entreprises, propriétaires et historique commercial.</CardDescription></CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            {reconnectStatus === "reconnected" ? <div className="rounded-lg border border-border bg-muted/45 px-3 py-2 font-medium">HubSpot a bien été reconnecté.</div> : null}
-            {reconnectStatus === "error" ? <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 font-medium text-destructive">La reconnexion HubSpot a échoué.</div> : null}
-            <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-[14px] border border-border bg-muted/35 p-3"><span className="text-muted-foreground">Mode</span><div className="mt-1 font-medium">{mode}</div></div><div className="rounded-[14px] border border-border bg-muted/35 p-3"><span className="text-muted-foreground">État API</span><div className="mt-1 font-medium">{state}</div></div></div>
-            <Button asChild disabled={!oauthConfigured}><a href="/api/auth/hubspot?returnTo=%2Fsettings%2Fintegrations">{connected ? "Reconnecter HubSpot" : "Connecter HubSpot"}</a></Button>
-          </CardContent>
-        </Card>
-
-        <div className="flex items-center gap-2 border-t border-border pt-5 text-[11px] text-muted-foreground"><Radio className="h-3.5 w-3.5" /> Paramètres Cockpit · Onoff API + Webhooks + HubSpot</div>
-      </div>
-    </>
-  );
+  return <>
+    <PageHeader title="Intégrations" description="Aircall gère les communications. Gando relie la prospection, les appels et le CRM HubSpot." />
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle className="flex flex-wrap items-center gap-2 text-base">Aircall <Badge variant={aircall.connected ? "default" : "outline"}>{apiState}</Badge></CardTitle><CardDescription>Appels sortants via API, téléphone Aircall Everywhere intégré et webhooks pour l’historique.</CardDescription></CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">API Aircall</div><div className="mt-1 font-semibold">{apiState}</div></div><div className="rounded-xl border border-border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Webhook Aircall</div><div className="mt-1 font-semibold">{aircall.webhookConfigured ? "Secret configuré" : "À configurer"}</div></div></div>
+          {aircall.error ? <p className="rounded-lg border border-destructive/40 p-3 text-xs text-destructive">{aircall.error}</p> : null}
+          <div className="flex flex-wrap gap-2"><Button asChild><a href="/phone">Ouvrir le téléphone Gando</a></Button><Button asChild variant="outline"><a href={WORKSPACE_URL} target="_blank" rel="noopener noreferrer">Aircall Workspace <ExternalLink size={13} /></a></Button><Button asChild variant="outline"><a href={DASHBOARD_URL} target="_blank" rel="noopener noreferrer">Aircall Dashboard <ExternalLink size={13} /></a></Button></div>
+          <p className="text-xs text-muted-foreground">Configurez AIRCALL_API_ID, AIRCALL_API_TOKEN et AIRCALL_WEBHOOK_TOKEN sur Vercel. Chaque commercial doit utiliser la même adresse e-mail dans Gando et Aircall.</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base">HubSpot <Badge variant={connected ? "default" : "outline"}>{state}</Badge></CardTitle><CardDescription>CRM de référence : contacts, entreprises, responsables commerciaux et historique HubSpot.</CardDescription></CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          {query.hubspot === "reconnected" ? <div className="rounded-lg border border-border bg-muted px-3 py-2">HubSpot a bien été reconnecté.</div> : null}
+          {query.hubspot === "error" ? <div className="rounded-lg border border-destructive/40 px-3 py-2 text-destructive">La reconnexion HubSpot a échoué.</div> : null}
+          <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Mode</div><div className="mt-1 font-semibold">{mode}</div></div><div className="rounded-xl border border-border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">État API</div><div className="mt-1 font-semibold">{state}</div></div></div>
+          <Button asChild><a href="/api/auth/hubspot?returnTo=%2Fsettings%2Fintegrations">{connected ? "Reconnecter HubSpot" : "Connecter HubSpot"}</a></Button>
+        </CardContent>
+      </Card>
+      <div className="flex items-center gap-2 border-t border-border pt-5 text-xs text-muted-foreground"><Radio size={14} /> Cockpit · Aircall + HubSpot</div>
+    </div>
+  </>;
 }

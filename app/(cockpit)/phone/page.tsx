@@ -1,5 +1,4 @@
 import { AircallHistoryView } from "@/components/aircall-history-view";
-import { AircallCallButton } from "@/components/aircall-call-button";
 import { getAircallStatus } from "@/lib/aircall";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +19,7 @@ export default async function PhonePage() {
         {status.error ? <div className="rounded-xl border border-destructive/30 p-4 text-sm text-destructive">{status.error}</div> : null}
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-sm">Pour ouvrir le téléphone intégré, utilise le bouton flottant en bas à droite. Depuis une fiche CRM, le numéro du contact est prérempli automatiquement.</p>
-          <div className="mt-3 flex flex-wrap items-center gap-3"><AircallCallButton phone="" label="Appeler un contact" className="hidden" /><a href="/settings/integrations" className="text-xs font-medium text-primary hover:underline">Paramètres Aircall</a><a href="https://workspace.aircall.io/" target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-primary hover:underline">Aircall Workspace</a></div>
+          <div className="mt-3 flex flex-wrap items-center gap-3"><a href="/settings/integrations" className="text-xs font-medium text-primary hover:underline">Paramètres Aircall</a><a href="https://workspace.aircall.io/" target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-primary hover:underline">Aircall Workspace</a></div>
         </div>
         <AircallHistoryView />
       </div>
