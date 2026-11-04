@@ -1,0 +1,26 @@
+export type CallAnalyticsSource = "allo" | "hubspot";
+export type CallAnalyticsView = "overview" | "outbound" | "inbound" | "power";
+export type CallAnalyticsBreakdown = "user" | "phone";
+export type CallMetric = { value: number; previous: number | null; change: number | null };
+export type CallMetricKey = "calls" | "talkSeconds" | "longCalls" | "answerRate";
+export type CallMetrics = Record<CallMetricKey, CallMetric>;
+export type CallStatsRow = { id: string; name: string; subtitle: string | null; metrics: CallMetrics };
+export type CallAnalyticsRange = { from: string; to: string; previousFrom: string; previousTo: string };
+export type CallStatsOption = { id: string; label: string };
+export type CallFunnelItem = { key: string; name: string; metric: CallMetric; rate: number | null };
+export type CallAnalyticsResponse = {
+  source: CallAnalyticsSource;
+  view: CallAnalyticsView;
+  breakdown: CallAnalyticsBreakdown;
+  period: CallAnalyticsRange;
+  metrics: CallMetrics;
+  rows: CallStatsRow[];
+  userOptions: CallStatsOption[];
+  phoneOptions: CallStatsOption[];
+  filterId: string | null;
+  canCompareTeam: boolean;
+  updatedAt: string | null;
+  funnel: CallFunnelItem[];
+  notes: string[];
+  partial: boolean;
+};
