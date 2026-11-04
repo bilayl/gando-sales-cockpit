@@ -7,6 +7,7 @@ import {
   CalendarDays,
   CircleHelp,
   ContactRound,
+  Headphones,
   Home,
   ListFilter,
   ListTodo,
@@ -106,6 +107,7 @@ export function AppSidebar({
     { href: "/today", label: "Accueil", icon: Home },
     { href: "/prospection", label: "Prospection", icon: PhoneCall },
     { href: "/contacts", label: "Contacts", icon: ContactRound },
+    { href: "/phone", label: "Appels", icon: Headphones },
     { href: "/agenda", label: "Agenda", icon: CalendarDays },
     { href: "/meetings", label: "Rendez-vous", icon: CalendarCheck2 },
   ];
