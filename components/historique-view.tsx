@@ -18,7 +18,6 @@ type HistoryItem = {
   ownerId?: string;
   toNumber?: string;
   fromNumber?: string;
-  onoffTranscript?: string;
   hubspotTranscriptAvailable?: boolean;
   hubspotSummary?: string;
   hubspotNotes?: string;
@@ -59,10 +58,9 @@ function TranscriptBlock({
 
 function CallTranscripts({ item }: { item: HistoryItem }) {
   const hubspotNotes = item.hubspotNotes?.trim();
-  const onoffTranscript = item.onoffTranscript?.trim();
   const hubspotSummary = item.hubspotSummary?.trim();
   const hasHubSpot = Boolean(hubspotSummary || item.hubspotTranscriptAvailable);
-  if (!hubspotNotes && !onoffTranscript && !hasHubSpot) return null;
+  if (!hubspotNotes && !hasHubSpot) return null;
 
   return (
     <div className="mt-3 grid gap-2 border-t border-border pt-3">
@@ -72,11 +70,6 @@ function CallTranscripts({ item }: { item: HistoryItem }) {
         </TranscriptBlock>
       ) : null}
 
-      {onoffTranscript ? (
-        <TranscriptBlock title="Transcription de l’appel" badge="Onoff" icon={<MessageSquareText size={14} />}>
-          <div className="max-h-[420px] overflow-y-auto whitespace-pre-wrap font-mono text-[11px] leading-5">{onoffTranscript}</div>
-        </TranscriptBlock>
-      ) : null}
 
       {hasHubSpot ? (
         <TranscriptBlock title="Synthèse HubSpot issue de la transcription" badge="HubSpot CI" icon={<Sparkles size={14} />}>

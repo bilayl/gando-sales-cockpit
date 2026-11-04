@@ -1,6 +1,6 @@
 "use client";
-import { AircallCallButton } from "@/components/aircall-call-button";
-import { AircallHistoryView } from "@/components/aircall-history-view";
+import { WithAlloCallButton } from "@/components/withallo-call-button";
+import { WithAlloHistoryView } from "@/components/withallo-history-view";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -289,7 +289,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            {effectivePhone ? <AircallCallButton phone={effectivePhone} className="h-8" /> : null}
+            {effectivePhone ? <WithAlloCallButton phone={effectivePhone} className="h-8" /> : null}
             {effectiveEmail ? <Button asChild variant="outline" size="sm" className="h-8"><a href={`mailto:${effectiveEmail}`}><Mail size={13} /> Email</a></Button> : null}
             <NewCRMNoteButton kind={kind} recordId={recordId} onCreated={async () => { setTab("notes"); await load(); }} />
             <ProfileSourcingButton entityType={kind} entityId={recordId} onCompleted={load} label="Enrichir" />
@@ -317,7 +317,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
               </div>
 
               <div className="mt-5 grid grid-cols-3 gap-2">
-                {effectivePhone ? <AircallCallButton phone={effectivePhone} className="h-[54px] flex-col gap-1 border border-border bg-background text-[10px] text-foreground hover:bg-muted" /> : <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-border bg-muted/20 px-2 py-2.5 text-[10px] text-muted-foreground"><Phone size={15} />Sans tél.</div>}
+                {effectivePhone ? <WithAlloCallButton phone={effectivePhone} className="h-[54px] flex-col gap-1 border border-border bg-background text-[10px] text-foreground hover:bg-muted" /> : <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-border bg-muted/20 px-2 py-2.5 text-[10px] text-muted-foreground"><Phone size={15} />Sans tél.</div>}
                 {effectiveEmail ? <a href={`mailto:${effectiveEmail}`} className="flex flex-col items-center justify-center gap-1 rounded-lg border border-border bg-background px-2 py-2.5 text-[10px] font-medium transition hover:bg-muted"><Mail size={15} />Email</a> : <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-border bg-muted/20 px-2 py-2.5 text-[10px] text-muted-foreground"><Mail size={15} />Sans email</div>}
                 <button type="button" onClick={() => setTab("notes")} className="flex flex-col items-center justify-center gap-1 rounded-lg border border-border bg-background px-2 py-2.5 text-[10px] font-medium transition hover:bg-muted"><StickyNote size={15} />Notes</button>
               </div>
@@ -370,7 +370,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
               {tab === "overview" ? (
                 <div className="space-y-6">
                   <section>
-                    <div className="mb-3 flex items-center justify-between"><div className="text-[13px] font-semibold">Highlights</div><div className="text-[11px] text-muted-foreground">Synchronisé avec HubSpot + Aircall</div></div>
+                    <div className="mb-3 flex items-center justify-between"><div className="text-[13px] font-semibold">Highlights</div><div className="text-[11px] text-muted-foreground">Synchronisé avec HubSpot + Allo</div></div>
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-xl border border-border p-4"><div className="text-[11px] text-muted-foreground">Statut commercial</div><div className="mt-3 text-[16px] font-semibold">{lifecycle}</div><div className="mt-1 text-[10px] text-muted-foreground">{p.statut_de_lappel || "Dernier résultat non renseigné"}</div></div>
                       <div className="rounded-xl border border-border p-4"><div className="text-[11px] text-muted-foreground">Prochaine action</div><div className="mt-3 text-[16px] font-semibold">{nextAction ? formatDateTime(nextAction) : "Aucune planifiée"}</div><div className="mt-1 text-[10px] text-muted-foreground">Relance / tâche commerciale</div></div>
@@ -393,7 +393,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div><div className="flex items-center gap-2 text-[13px] font-semibold"><Sparkles size={14} className="text-primary" /> Actions rapides</div><div className="mt-1 text-[10px] text-muted-foreground">Chaque action est séparée pour éviter de mélanger qualification et exécution.</div></div>
                       <div className="flex flex-wrap gap-2">
-                        {effectivePhone ? <Button asChild size="sm"><a href={`tel:${effectivePhone}`}><Phone size={13} /> Appeler</a></Button> : null}
+                        {effectivePhone ? <WithAlloCallButton phone={effectivePhone} /> : null}
                         <NewCRMNoteButton kind={kind} recordId={recordId} onCreated={async () => { setTab("notes"); await load(); }} />
                         <PostCallEmailButton
                           contactId={emailContactId || undefined}
@@ -415,13 +415,13 @@ export function CRMRecordPage({ kind, recordId }: Props) {
 
               {tab === "activity" ? (
                 <section className="rounded-xl border border-border">
-                  <div className="border-b border-border px-4 py-3"><div className="text-[13px] font-semibold">Toute l’activité</div><div className="mt-0.5 text-[10px] text-muted-foreground">Historique chronologique HubSpot + Aircall</div></div>
+                  <div className="border-b border-border px-4 py-3"><div className="text-[13px] font-semibold">Toute l’activité</div><div className="mt-0.5 text-[10px] text-muted-foreground">Historique chronologique HubSpot + Allo</div></div>
                   <div className="px-4">{timeline.length ? timeline.map(renderTimelineItem) : <div className="py-12 text-center text-[12px] text-muted-foreground">Aucune activité.</div>}</div>
                 </section>
               ) : null}
 
               {tab === "calls" ? (
-                <div className="mb-4"><AircallHistoryView phone={effectivePhone || undefined} compact limit={50} /></div>
+                <div className="mb-4"><WithAlloHistoryView phone={effectivePhone || undefined} compact limit={50} /></div>
               ) : null}
 
               {tab === "calls" ? (

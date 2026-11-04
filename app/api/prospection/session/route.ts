@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { hubspotJson } from "@/lib/hubspot";
-import { getAircallStatus } from "@/lib/aircall";
+import { getWithAlloStatus } from "@/lib/withallo";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -89,14 +89,14 @@ export async function POST(request: NextRequest) {
     await requireCockpitAccess();
     const body = await request.json().catch(() => ({}));
     const requestedCompanyIds = unique((Array.isArray(body.companyIds) ? body.companyIds : []).map(String)).slice(0, 100);
-    const aircall = await getAircallStatus();
+    const withallo = await getWithAlloStatus();
 
-    if (!requestedCompanyIds.length) return NextResponse.json({ summaries: {}, aircall });
+    if (!requestedCompanyIds.length) return NextResponse.json({ summaries: {}, withallo });
 
     const companyRecords = await batchRead("companies", requestedCompanyIds, COMPANY_PROPERTIES);
     const wonCompanyIds = new Set(companyRecords.filter(isWonRecord).map(company => String(company.id)));
     const companyIds = requestedCompanyIds.filter(id => !wonCompanyIds.has(id));
-    if (!companyIds.length) return NextResponse.json({ summaries: {}, aircall });
+    if (!companyIds.length) return NextResponse.json({ summaries: {}, withallo });
 
     const [companyContacts, companyTasks] = await Promise.all([
       batchAssociations("companies", "contacts", companyIds),
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    return NextResponse.json({ summaries, aircall }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ summaries, withallo }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const e = error as Error & { status?: number };
     return NextResponse.json({ error: e.message || "Impossible de préparer la session de prospection" }, { status: e.status || 500 });

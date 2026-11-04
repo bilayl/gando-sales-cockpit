@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { apiError, hubspotJson } from "@/lib/hubspot";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const CALL_PROPS = [
   "hs_timestamp",
@@ -18,13 +17,6 @@ const CALL_PROPS = [
 const MEETING_PROPS = ["hs_meeting_title", "hs_meeting_start_time", "hs_meeting_end_time", "hs_meeting_outcome", "hubspot_owner_id", "hs_timestamp"];
 
 type Row = { id: string; properties?: Record<string, string | null | undefined> };
-type OnoffTranscriptRow = {
-  call_id?: string | null;
-  hubspot_call_id?: string | null;
-  started_at?: string | null;
-  external_number?: string | null;
-  transcript_text?: string | null;
-};
 type HistoryItem = {
   type: "call" | "meeting";
   id: string;
@@ -37,24 +29,10 @@ type HistoryItem = {
   ownerId?: string;
   toNumber?: string;
   fromNumber?: string;
-  onoffTranscript?: string;
   hubspotTranscriptAvailable?: boolean;
   hubspotSummary?: string;
   hubspotNotes?: string;
 };
-
-function normalizePhone(value?: string | null) {
-  const digits = String(value || "").replace(/\D/g, "");
-  const normalized = digits.startsWith("00") ? digits.slice(2) : digits;
-  return normalized.length > 9 ? normalized.slice(-9) : normalized;
-}
-
-function timeDistanceMs(left?: string | null, right?: string | null) {
-  const a = Date.parse(left || "");
-  const b = Date.parse(right || "");
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return Number.POSITIVE_INFINITY;
-  return Math.abs(a - b);
-}
 
 function decodeHtmlEntities(value: string) {
   return value
@@ -78,35 +56,7 @@ function htmlToText(value?: string | null) {
     .trim();
 }
 
-function findOnoffTranscript(row: Row, onoffRows: OnoffTranscriptRow[]) {
-  const p = row.properties ?? {};
-  const callTime = p.hs_timestamp;
-  const callPhones = [p.hs_call_to_number, p.hs_call_from_number]
-    .map(normalizePhone)
-    .filter(Boolean);
-
-  const exact = onoffRows
-    .filter(candidate => candidate.hubspot_call_id === row.id && candidate.transcript_text?.trim())
-    .sort((a, b) => timeDistanceMs(a.started_at, callTime) - timeDistanceMs(b.started_at, callTime));
-
-  const exactBest = exact[0];
-  if (exactBest && timeDistanceMs(exactBest.started_at, callTime) <= 10 * 60 * 1000) {
-    return exactBest.transcript_text?.trim() || undefined;
-  }
-
-  const byTimeAndPhone = onoffRows
-    .filter(candidate => {
-      if (!candidate.transcript_text?.trim()) return false;
-      if (timeDistanceMs(candidate.started_at, callTime) > 10 * 60 * 1000) return false;
-      const external = normalizePhone(candidate.external_number);
-      return Boolean(external && callPhones.some(phone => phone === external));
-    })
-    .sort((a, b) => timeDistanceMs(a.started_at, callTime) - timeDistanceMs(b.started_at, callTime));
-
-  return byTimeAndPhone[0]?.transcript_text?.trim() || exactBest?.transcript_text?.trim() || undefined;
-}
-
-function callItem(row: Row, onoffRows: OnoffTranscriptRow[]): HistoryItem | null {
+function callItem(row: Row): HistoryItem | null {
   const p = row.properties ?? {};
   if (!p.hs_timestamp) return null;
   const duration = Number(p.hs_call_duration);
@@ -123,7 +73,6 @@ function callItem(row: Row, onoffRows: OnoffTranscriptRow[]): HistoryItem | null
     ownerId: p.hubspot_owner_id || undefined,
     toNumber: p.hs_call_to_number || undefined,
     fromNumber: p.hs_call_from_number || undefined,
-    onoffTranscript: findOnoffTranscript(row, onoffRows),
     hubspotTranscriptAvailable: p.hs_call_has_transcript === "true",
     hubspotSummary: hubspotSummary || undefined,
     hubspotNotes: hubspotNotes || undefined,
@@ -143,29 +92,9 @@ function meetingItem(row: Row): HistoryItem | null {
   };
 }
 
-async function loadOnoffTranscripts(): Promise<OnoffTranscriptRow[]> {
-  try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from("onoff_call_processing")
-      .select("call_id,hubspot_call_id,started_at,external_number,transcript_text")
-      .not("transcript_text", "is", null)
-      .order("started_at", { ascending: false })
-      .limit(500);
-    if (error) {
-      console.warn("historique:onoff_transcripts", error.message);
-      return [];
-    }
-    return (data || []) as OnoffTranscriptRow[];
-  } catch (error) {
-    console.warn("historique:onoff_transcripts", error instanceof Error ? error.message : error);
-    return [];
-  }
-}
-
 export async function GET() {
   try {
-    const [calls, meetings, onoffRows] = await Promise.all([
+    const [calls, meetings] = await Promise.all([
       hubspotJson("/crm/objects/2026-03/calls/search", {
         method: "POST",
         body: JSON.stringify({
@@ -182,11 +111,10 @@ export async function GET() {
           sorts: [{ propertyName: "hs_meeting_start_time", direction: "DESCENDING" }],
         }),
       }),
-      loadOnoffTranscripts(),
     ]);
 
     const items = [
-      ...(calls.results || []).map((row: Row) => callItem(row, onoffRows)),
+      ...(calls.results || []).map((row: Row) => callItem(row)),
       ...(meetings.results || []).map(meetingItem),
     ]
       .filter((x): x is HistoryItem => x !== null)

@@ -1,5 +1,5 @@
 "use client";
-import { AircallCallButton } from "@/components/aircall-call-button";
+import { WithAlloCallButton } from "@/components/withallo-call-button";
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -254,8 +254,8 @@ function CompanyProfilePanel({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {primaryPhone ? <AircallCallButton phone={primaryPhone} /> : null}
-              <Button asChild size="sm" variant="outline"><a href="/phone"><Phone size={14} /> Téléphone Aircall</a></Button>
+              {primaryPhone ? <WithAlloCallButton phone={primaryPhone} /> : null}
+              <Button asChild size="sm" variant="outline"><a href="/phone"><Phone size={14} /> Téléphone Allo</a></Button>
               {email ? <Button asChild size="sm" variant="outline"><a href={`mailto:${email}`}><Mail size={14} /> Email</a></Button> : null}
               {p.domain ? <Button asChild size="sm" variant="outline"><a href={`https://${p.domain}`} target="_blank" rel="noreferrer"><Globe size={14} /> Site web</a></Button> : null}
             </div>
@@ -355,7 +355,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
   const sessionQuery = useProspectionSessionData(activeIds, open);
   const summaries = sessionQuery.data?.summaries ?? {};
-  const aircall = sessionQuery.data?.aircall ?? null;
+  const withallo = sessionQuery.data?.withallo ?? null;
   const loading = open && activeIds.length > 0 && sessionQuery.isPending;
   const error = sessionQuery.error instanceof Error ? sessionQuery.error.message : "";
 
@@ -536,7 +536,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   const task = current?.summary?.nextTask || null;
   const currentReminder = p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date;
   const needsReminder = outcome === "FOLLOW_UP" || outcome === "NO_ANSWER" || outcome === "WRONG_CONTACT";
-  const aircallReady = Boolean(aircall?.configured && aircall?.connected === true);
+  const withalloReady = Boolean(withallo?.configured && withallo?.connected === true);
 
   return (
     <>
@@ -549,7 +549,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                 <DialogDescription className="mt-1">Appelle, qualifie le résultat, puis passe automatiquement au compte suivant. Une action ou une sortie pour chaque appel.</DialogDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={aircallReady ? "default" : "outline"}>{aircallReady ? "Aircall API · prête" : aircall?.configured ? "Aircall API à vérifier" : "Aircall non configuré"}</Badge>
+                <Badge variant={withalloReady ? "default" : "outline"}>{withalloReady ? "Allo API · prête" : withallo?.configured ? "Allo API à vérifier" : "Allo non configuré"}</Badge>
                 <Badge variant="outline">{done.size} traité{done.size > 1 ? "s" : ""}</Badge>
                 <Badge variant="secondary">{remaining.length} restant{remaining.length > 1 ? "s" : ""}</Badge>
               </div>
@@ -557,7 +557,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
           </DialogHeader>
 
           {loading ? (
-            <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center"><div><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Préparation de la file d’appels, vérification Aircall et lecture des tâches HubSpot…</p></div></div>
+            <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center"><div><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Préparation de la file d’appels, vérification Allo et lecture des tâches HubSpot…</p></div></div>
           ) : error ? (
             <div className="m-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
           ) : !current ? (
@@ -582,10 +582,10 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                   <div className="grid grid-cols-2 gap-2"><div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Dernier résultat</div><div className="mt-1 truncate text-sm font-semibold">{p.statut_de_lappel || STAGE_LABELS[current.stage]}</div></div><div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Échéance</div><div className="mt-1 truncate text-sm font-semibold">{formatDateTime(currentReminder)}</div></div></div>
 
                   <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-xs leading-5">
-                    <div className="font-semibold text-primary">Téléphonie Aircall</div>
-                    <div className="mt-0.5 text-muted-foreground">{aircallReady ? "Aircall est connecté. Composez depuis cette session ou ouvrez son téléphone intégré." : "Configurez les clés Aircall côté serveur dans les paramètres."}</div>
+                    <div className="font-semibold text-primary">Téléphonie Allo</div>
+                    <div className="mt-0.5 text-muted-foreground">{withalloReady ? "Allo est connecté. Utilisez l’extension Allo ou ouvrez son application web pour passer l’appel." : "Vérifiez WITHALLO_API_KEY et ses permissions dans les paramètres."}</div>
                   </div>
-                  {p.phone || task?.sourceContactPhone ? <AircallCallButton phone={String(task?.sourceContactPhone || p.phone)} label="Appeler le prospect avec Aircall" className="h-11 w-full" /> : <Button asChild className="w-full" variant="outline"><a href="/phone">Ouvrir Aircall</a></Button>}
+                  {p.phone || task?.sourceContactPhone ? <WithAlloCallButton phone={String(task?.sourceContactPhone || p.phone)} label="Appeler le prospect avec Allo" className="h-11 w-full" /> : <Button asChild className="w-full" variant="outline"><a href="/phone">Ouvrir Allo</a></Button>}
 
                   <div className="space-y-2 border-t border-border pt-4">
                     <Button className="w-full" size="lg" onClick={openFinish}><CheckCircle2 size={17} /> Terminer l’appel</Button>
