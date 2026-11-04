@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { hubspotJson } from "@/lib/hubspot";
-import { getOnoffDirectApiStatus } from "@/lib/onoff";
+import { getAircallStatus } from "@/lib/aircall";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -89,19 +89,14 @@ export async function POST(request: NextRequest) {
     await requireCockpitAccess();
     const body = await request.json().catch(() => ({}));
     const requestedCompanyIds = unique((Array.isArray(body.companyIds) ? body.companyIds : []).map(String)).slice(0, 100);
-    const onoff = await getOnoffDirectApiStatus().catch(error => ({
-      configured: false,
-      connected: false,
-      source: "onoff_api" as const,
-      error: error instanceof Error ? error.message : "Impossible de vérifier Onoff.",
-    }));
+    const aircall = await getAircallStatus();
 
-    if (!requestedCompanyIds.length) return NextResponse.json({ summaries: {}, onoff });
+    if (!requestedCompanyIds.length) return NextResponse.json({ summaries: {}, aircall });
 
     const companyRecords = await batchRead("companies", requestedCompanyIds, COMPANY_PROPERTIES);
     const wonCompanyIds = new Set(companyRecords.filter(isWonRecord).map(company => String(company.id)));
     const companyIds = requestedCompanyIds.filter(id => !wonCompanyIds.has(id));
-    if (!companyIds.length) return NextResponse.json({ summaries: {}, onoff });
+    if (!companyIds.length) return NextResponse.json({ summaries: {}, aircall });
 
     const [companyContacts, companyTasks] = await Promise.all([
       batchAssociations("companies", "contacts", companyIds),
@@ -186,7 +181,7 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    return NextResponse.json({ summaries, onoff }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ summaries, aircall }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const e = error as Error & { status?: number };
     return NextResponse.json({ error: e.message || "Impossible de préparer la session de prospection" }, { status: e.status || 500 });

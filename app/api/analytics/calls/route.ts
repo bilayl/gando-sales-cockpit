@@ -16,7 +16,6 @@ const CALL_PROPERTIES = [
   "hs_call_summary",
   "hs_call_recording_url",
   "hs_call_has_transcript",
-  "onoff_call_tags",
   "hubspot_owner_id",
 ];
 
@@ -95,7 +94,7 @@ export async function GET(request: NextRequest) {
         summary,
         recordingUrl: properties.hs_call_recording_url || null,
         hasTranscript: String(properties.hs_call_has_transcript || "").toLowerCase() === "true",
-        tags: properties.onoff_call_tags || null,
+        tags: null,
         ownerId: properties.hubspot_owner_id || null,
       };
     });

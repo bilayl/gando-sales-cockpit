@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const CONTACT_PROPERTIES = [
   "firstname","lastname","email","phone","mobilephone","jobtitle","company","hubspot_owner_id",
@@ -32,43 +31,6 @@ async function batchRead(path: string, ids: string[], properties: string[]) {
   return result.results || [];
 }
 
-async function attachOnoffCallDetails(calls: any[]) {
-  const hubspotCallIds = calls.map(call => String(call.id || "")).filter(Boolean);
-  if (!hubspotCallIds.length) return calls;
-
-  try {
-    const { data, error } = await getSupabaseAdmin()
-      .from("onoff_call_processing")
-      .select("hubspot_call_id,call_id,transcript_text,ai_analysis,tags,processing_status,created_at")
-      .in("hubspot_call_id", hubspotCallIds)
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-
-    const detailsByCall = new Map<string, any>();
-    for (const row of data || []) {
-      const key = String(row.hubspot_call_id || "");
-      if (!key) continue;
-      const current = detailsByCall.get(key);
-      if (!current || (!current.transcript_text && row.transcript_text)) detailsByCall.set(key, row);
-    }
-
-    return calls.map(call => {
-      const detail = detailsByCall.get(String(call.id));
-      if (!detail) return call;
-      return {
-        ...call,
-        transcript: String(detail.transcript_text || "").trim() || null,
-        onoffCallId: detail.call_id ? String(detail.call_id) : null,
-        onoffAiAnalysis: detail.ai_analysis || null,
-        onoffTags: detail.tags || null,
-        onoffProcessingStatus: detail.processing_status || null,
-      };
-    });
-  } catch (error) {
-    console.warn("Onoff transcript enrichment unavailable:", error);
-    return calls;
-  }
-}
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -87,7 +49,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       batchRead("deals", associationIds(contact, "deals"), DEAL_PROPERTIES),
     ]);
 
-    const calls = await attachOnoffCallDetails(callsRaw);
+    const calls = callsRaw;
     const meetings = meetingsRaw.map((meeting: any) => {
       const startAt = meeting.properties?.hs_meeting_start_time || meeting.properties?.hs_timestamp || null;
       const status = meeting.properties?.hs_meeting_outcome || (startAt && new Date(startAt).getTime() >= Date.now() ? "SCHEDULED" : "UNREVIEWED");

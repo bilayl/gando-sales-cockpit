@@ -21,7 +21,7 @@ export type ProspectionTaskSummary = {
   } | null;
 };
 
-export type OnoffSessionState = {
+export type AircallSessionState = {
   configured?: boolean;
   connected?: boolean | null;
   latestProcessingStatus?: string | null;
@@ -31,14 +31,14 @@ export type OnoffSessionState = {
 
 type ProspectionSessionPayload = {
   summaries: Record<string, ProspectionTaskSummary>;
-  onoff: OnoffSessionState | null;
+  aircall: AircallSessionState | null;
 };
 
 export function useProspectionSessionData(companyIds: string[], enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.prospection.session(companyIds),
     queryFn: async (): Promise<ProspectionSessionPayload> => {
-      if (!companyIds.length) return { summaries: {}, onoff: null };
+      if (!companyIds.length) return { summaries: {}, aircall: null };
       const response = await fetch("/api/prospection/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -49,7 +49,7 @@ export function useProspectionSessionData(companyIds: string[], enabled: boolean
       if (!response.ok) throw new Error(body.error || "Impossible de préparer la session");
       return {
         summaries: body.summaries || {},
-        onoff: body.onoff || null,
+        aircall: body.aircall || null,
       };
     },
     enabled: enabled && companyIds.length > 0,

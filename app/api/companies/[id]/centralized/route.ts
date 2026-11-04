@@ -46,43 +46,6 @@ async function batchRead(path: string, recordIds: string[], properties: string[]
   return all;
 }
 
-async function attachOnoffCallDetails(calls: any[]) {
-  const hubspotCallIds = calls.map(call => String(call.id || "")).filter(Boolean);
-  if (!hubspotCallIds.length) return calls;
-
-  try {
-    const { data, error } = await getSupabaseAdmin()
-      .from("onoff_call_processing")
-      .select("hubspot_call_id,call_id,transcript_text,ai_analysis,tags,processing_status,created_at")
-      .in("hubspot_call_id", hubspotCallIds)
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-
-    const detailsByCall = new Map<string, any>();
-    for (const row of data || []) {
-      const key = String(row.hubspot_call_id || "");
-      if (!key) continue;
-      const current = detailsByCall.get(key);
-      if (!current || (!current.transcript_text && row.transcript_text)) detailsByCall.set(key, row);
-    }
-
-    return calls.map(call => {
-      const detail = detailsByCall.get(String(call.id));
-      if (!detail) return call;
-      return {
-        ...call,
-        transcript: String(detail.transcript_text || "").trim() || null,
-        onoffCallId: detail.call_id ? String(detail.call_id) : null,
-        onoffAiAnalysis: detail.ai_analysis || null,
-        onoffTags: detail.tags || null,
-        onoffProcessingStatus: detail.processing_status || null,
-      };
-    });
-  } catch (error) {
-    console.warn("Onoff transcript enrichment unavailable:", error);
-    return calls;
-  }
-}
 
 function contactName(contact: any): string {
   const p = contact?.properties || {};
@@ -230,7 +193,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       batchRead("deals", dealIds, DEAL_PROPERTIES),
     ]);
 
-    const callsEnriched = await attachOnoffCallDetails(callsRaw);
+    const callsEnriched = callsRaw;
     const decorate = (type: string, record: any) => {
       const contactId = sourceMaps[type]?.get(String(record.id)) || null;
       return {
