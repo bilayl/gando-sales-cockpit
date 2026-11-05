@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   CalendarCheck2,
   CalendarDays,
+  CalendarClock,
   BarChart3,
   CircleHelp,
   ContactRound,
@@ -107,6 +108,7 @@ export function AppSidebar({
 
   const primary: NavItem[] = [
     { href: "/today", label: "Accueil", icon: Home },
+    { href: "/sdr", label: "Ma journée SDR", icon: CalendarClock },
     { href: "/prospection", label: "Prospection", icon: PhoneCall },
     { href: "/contacts", label: "Contacts", icon: ContactRound },
     { href: "/phone", label: "Appels", icon: Headphones },

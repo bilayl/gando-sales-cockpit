@@ -13,7 +13,7 @@ function defaultTime(){
 }
 
 export function WithAlloPostCallActions({call}:{call:AlloCallDetailView}){
-  const [selected,setSelected]=useState("0");
+  const [selected,setSelected]=useState(call.actions.length?"0":"manual");
   const [manualText,setManualText]=useState("");
   const [type,setType]=useState("CALL");
   const [when,setWhen]=useState(defaultTime);
