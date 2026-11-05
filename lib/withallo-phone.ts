@@ -1,7 +1,10 @@
 /** Phone normalization shared by the CRM and the server; no silent +33 conversion for French overseas prefixes. */
 export function normalizeWithAlloDialNumber(input: unknown): string | null {
   const trimmed = String(input ?? "").replace(/[\s().()-]/g, "");
-  const candidate = trimmed.startsWith("00") ? "+" + trimmed.slice(2) : trimmed;
+  let candidate = trimmed.startsWith("00") ? "+" + trimmed.slice(2) : trimmed;
+  // People often save +33 (0)7... or +590 (0)690... in HubSpot.
+  // The local trunk 0 must be removed to match E.164 caller IDs.
+  candidate = candidate.replace(/^\+(33|590|594|596|262)0(?=[1-9]\d{7,9}$)/, "+$1");
   if (/^\+[1-9]\d{7,14}$/.test(candidate)) return candidate;
   if (!/^0\d{9}$/.test(candidate)) return null;
   const overseas: Array<[string, string]> = [
