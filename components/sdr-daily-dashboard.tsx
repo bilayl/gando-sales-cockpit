@@ -54,8 +54,8 @@ export function SdrDailyDashboard(){
     if(busy)return;
     setBusy(task.id);
     try{
-      const res=await fetch("/api/tasks/"+encodeURIComponent(task.id),{
-        method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:"COMPLETED"}),
+      const res=await fetch("/api/sdr/tasks/"+encodeURIComponent(task.id)+"/complete",{
+        method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({}),
       });
       const result=await res.json().catch(()=>({}));
       if(!res.ok)throw new Error(result.error||"Modification refusée par HubSpot.");
