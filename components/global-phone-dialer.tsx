@@ -37,6 +37,7 @@ export function GlobalPhoneDialer() {
   const [incoming, setIncoming] = useState<IncomingResult | null>(null);
   const [callerLookupBusy, setCallerLookupBusy] = useState(false);
   const [lastIncomingFields, setLastIncomingFields] = useState<string[]>([]);
+  const [lastIncomingEventAt, setLastIncomingEventAt] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [number, setNumber] = useState("");
@@ -167,6 +168,7 @@ export function GlobalPhoneDialer() {
         setAgentSignedIn(true);
       } else if (data.type === "incoming_call") {
         setCallState("Appel entrant");
+        setLastIncomingEventAt(Date.now());
         void resolveIncoming(data.payload ?? data.data ?? data);
       } else if (data.type === "outgoing_call") {
         setCallState("Appel sortant en cours");
@@ -218,6 +220,34 @@ export function GlobalPhoneDialer() {
   if (!mounted) return null;
   return createPortal(
     <>
+      {incoming && ["multiple", "unknown", "masked", "error"].includes(incoming.state) ? (
+        <aside role="alert" aria-live="assertive"
+          className="fixed left-1/2 top-3 z-[1100] w-[min(510px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-primary/30 bg-background p-4 shadow-2xl">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Appel entrant · Fiche CRM</p>
+              {incoming.phone ? <p className="mt-1 text-xs text-muted-foreground">{incoming.phone}</p> : null}
+            </div>
+            <button type="button" onClick={() => setIncoming(null)} aria-label="Masquer la notification de l’appel entrant" className="rounded-lg p-1.5 hover:bg-muted"><X size={16}/></button>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">{incoming.message}</p>
+          {incoming.state === "multiple" ? (
+            <div className="mt-3 max-h-40 space-y-1.5 overflow-y-auto">
+              {incoming.contacts.map(contact => (
+                <Link key={contact.id} href={contact.href} onClick={() => setIncoming(null)}
+                  className="block rounded-lg border border-border p-2.5 text-xs font-semibold transition hover:bg-muted">
+                  {contact.name}{contact.company ? <span className="ml-2 font-normal text-muted-foreground">{contact.company}</span> : null}
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <button type="button" onClick={() => { toggle(true); setIncoming(null); }}
+              className="mt-3 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-muted">
+              Ouvrir le téléphone et tester le numéro
+            </button>
+          )}
+        </aside>
+      ) : null}
       {!open ? (
         <button
           type="button"
@@ -325,6 +355,11 @@ export function GlobalPhoneDialer() {
             <span className="inline-flex items-center gap-1 text-muted-foreground"><span className={"h-2 w-2 rounded-full " + (ready ? "bg-emerald-500" : "bg-amber-500")} /> {callState}</span>
             <a href={ALLO_ORIGIN} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">Ouvrir Allo <ExternalLink size={11}/></a>
           </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {lastIncomingEventAt
+              ? "Événement entrant reçu par Gando à " + new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(new Date(lastIncomingEventAt))
+              : "Aucun événement entrant reçu par le Cockpit depuis l'ouverture de cette page."}
+          </p>
           {embedWarning && !ready ? (
             <p role="alert" className="mt-2 text-[11px] leading-4 text-amber-700 dark:text-amber-300">
               Le téléphone intégré ne répond pas. Allo doit autoriser <strong>room.gando.pro</strong> pour l’intégration embarquée.
