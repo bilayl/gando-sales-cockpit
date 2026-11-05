@@ -138,7 +138,7 @@ export async function withAlloCallAnalytics(args:{
       notes.push("Le détail des appels répondus et des transcriptions est temporairement indisponible : "+(error instanceof Error?error.message:"erreur Allo"));
       return null;
     });
-    if(insights?.partial)notes.push("Comptage des appels répondus et transcrits partiel au-delà de 500 appels. Réduisez la période.");
+    if(insights?.partial)notes.push("Comptage des appels répondus et transcrits partiel au-delà de 400 appels. Réduisez la période.");
     const rows=breakdown==="user" ? toRows(base) : [];
     let partial=false;
     if(breakdown==="phone"&&canCompareTeam){
@@ -171,7 +171,7 @@ export async function withAlloCallAnalytics(args:{
     notes.push("Le détail des réponses et transcriptions est momentanément indisponible : "+(error instanceof Error?error.message:"erreur Allo"));
     return null;
   });
-  if(insights?.partial)notes.push("Comptage des réponses et transcriptions partiel au-delà de 500 appels.");
+  if(insights?.partial)notes.push("Comptage des réponses et transcriptions partiel au-delà de 400 appels.");
   const names=new Map(users.map(x=>[x.id,x]));
   const [c,p,extra]=await Promise.all([
     searchCalls({from:range.from,to:range.to},direction,selectedUser,selectedNumber),
