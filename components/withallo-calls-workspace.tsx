@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, BarChart3, CalendarClock, Check, ClipboardList, Clock3, Copy, Headphones, Loader2, PhoneCall, PhoneIncoming, PhoneOutgoing, RefreshCw, Search, Sparkles, UserRound, Users, X } from "lucide-react";
 import { WithAlloRecordingPlayer } from "@/components/withallo-recording-player";
 import { WithAlloCallButton } from "@/components/withallo-call-button";
+import { WithAlloPostCallActions } from "@/components/withallo-postcall-actions";
 import type { AlloCallDetailView } from "@/lib/withallo-call-detail";
 
 type ListCall = {
@@ -131,6 +132,7 @@ function CallDetails({ call, loading, error, onRefresh }: {
             </div>
             {call.actions.length ? <ol className="space-y-2">{call.actions.map((a,i) => <li key={i} className="flex gap-3 rounded-xl border border-border bg-background/60 p-3.5"><span className="grid size-6 shrink-0 place-items-center rounded-lg bg-muted text-xs font-semibold">{i+1}</span><div className="min-w-0"><p className="break-words text-sm leading-6">{a.text}</p>{a.assignedTo || a.dueAt ? <div className="mt-1 text-[11px] text-muted-foreground">{[a.assignedTo, a.dueAt ? dateFmt(a.dueAt) : null].filter(Boolean).join(" · ")}</div> : null}</div></li>)}</ol> :
               <p className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">Allo n’a identifié aucune action explicite dans ce compte rendu. Aucune action n’a été ajoutée artificiellement.</p>}
+            <WithAlloPostCallActions key={call.id} call={call}/>
             <a href="/tasks" className="mt-5 inline-flex rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-muted">Voir les tâches HubSpot</a>
           </section>
         ) : null}
