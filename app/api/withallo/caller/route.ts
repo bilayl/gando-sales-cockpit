@@ -67,12 +67,20 @@ export async function GET(request: NextRequest) {
     if (!phone) return NextResponse.json({ error: "Numéro entrant non valide." }, { status: 400 });
 
     const numbers = candidateNumbers(phone);
-    const exact = await searchNumber(numbers.slice(0, 2), "EQ");
-    const local = numbers.slice(2);
-    // EQ is preferred to avoid false matches; a token search is only a
-    // discovery fallback, and every result is re-verified as a full number.
+    const national = numbers.find(value => /^0\d{9}$/.test(value));
+    const formatted = national?.replace(/(\d{2})(?=\d)/g, "$1 ").trim();
+    // HubSpot stores phones in various formats: international, French local
+    // and spaced. Query each format, then *strictly* compare normalized values.
+    const variants = [...new Set([phone, national, formatted, "00" + phone.slice(1)].filter((v): v is string => Boolean(v)))];
+    const searches = await Promise.all([
+      searchNumber(variants.slice(0, 2), "EQ"),
+      searchNumber(variants.slice(2, 4), "EQ"),
+    ]);
+    const exact = searches.flat();
+    // Discovery fallback only. Matching by last digits alone is never enough
+    // to trigger an automatic page navigation.
     const supplemental = exact.length === 0
-      ? await searchNumber([...(local.slice(0, 1)), "*" + phone.replace(/\D/g, "").slice(-9)], "CONTAINS_TOKEN").catch(() => [])
+      ? await searchNumber(["*" + phone.replace(/\D/g, "").slice(-9)], "CONTAINS_TOKEN").catch(() => [])
       : [];
     const rows = [...exact, ...supplemental];
     const distinct = new Map<string, Contact>();
