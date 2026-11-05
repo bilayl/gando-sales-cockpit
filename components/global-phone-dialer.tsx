@@ -25,6 +25,7 @@ type IncomingResult = {
   phone: string | null;
   contacts: ContactMatch[];
   message?: string;
+  source?: string;
 };
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -51,6 +52,7 @@ export function GlobalPhoneDialer() {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const readyRef = useRef(false);
   const pendingPhoneRef = useRef<string | null>(null);
+  const phoneInputRef = useRef<HTMLInputElement | null>(null);
 
   const toggle = useCallback((next: boolean) => {
     setOpen(next);
@@ -91,13 +93,14 @@ export function GlobalPhoneDialer() {
     toggle(true);
     if (!manual) setLastIncomingFields(incomingEventFields(payload));
     if (!callerPhone) {
+      setCallerLookupBusy(false);
       setIncoming({
         state: "masked", phone: null, contacts: [],
         message: "Allo a signalé l'appel entrant, mais n'a pas fourni de numéro exploitable. Saisissez le numéro dans le champ ci-dessous pour identifier le contact.",
       });
       return;
     }
-    setIncoming({ state: "loading", phone: callerPhone, contacts: [] });
+    setIncoming({ state: "loading", phone: callerPhone, contacts: [], message: manual ? "Test de la recherche CRM en cours…" : "Recherche automatique de l’appelant…" });
     setCallerLookupBusy(true);
     try {
       const response = await fetch("/api/withallo/caller?phone=" + encodeURIComponent(callerPhone), {
@@ -108,17 +111,30 @@ export function GlobalPhoneDialer() {
       if (!response.ok) throw new Error(data.error || "Le CRM n'a pas pu identifier ce numéro.");
       const matches: ContactMatch[] = Array.isArray(data.contacts) ? data.contacts : [];
       if (data.result === "match" && matches.length === 1 && /^\/contacts\/\d+$/.test(matches[0].href)) {
-        setIncoming({ state: "match", phone: callerPhone, contacts: matches, message: "Contact identifié, ouverture de sa fiche CRM." });
-        router.push(matches[0].href);
+        setIncoming({
+          state: "match", phone: callerPhone, contacts: matches,
+          source: data.source, message: "Contact identifié : " + matches[0].name + ". Ouverture de la fiche CRM.",
+        });
+        if (manual) {
+          // The user explicitly asked to open the contact. A real browser
+          // navigation is deterministic even when Next.js client routing is
+          // intercepted or the dialer iframe holds focus.
+          window.location.assign(matches[0].href);
+        } else {
+          // Preserve the Allo iframe/session for an actual incoming call.
+          router.push(matches[0].href);
+        }
       } else if (data.result === "multiple" && matches.length) {
         setIncoming({
           state: "multiple", phone: callerPhone, contacts: matches,
-          message: matches.length + " fiches HubSpot utilisent ce numéro. Sélectionnez le bon contact : aucune fiche n'est ouverte automatiquement pour éviter une erreur.",
+          source: data.source,
+          message: matches.length + " fiches CRM correspondent à ce numéro. Sélectionnez la bonne fiche ci-dessous : l’ouverture automatique est désactivée pour éviter une erreur.",
         });
       } else {
         setIncoming({
           state: "unknown", phone: callerPhone, contacts: [],
-          message: "Ce numéro ne correspond à aucun contact dans le CRM. Vérifiez qu'il figure dans un champ Téléphone ou Mobile HubSpot.",
+          source: data.source,
+          message: data.message || "Aucun contact correspondant dans le répertoire Gando ou HubSpot. Vérifiez le champ Téléphone ou Mobile du contact.",
         });
       }
     } catch (error) {
@@ -194,8 +210,19 @@ export function GlobalPhoneDialer() {
   const normalized = normalizeWithAlloDialNumber(number);
 
   const lookupFromDialer = () => {
-    if (normalized) void resolveIncoming({ from_number: normalized }, true);
-    else setNotice("Saisissez d'abord un numéro valide pour rechercher sa fiche HubSpot.");
+    setNotice("");
+    if (normalized) {
+      void resolveIncoming({ from_number: normalized }, true);
+      return;
+    }
+    // A number typed inside the Allo iframe is NOT shared with this React
+    // form. Never make the test button silently inert in that situation.
+    setIncoming({
+      state: "error", phone: null, contacts: [],
+      message: "Saisissez le numéro à rechercher dans le champ juste au-dessus du bouton « Composer » de Gando (pas dans le clavier intégré à Allo), puis cliquez de nouveau sur « Tester la recherche CRM ».",
+    });
+    toggle(true);
+    phoneInputRef.current?.focus();
   };
 
   const prefill = () => {
@@ -234,10 +261,10 @@ export function GlobalPhoneDialer() {
           {incoming.state === "multiple" ? (
             <div className="mt-3 max-h-40 space-y-1.5 overflow-y-auto">
               {incoming.contacts.map(contact => (
-                <Link key={contact.id} href={contact.href} onClick={() => setIncoming(null)}
+                <a key={contact.id} href={contact.href}
                   className="block rounded-lg border border-border p-2.5 text-xs font-semibold transition hover:bg-muted">
                   {contact.name}{contact.company ? <span className="ml-2 font-normal text-muted-foreground">{contact.company}</span> : null}
-                </Link>
+                </a>
               ))}
             </div>
           ) : (
@@ -290,11 +317,12 @@ export function GlobalPhoneDialer() {
         </div>
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
           <input
-            aria-label="Numéro de téléphone à appeler"
+            ref={phoneInputRef}
+            aria-label="Numéro de téléphone à appeler ou rechercher dans le CRM"
             value={number}
             onChange={event => { setNumber(event.target.value); pendingPhoneRef.current = null; setCopied(false); }}
             onKeyDown={event => { if (event.key === "Enter") prefill(); }}
-            placeholder="06 12 34 56 78 ou +590…"
+            placeholder="N° du contact à retrouver dans Gando…"
             inputMode="tel"
             className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
@@ -302,8 +330,8 @@ export function GlobalPhoneDialer() {
           <button type="button" onClick={() => void copy()} disabled={!normalized} title="Copier le numéro" aria-label="Copier le numéro" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border hover:bg-muted disabled:opacity-40">{copied ? <Check size={14}/> : <Copy size={14}/>}</button>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-          <p className="text-[11px] text-muted-foreground">Fiche CRM à l'arrivée d'un appel entrant</p>
-          <button type="button" onClick={lookupFromDialer} disabled={!normalized || callerLookupBusy}
+          <p className="text-[11px] text-muted-foreground">Recherche dans le CRM Gando</p>
+          <button type="button" onClick={lookupFromDialer} disabled={callerLookupBusy}
             className="rounded-lg border border-border bg-card px-3 py-1.5 text-[11px] font-semibold hover:bg-muted disabled:opacity-40">
             {callerLookupBusy ? "Recherche en cours…" : "Tester la recherche CRM"}
           </button>
@@ -314,15 +342,16 @@ export function GlobalPhoneDialer() {
               <strong>Appel entrant {incoming.phone ? "· " + incoming.phone : "· Numéro masqué"}</strong>
               <button type="button" className="rounded-md p-1 hover:bg-muted" title="Masquer la fiche de l’appelant" onClick={() => setIncoming(null)}><X size={13}/></button>
             </div>
-            <p className="mt-1 text-muted-foreground">{incoming.state === "loading" ? "Recherche dans les contacts HubSpot…" : incoming.message}</p>
+            <p className="mt-1 text-muted-foreground">{incoming.state === "loading" ? incoming.message : incoming.message}</p>
             {incoming.state === "match" && incoming.contacts[0] ? (
-              <Link href={incoming.contacts[0].href} className="mt-2 inline-flex font-semibold text-primary hover:underline">{incoming.contacts[0].name} · Voir la fiche</Link>
+              <a href={incoming.contacts[0].href} className="mt-2 inline-flex rounded-lg border border-primary/25 bg-background px-3 py-1.5 font-semibold text-primary hover:bg-muted">{incoming.contacts[0].name} · Ouvrir sa fiche CRM</a>
             ) : null}
+            {incoming.source ? <p className="mt-1 text-[10px] text-muted-foreground">Source de recherche : {incoming.source === "cockpit" ? "répertoire du Cockpit" : "HubSpot"}</p> : null}
             {incoming.state === "multiple" ? <div className="mt-2 space-y-1">
               {incoming.contacts.map(item => (
-                <Link key={item.id} href={item.href} onClick={() => setIncoming(null)} className="block rounded-lg border border-border bg-background px-3 py-2 hover:bg-muted">
+                <a key={item.id} href={item.href} className="block rounded-lg border border-border bg-background px-3 py-2 hover:bg-muted">
                   <span className="font-semibold">{item.name}</span>{item.company ? <span className="ml-2 text-muted-foreground">{item.company}</span> : null}
-                </Link>
+                </a>
               ))}
             </div> : null}
             {incoming.state === "unknown" || incoming.state === "masked" || incoming.state === "error" ? (
