@@ -24,7 +24,7 @@ function safeCallId(id: string) {
 export async function getAuthorizedAlloCall(id: string, access: CockpitAccess): Promise<AlloCallDetail> {
   const callId = safeCallId(id);
   const response = await withAlloRequest<{ data?: AlloCallDetail }>(
-    "/v2/api/conversations/items/" + encodeURIComponent(callId),
+    "/v2/api/conversations/items/" + encodeURIComponent(callId) + "?extend=transcript",
   );
   const call = response.data;
   if (!call || call.id !== callId || (call.type && call.type !== "CALL")) {
