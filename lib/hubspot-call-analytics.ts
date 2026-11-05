@@ -2,13 +2,13 @@ import "server-only";
 import { hubspotJson } from "@/lib/hubspot";
 import { epochBounds } from "@/lib/call-analytics-period";
 import { emptyMetrics, metricsFromRecords, recordsBreakdown, type CallRecord } from "@/lib/call-analytics-math";
-import type { CallAnalyticsRange, CallAnalyticsResponse, CallAnalyticsView, CallAnalyticsBreakdown, CallStatsOption } from "@/lib/call-analytics-types";
+import type { CallAnalyticsRange, CallAnalyticsResponse, CallAnalyticsView, CallAnalyticsBreakdown, CallStatsOption, CallAnalyticsInsights } from "@/lib/call-analytics-types";
 import type { CockpitAccess } from "@/lib/cockpit-access";
 
 type HubspotRow = { id: string; properties?: Record<string, string | null | undefined> };
 type HubspotSearch = { results?: HubspotRow[]; paging?: { next?: { after?: string } } };
 type HubspotOwner = { id: string; email?: string; firstName?: string; lastName?: string; teams?: unknown[] };
-const PROPERTIES = ["hs_timestamp","hubspot_owner_id","hs_call_title","hs_call_status","hs_call_disposition","hs_call_direction","hs_call_duration","hs_call_owner_talk_time","hs_call_to_number","hs_call_from_number","hs_inbound_call_answer_status"];
+const PROPERTIES = ["hs_timestamp","hubspot_owner_id","hs_call_title","hs_call_status","hs_call_disposition","hs_call_direction","hs_call_duration","hs_call_owner_talk_time","hs_call_to_number","hs_call_from_number","hs_inbound_call_answer_status","hs_call_has_transcript","hs_call_summary"];
 const CONNECTED_DISPOSITIONS = new Set([
   "f240bbac-87c9-4f6e-bf70-924b57d47db7", // Connected
   "a4c4c377-d246-4b32-a13b-75a56a4cd0ff", // Left live message
@@ -111,6 +111,24 @@ export async function hubspotCallAnalytics(args:{
   const phoneFiltered=selectedPhone ? current.filter(x=>x.phoneKey===selectedPhone):current;
   const oldPhoneFiltered=selectedPhone ? previous.filter(x=>x.phoneKey===selectedPhone):previous;
   const rows=recordsBreakdown(phoneFiltered,oldPhoneFiltered,breakdown);
+  const sourceRows=a.rows.filter(item=>{
+    const p=item.properties||{};
+    if(view==="outbound"&&p.hs_call_direction!=="OUTBOUND")return false;
+    if(view==="inbound"&&p.hs_call_direction!=="INBOUND")return false;
+    if(selectedPhone && ((p.hs_call_direction==="INBOUND"?p.hs_call_to_number:p.hs_call_from_number)||"").replace(/[\s().-]/g,"")!==selectedPhone)return false;
+    return true;
+  });
+  const insights:CallAnalyticsInsights={
+    answered:sourceRows.filter(x=>callAnswered(x.properties||{})).length,
+    missedOrVoicemail:sourceRows.filter(x=>["MISSED","NO_ANSWER","BUSY","FAILED","CANCELED"].includes(x.properties?.hs_call_status||"")).length,
+    unknownOutcome:sourceRows.filter(x=>{
+      const p=x.properties||{};
+      return !callAnswered(p)&&!["MISSED","NO_ANSWER","BUSY","FAILED","CANCELED"].includes(p.hs_call_status||"");
+    }).length,
+    transcribed:sourceRows.filter(x=>String(x.properties?.hs_call_has_transcript||"").toLowerCase()==="true").length,
+    summarized:sourceRows.filter(x=>Boolean(x.properties?.hs_call_summary)).length,
+    actionedCalls:null,actionSuggestions:null,checkedCalls:sourceRows.length,partial:a.partial,source:"HubSpot CRM"
+  };
   const notes=["Source HubSpot CRM : activités téléphoniques réellement enregistrées dans le CRM, y compris les anciens appels Onoff. Elles ne sont pas additionnées aux appels Allo.",
     "Le taux de réponse s’appuie sur les dispositions HubSpot explicites. Le temps de conversation utilise le temps de parole s’il est renseigné, sinon la durée CRM des appels décrochés."];
   if(view==="power")notes.push("HubSpot ne renseigne pas de manière fiable le mode Power Dialer dans les activités d’appel : aucun chiffre n’est attribué artificiellement à ce mode.");
@@ -118,5 +136,5 @@ export async function hubspotCallAnalytics(args:{
   return {source:"hubspot",view,breakdown,period:range,metrics:metricsFromRecords(phoneFiltered,oldPhoneFiltered),
     rows,filterId:breakdown==="user"?ownerId||null:selectedPhone,canCompareTeam,
     userOptions,phoneOptions:phones.map(id=>({id,label:id})),
-    updatedAt:new Date().toISOString(),funnel:[],partial:a.partial||b.partial,notes};
+    updatedAt:new Date().toISOString(),funnel:[],insights,partial:a.partial||b.partial,notes};
 }

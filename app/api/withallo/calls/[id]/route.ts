@@ -9,7 +9,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const access = await requireCockpitAccess();
     const { id } = await params;
     // Authorize access before exposing the transcript, summary, contact or agents.
-    const call = await getAuthorizedAlloCall(id, access);
+    const call = await getAuthorizedAlloCall(id, access, true);
     return NextResponse.json({ call: shapeWithAlloCallDetail(call) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const code = Number((error as { status?: number }).status || 502);

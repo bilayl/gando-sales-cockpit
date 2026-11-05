@@ -123,7 +123,7 @@ function parseCall(value: unknown, lineNumber: string): WithAlloCall | null {
   const direction = text(first(call, ["direction", "call_direction", "callDirection", "type"]));
   const from = text(first(call, ["from_number", "from", "fromNumber", "caller", "caller_number", "callerNumber"]));
   const to = text(first(call, ["to", "to_number", "toNumber", "callee", "callee_number", "calleeNumber"]));
-  const contact = record(first(call, ["contact", "person", "customer"]));
+  const contact = record(first(call, ["contact", "person", "customer"]) || (Array.isArray(call.contacts) ? call.contacts[0] : null));
   const contactPhone = text(first(call, ["contact_number", "contactNumber"])) || text(first(contact, ["phone", "phone_number", "phoneNumber", "number"]));
   const contactName = text(first(contact, ["name", "full_name", "display_name"])) || text(first(call, ["contact_name", "person_name", "customer_name"]));
   const tags = (Array.isArray(call.tags) ? call.tags : []).map(item => typeof item === "string" ? item : text(first(record(item), ["name", "label", "key"]))).filter((item): item is string => Boolean(item)).slice(0, 20);

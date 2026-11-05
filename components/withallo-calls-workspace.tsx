@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, BarChart3, CalendarClock, Check, ClipboardList, Clock3, Copy, Headphones, Loader2, PhoneCall, PhoneIncoming, PhoneOutgoing, RefreshCw, Search, Sparkles, UserRound, Users, X } from "lucide-react";
 import { WithAlloRecordingPlayer } from "@/components/withallo-recording-player";
 import { WithAlloCallButton } from "@/components/withallo-call-button";
+import { WithAlloPostCallActions } from "@/components/withallo-postcall-actions";
 import type { AlloCallDetailView } from "@/lib/withallo-call-detail";
 
 type ListCall = {
@@ -83,6 +84,13 @@ function CallDetails({ call, loading, error, onRefresh }: {
           <span className="inline-flex items-center gap-1.5"><Clock3 size={14}/>{durationFmt(call.durationSeconds)}</span>
         </div>
         <h2 className="mt-3 break-words text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-2xl">{call.title}</h2>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className={"rounded-lg border px-2.5 py-1 text-[11px] font-semibold "+(["ANSWERED","TRANSFERRED"].includes(String(call.status||"").toUpperCase())?"border-emerald-500/30 bg-emerald-500/10 text-emerald-700":call.status==="VOICEMAIL"?"border-amber-500/30 bg-amber-500/10 text-amber-700":"border-border bg-muted text-muted-foreground")}>
+            {["ANSWERED","TRANSFERRED"].includes(String(call.status||"").toUpperCase())?"Appel répondu":call.status==="VOICEMAIL"?"Messagerie":call.status||"Résultat non renseigné"}
+          </span>
+          {call.transcriptText||call.transcript.length?<span className="rounded-lg border border-border bg-muted px-2.5 py-1 text-[11px]">Transcription Allo disponible</span>:null}
+          {call.actions.length?<span className="rounded-lg border border-border bg-muted px-2.5 py-1 text-[11px]">{call.actions.length} action(s) à valider</span>:null}
+        </div>
         <div className="mt-5 grid gap-3 text-sm sm:grid-cols-[105px_1fr]">
           <span className="flex items-center gap-2 text-muted-foreground"><UserRound size={16}/> Membre</span>
           <span className="font-medium">{call.memberName || call.memberEmail || "Non renseigné"}</span>
@@ -131,6 +139,7 @@ function CallDetails({ call, loading, error, onRefresh }: {
             </div>
             {call.actions.length ? <ol className="space-y-2">{call.actions.map((a,i) => <li key={i} className="flex gap-3 rounded-xl border border-border bg-background/60 p-3.5"><span className="grid size-6 shrink-0 place-items-center rounded-lg bg-muted text-xs font-semibold">{i+1}</span><div className="min-w-0"><p className="break-words text-sm leading-6">{a.text}</p>{a.assignedTo || a.dueAt ? <div className="mt-1 text-[11px] text-muted-foreground">{[a.assignedTo, a.dueAt ? dateFmt(a.dueAt) : null].filter(Boolean).join(" · ")}</div> : null}</div></li>)}</ol> :
               <p className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">Allo n’a identifié aucune action explicite dans ce compte rendu. Aucune action n’a été ajoutée artificiellement.</p>}
+            <WithAlloPostCallActions key={call.id} call={call}/>
             <a href="/tasks" className="mt-5 inline-flex rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-muted">Voir les tâches HubSpot</a>
           </section>
         ) : null}
@@ -157,6 +166,7 @@ export function WithAlloCallsWorkspace() {
   const [query,setQuery] = useState("");
   const [direction,setDirection] = useState<"all"|"in"|"out">("all");
   const [recordingsOnly,setRecordingsOnly] = useState(false);
+  const [answerFilter,setAnswerFilter] = useState<"all"|"answered"|"missed">("all");
 
   const reload = useCallback(async () => {
     setLoading(true);setError("");
@@ -202,9 +212,12 @@ export function WithAlloCallsWorkspace() {
     if(direction==="out" && !isOutbound(call.direction))return false;
     if(direction==="in" && isOutbound(call.direction))return false;
     if(recordingsOnly && !call.recordingAvailable)return false;
+    const outcome=String(call.status||"").toUpperCase();
+    if(answerFilter==="answered" && !["ANSWERED","TRANSFERRED"].includes(outcome))return false;
+    if(answerFilter==="missed" && !["VOICEMAIL","MISSED","NO_ANSWER","BUSY","CANCELED","FAILED"].includes(outcome))return false;
     const hay=[call.contactName,call.title,call.externalNumber,call.from,call.to,call.ownerEmail,call.summary,call.transcript].filter(Boolean).join(" ").toLocaleLowerCase("fr-FR");
     return !query || hay.includes(query.toLocaleLowerCase("fr-FR"));
-  }),[calls,direction,query,recordingsOnly]);
+  }),[calls,direction,query,recordingsOnly,answerFilter]);
   const outbound=calls.filter(call=>isOutbound(call.direction)).length;
 
   return <div className="page-shell"><div className="page-content space-y-5">
@@ -224,6 +237,9 @@ export function WithAlloCallsWorkspace() {
           <div className="relative"><Search size={15} className="absolute left-3 top-3 text-muted-foreground"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher un appel…" aria-label="Rechercher un appel" className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring"/>{query ? <button type="button" onClick={()=>setQuery("")} aria-label="Effacer la recherche" className="absolute right-2.5 top-3 text-muted-foreground"><X size={15}/></button>:null}</div>
           <div className="flex flex-wrap items-center gap-2">
             <select value={direction} onChange={e=>setDirection(e.target.value as "all"|"in"|"out")} aria-label="Direction des appels" className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-xs"><option value="all">Tous les appels</option><option value="in">Entrants</option><option value="out">Sortants</option></select>
+            <select aria-label="Résultat d’appel" value={answerFilter} onChange={e=>setAnswerFilter(e.target.value as "all"|"answered"|"missed")} className="h-9 rounded-lg border border-border bg-background px-2 text-xs">
+              <option value="all">Tous résultats</option><option value="answered">Répondus</option><option value="missed">Non répondus</option>
+            </select>
             <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"><input type="checkbox" checked={recordingsOnly} onChange={e=>setRecordingsOnly(e.target.checked)}/> Audio</label>
           </div>
         </div>
@@ -234,7 +250,7 @@ export function WithAlloCallsWorkspace() {
               className={"w-full px-4 py-3.5 text-left transition hover:bg-muted/60 "+(selectedId===call.id?"bg-primary/[0.06] border-l-[3px] border-primary":"border-l-[3px] border-transparent")}>
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-muted">{isOutbound(call.direction)?<PhoneOutgoing size={14}/>:<PhoneIncoming size={14}/>}</span>
-                <div className="min-w-0 flex-1"><p className="line-clamp-2 break-words text-xs font-semibold leading-5">{displayCall(call)}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{call.externalNumber || call.contactName || "Numéro non identifié"}</p><p className="mt-1 text-[10px] text-muted-foreground">{dateFmt(call.startedAt)} · {durationFmt(call.durationSeconds)}</p></div>
+                <div className="min-w-0 flex-1"><p className="line-clamp-2 break-words text-xs font-semibold leading-5">{displayCall(call)}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{call.externalNumber || call.contactName || "Numéro non identifié"}</p><p className="mt-1 text-[10px] text-muted-foreground">{dateFmt(call.startedAt)} · {durationFmt(call.durationSeconds)}</p><p className="mt-1 text-[10px] font-medium text-primary">{["ANSWERED","TRANSFERRED"].includes(String(call.status||"").toUpperCase())?"Répondu":String(call.status||"").toUpperCase()==="VOICEMAIL"?"Messagerie":call.status||"Résultat non disponible"}</p></div>
                 {call.recordingAvailable ? <Headphones size={13} className="mt-1 shrink-0 text-primary"/>:null}
               </div>
             </button>)}

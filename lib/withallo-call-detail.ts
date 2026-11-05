@@ -70,7 +70,10 @@ function transcriptValue(value: unknown) {
     if (typeof rawAt === "number" && Number.isFinite(rawAt) && rawAt >= 0) {
       const seconds = rawAt > 10000 ? rawAt / 1000 : rawAt;
       at = Math.floor(seconds / 60).toString().padStart(2,"0")+":"+Math.floor(seconds % 60).toString().padStart(2,"0");
-    } else if (typeof rawAt === "string") at = rawAt.slice(0, 16);
+    } else if (typeof rawAt === "string") {
+      const asDate = Date.parse(rawAt);
+      at = Number.isFinite(asDate) ? new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(new Date(asDate)) : rawAt.slice(0, 16);
+    }
     const speakerData = first(item, ["speaker", "speaker_name", "speakerName", "role", "agent"]);
     const speaker = typeof speakerData === "object" ? str(first(obj(speakerData), ["name", "label", "role"])) || "" : str(speakerData) || "";
     return [{ speaker, text, at }];
@@ -128,7 +131,8 @@ function tagValues(call: Obj): string[] {
 }
 export function shapeWithAlloCallDetail(value: unknown): AlloCallDetailView {
   const call = obj(value);
-  const contact = obj(first(call, ["person", "contact", "crm_person", "customer"]));
+  const firstContact = vals(call.contacts)[0];
+  const contact = obj(first(call, ["person", "contact", "crm_person", "customer"]) || firstContact);
   const user = obj(first(call, ["user", "owner", "agent", "team_member"]));
   const summary = summaryValue(first(call, ["summary", "ai_summary", "aiSummary", "call_summary", "callSummary", "summary_markdown"]));
   const transcript = transcriptValue(first(call, ["transcriptions", "transcript", "concatenated_transcript", "transcription", "transcript_text", "transcriptText", "transcript_segments"]));

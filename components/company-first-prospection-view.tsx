@@ -314,7 +314,11 @@ export function CompanyFirstProspectionView() {
         }
       />
 
-      <div className="mt-6 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/50 bg-background">
+      <div className="mt-3 flex shrink-0 items-center justify-between rounded-xl border border-primary/15 bg-primary/[0.03] px-4 py-2.5">
+        <div className="min-w-0"><p className="text-xs font-semibold">Votre journée SDR</p><p className="truncate text-[11px] text-muted-foreground">Rappels du jour, comptes prioritaires et actions issues des appels Allo.</p></div>
+        <a href="/sdr" className="ml-3 inline-flex shrink-0 items-center rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted">Voir mes rappels</a>
+      </div>
+      <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/50 bg-background">
         <SdrWorkQueue
           activeFilter={workFilter}
           actionableCount={actionableCount}
