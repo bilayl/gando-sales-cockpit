@@ -28,7 +28,7 @@ export async function getAlloCallInsights(input: {
   };
   const seen = new Set<string>();
   // Hard cap to control API latency and rate limits; a partial report is labelled.
-  for (let page = 1; page <= 5; page++) {
+  for (let page = 1; page <= 4; page++) {
     const result = await withAlloRequest<SearchResult>("/v2/api/conversations/items/search", {
       method: "POST",
       body: JSON.stringify({
@@ -57,7 +57,7 @@ export async function getAlloCallInsights(input: {
       accumulator.checkedCalls++;
     }
     if (!result.pagination?.has_more) break;
-    if (page === 5) accumulator.partial = true;
+    if (page === 4) accumulator.partial = true;
   }
   return accumulator;
 }

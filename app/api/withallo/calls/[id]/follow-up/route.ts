@@ -30,7 +30,7 @@ async function findUniqueHubSpotContact(phone:string|null):Promise<{id:string;la
   const result=await hubspotJson("/crm/objects/2026-03/contacts/search",{
     method:"POST",
     body:JSON.stringify({
-      filterGroups:inputs.flatMap(value=>["phone","mobilephone"].map(propertyName=>({
+      filterGroups:inputs.slice(0,2).flatMap(value=>["phone","mobilephone"].map(propertyName=>({
         filters:[{propertyName,operator:"EQ",value}],
       }))),
       limit:5,
@@ -81,6 +81,7 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
       throw reservationError;
     }
 
+    let hubspotTaskConfirmed=false;
     try{
       const assignee=await resolveCockpitTaskAssignee(owner);
       // An ambiguous CRM match never creates a wrong association.
@@ -102,6 +103,7 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
       };
       if(assignee?.hubspotOwnerId)properties.hubspot_owner_id=assignee.hubspotOwnerId;
       const created=await createTask(properties,contact?[{id:contact.id,associationTypeId:204}]:[]);
+      hubspotTaskConfirmed=true;
       const taskId=String(created.id||"");
       if(!taskId)throw new Error("HubSpot n'a pas confirmé l'identifiant de la tâche.");
       const {error:updateError}=await supabase.from("sdr_allo_action_tasks")
@@ -116,7 +118,7 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
       // Release reservation if no task creation was confirmed.
       const {data:row}=await supabase.from("sdr_allo_action_tasks")
         .select("state").eq("call_id",id).eq("action_fingerprint",digest).eq("owner_email",owner).maybeSingle();
-      if(row?.state==="pending"){
+      if(row?.state==="pending" && !hubspotTaskConfirmed){
         await supabase.from("sdr_allo_action_tasks")
           .delete().eq("call_id",id).eq("action_fingerprint",digest).eq("owner_email",owner);
       }

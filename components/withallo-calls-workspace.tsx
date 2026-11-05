@@ -84,6 +84,13 @@ function CallDetails({ call, loading, error, onRefresh }: {
           <span className="inline-flex items-center gap-1.5"><Clock3 size={14}/>{durationFmt(call.durationSeconds)}</span>
         </div>
         <h2 className="mt-3 break-words text-xl font-semibold tracking-[-0.03em] text-foreground sm:text-2xl">{call.title}</h2>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className={"rounded-lg border px-2.5 py-1 text-[11px] font-semibold "+(["ANSWERED","TRANSFERRED"].includes(String(call.status||"").toUpperCase())?"border-emerald-500/30 bg-emerald-500/10 text-emerald-700":call.status==="VOICEMAIL"?"border-amber-500/30 bg-amber-500/10 text-amber-700":"border-border bg-muted text-muted-foreground")}>
+            {["ANSWERED","TRANSFERRED"].includes(String(call.status||"").toUpperCase())?"Appel répondu":call.status==="VOICEMAIL"?"Messagerie":call.status||"Résultat non renseigné"}
+          </span>
+          {call.transcriptText||call.transcript.length?<span className="rounded-lg border border-border bg-muted px-2.5 py-1 text-[11px]">Transcription Allo disponible</span>:null}
+          {call.actions.length?<span className="rounded-lg border border-border bg-muted px-2.5 py-1 text-[11px]">{call.actions.length} action(s) à valider</span>:null}
+        </div>
         <div className="mt-5 grid gap-3 text-sm sm:grid-cols-[105px_1fr]">
           <span className="flex items-center gap-2 text-muted-foreground"><UserRound size={16}/> Membre</span>
           <span className="font-medium">{call.memberName || call.memberEmail || "Non renseigné"}</span>

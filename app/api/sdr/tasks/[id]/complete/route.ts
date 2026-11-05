@@ -19,7 +19,8 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
       const {data:local}=await getSupabaseAdmin().from("tasks").select("assignee_cockpit_email").eq("hubspot_id",id).maybeSingle();
       const owner=String(task.properties?.hubspot_owner_id||"");
       const localEmail=String(local?.assignee_cockpit_email||"").trim().toLowerCase();
-      if(localEmail!==access.email.toLowerCase() && (!user?.hubspotOwnerId||user.hubspotOwnerId!==owner)){
+      if((localEmail && localEmail!==access.email.toLowerCase()) ||
+         (!localEmail && (!user?.hubspotOwnerId||user.hubspotOwnerId!==owner))){
         return NextResponse.json({error:"Cette tâche n’est pas affectée à votre compte."},{status:403});
       }
     }
