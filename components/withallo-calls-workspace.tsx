@@ -157,6 +157,7 @@ export function WithAlloCallsWorkspace() {
   const [query,setQuery] = useState("");
   const [direction,setDirection] = useState<"all"|"in"|"out">("all");
   const [recordingsOnly,setRecordingsOnly] = useState(false);
+  const [answerFilter,setAnswerFilter] = useState<"all"|"answered"|"missed">("all");
 
   const reload = useCallback(async () => {
     setLoading(true);setError("");
@@ -202,9 +203,12 @@ export function WithAlloCallsWorkspace() {
     if(direction==="out" && !isOutbound(call.direction))return false;
     if(direction==="in" && isOutbound(call.direction))return false;
     if(recordingsOnly && !call.recordingAvailable)return false;
+    const outcome=String(call.status||"").toUpperCase();
+    if(answerFilter==="answered" && !["ANSWERED","TRANSFERRED"].includes(outcome))return false;
+    if(answerFilter==="missed" && !["VOICEMAIL","MISSED","NO_ANSWER","BUSY","CANCELED","FAILED"].includes(outcome))return false;
     const hay=[call.contactName,call.title,call.externalNumber,call.from,call.to,call.ownerEmail,call.summary,call.transcript].filter(Boolean).join(" ").toLocaleLowerCase("fr-FR");
     return !query || hay.includes(query.toLocaleLowerCase("fr-FR"));
-  }),[calls,direction,query,recordingsOnly]);
+  }),[calls,direction,query,recordingsOnly,answerFilter]);
   const outbound=calls.filter(call=>isOutbound(call.direction)).length;
 
   return <div className="page-shell"><div className="page-content space-y-5">
@@ -224,6 +228,9 @@ export function WithAlloCallsWorkspace() {
           <div className="relative"><Search size={15} className="absolute left-3 top-3 text-muted-foreground"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher un appel…" aria-label="Rechercher un appel" className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring"/>{query ? <button type="button" onClick={()=>setQuery("")} aria-label="Effacer la recherche" className="absolute right-2.5 top-3 text-muted-foreground"><X size={15}/></button>:null}</div>
           <div className="flex flex-wrap items-center gap-2">
             <select value={direction} onChange={e=>setDirection(e.target.value as "all"|"in"|"out")} aria-label="Direction des appels" className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-xs"><option value="all">Tous les appels</option><option value="in">Entrants</option><option value="out">Sortants</option></select>
+            <select aria-label="Résultat d’appel" value={answerFilter} onChange={e=>setAnswerFilter(e.target.value as "all"|"answered"|"missed")} className="h-9 rounded-lg border border-border bg-background px-2 text-xs">
+              <option value="all">Tous résultats</option><option value="answered">Répondus</option><option value="missed">Non répondus</option>
+            </select>
             <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"><input type="checkbox" checked={recordingsOnly} onChange={e=>setRecordingsOnly(e.target.checked)}/> Audio</label>
           </div>
         </div>
@@ -234,7 +241,7 @@ export function WithAlloCallsWorkspace() {
               className={"w-full px-4 py-3.5 text-left transition hover:bg-muted/60 "+(selectedId===call.id?"bg-primary/[0.06] border-l-[3px] border-primary":"border-l-[3px] border-transparent")}>
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-muted">{isOutbound(call.direction)?<PhoneOutgoing size={14}/>:<PhoneIncoming size={14}/>}</span>
-                <div className="min-w-0 flex-1"><p className="line-clamp-2 break-words text-xs font-semibold leading-5">{displayCall(call)}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{call.externalNumber || call.contactName || "Numéro non identifié"}</p><p className="mt-1 text-[10px] text-muted-foreground">{dateFmt(call.startedAt)} · {durationFmt(call.durationSeconds)}</p></div>
+                <div className="min-w-0 flex-1"><p className="line-clamp-2 break-words text-xs font-semibold leading-5">{displayCall(call)}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{call.externalNumber || call.contactName || "Numéro non identifié"}</p><p className="mt-1 text-[10px] text-muted-foreground">{dateFmt(call.startedAt)} · {durationFmt(call.durationSeconds)}</p><p className="mt-1 text-[10px] font-medium text-primary">{["ANSWERED","TRANSFERRED"].includes(String(call.status||"").toUpperCase())?"Répondu":String(call.status||"").toUpperCase()==="VOICEMAIL"?"Messagerie":call.status||"Résultat non disponible"}</p></div>
                 {call.recordingAvailable ? <Headphones size={13} className="mt-1 shrink-0 text-primary"/>:null}
               </div>
             </button>)}

@@ -212,6 +212,23 @@ export function CallStatsDashboard() {
             </div>
           </section>
 
+          {data.insights ? <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><h2 className="text-base font-semibold">Réponses, transcriptions et actions</h2><p className="mt-1 text-xs text-muted-foreground">Calculées sur {data.insights.checkedCalls} appels vérifiés dans {data.insights.source}{data.insights.partial?" · échantillon partiel":""}.</p></div>
+              <Link href="/phone" className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">Consulter les appels et transcriptions <ArrowUpRight size={13}/></Link>
+            </div>
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              {[
+                {label:"Appels répondus",count:data.insights.answered,detail:"Résultat ANSWERED ou TRANSFERRED chez Allo"},
+                {label:"Sans réponse / messagerie",count:data.insights.missedOrVoicemail,detail:"Statuts explicitement non répondus"},
+                {label:"Avec transcription",count:data.insights.transcribed,detail:"Transcription réellement fournie par la source"},
+                {label:"Avec actions à suivre",count:data.insights.actionedCalls,detail:"Actions proposées par le compte rendu Allo"},
+              ].map(item=><div key={item.label} className="rounded-2xl border border-border bg-card p-4 shadow-sm"><div className="text-xs font-semibold">{item.label}</div><div className="mt-3 text-2xl font-semibold">{item.count==null?"—":number(item.count)}</div><p className="mt-1 text-[11px] leading-4 text-muted-foreground">{item.detail}</p></div>)}
+            </div>
+            {data.insights.unknownOutcome ? <p className="text-xs text-amber-600">{data.insights.unknownOutcome} appel(s) sans résultat exploitable : exclus du compteur « sans réponse ».</p> : null}
+            {data.insights.actionSuggestions != null ? <p className="text-xs text-muted-foreground">{data.insights.actionSuggestions} action(s) proposées par Allo sur les appels vérifiés. Elles restent à valider avant création d’une tâche CRM.</p> : null}
+          </section> : null}
+
           {view==="outbound"&&data.funnel.length ? <section className="rounded-2xl border border-border bg-card p-5">
             <div className="mb-4"><h2 className="text-base font-semibold">Entonnoir des appels sortants</h2><p className="mt-1 text-xs text-muted-foreground">Étapes fournies directement par l’API Allo · tous les appels sortants de la sélection.</p></div>
             <div className="grid gap-3 sm:grid-cols-4">{data.funnel.map(item=><div key={item.key} className="rounded-xl border border-border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">{item.name}</p><p className="mt-1 text-2xl font-semibold">{number(item.metric.value)}</p><p className={"mt-1 text-xs "+percentClass(item.metric)}>{changeLabel(item.metric)}</p></div>)}</div>
