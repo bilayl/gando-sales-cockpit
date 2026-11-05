@@ -28,11 +28,11 @@ function candidateNumbers(e164: string) {
 
 async function searchNumber(
   values: string[], operator: "EQ" | "CONTAINS_TOKEN",
-): Promise<{ rows: HubSpotContact[]; total: number }> {
+): Promise<HubSpotContact[]> {
   const filterGroups = values.flatMap(value => ["phone", "mobilephone"].map(propertyName => ({
     filters: [{ propertyName, operator, value }],
   }))).slice(0, 5);
-  if (!filterGroups.length) return { rows: [], total: 0 };
+  if (!filterGroups.length) return [];
   const payload = await hubspotJson("/crm/objects/2026-03/contacts/search", {
     method: "POST",
     body: JSON.stringify({
@@ -41,7 +41,7 @@ async function searchNumber(
       properties: ["firstname", "lastname", "email", "phone", "mobilephone", "company"],
     }),
   }) as HubSpotSearch;
-  return { rows: Array.isArray(payload.results) ? payload.results : [], total: Number(payload.total || 0) };
+  return Array.isArray(payload.results) ? payload.results : [];
 }
 
 function isExactMatch(contact: HubSpotContact, expected: string) {
@@ -68,60 +68,29 @@ export async function GET(request: NextRequest) {
 
     const numbers = candidateNumbers(phone);
     const national = numbers.find(value => /^0\d{9}$/.test(value));
-    const spaced = national?.replace(/(\d{2})(?=\d)/g, "$1 ").trim();
-    const dotted = national?.replace(/(\d{2})(?=\d)/g, "$1.").replace(/\.$/, "");
-    const variants = [...new Set([
-      phone, national, spaced, dotted, "00" + phone.slice(1),
-    ].filter((value): value is string => Boolean(value)))];
-
-    // HubSpot phones have no single reliable storage format. Try exact
-    // comparisons across E.164, local, spaced and dotted representations.
-    // A failed format must not make every other lookup fail.
-    const calls = [];
-    for (let start = 0; start < variants.length; start += 2) {
-      calls.push(searchNumber(variants.slice(start, start + 2), "EQ"));
-    }
-    const exactResults = await Promise.allSettled(calls);
-    const exact = exactResults.flatMap(item => item.status === "fulfilled" ? item.value.rows : []);
-    const incomplete = exactResults.some(item => item.status === "rejected" || (item.status === "fulfilled" && item.value.total > item.value.rows.length));
-
+    const formatted = national?.replace(/(\d{2})(?=\d)/g, "$1 ").trim();
+    // HubSpot stores phones in various formats: international, French local
+    // and spaced. Query each format, then *strictly* compare normalized values.
+    const variants = [...new Set([phone, national, formatted, "00" + phone.slice(1)].filter((v): v is string => Boolean(v)))];
+    const searches = await Promise.all([
+      searchNumber(variants.slice(0, 2), "EQ"),
+      searchNumber(variants.slice(2, 4), "EQ"),
+    ]);
+    const exact = searches.flat();
+    // Discovery fallback only. Matching by last digits alone is never enough
+    // to trigger an automatic page navigation.
+    const supplemental = exact.length === 0
+      ? await searchNumber(["*" + phone.replace(/\D/g, "").slice(-9)], "CONTAINS_TOKEN").catch(() => [])
+      : [];
+    const rows = [...exact, ...supplemental];
     const distinct = new Map<string, Contact>();
-    function appendMatches(rows: HubSpotContact[]) {
-      for (const row of rows) {
-        if (!isExactMatch(row, phone)) continue;
-        const entry = present(row);
-        if (entry) distinct.set(entry.id, entry);
-      }
-    }
-    appendMatches(exact);
-
-    if (!distinct.size || incomplete) {
-      const digits = phone.replace(/\D/g, "");
-      const suffix = digits.slice(-9);
-      const fallbacks = await Promise.allSettled([
-        searchNumber(["*" + suffix], "CONTAINS_TOKEN"),
-        hubspotJson("/crm/objects/2026-03/contacts/search", {
-          method: "POST",
-          body: JSON.stringify({
-            query: suffix,
-            limit: 30,
-            properties: ["firstname", "lastname", "email", "phone", "mobilephone", "company"],
-          }),
-        }) as Promise<HubSpotSearch>,
-      ]);
-      for (const fallback of fallbacks) {
-        if (fallback.status !== "fulfilled") continue;
-        const data = fallback.value;
-        appendMatches("rows" in data && Array.isArray(data.rows) ? data.rows : ("results" in data && Array.isArray(data.results) ? data.results : []));
-      }
-      if (!exact.length && fallbacks.every(item => item.status === "rejected")) {
-        throw new Error("HubSpot ne permet pas de rechercher le numéro. Vérifiez la connexion CRM et les autorisations de lecture des contacts.");
-      }
+    for (const row of rows) {
+      if (!isExactMatch(row, phone)) continue;
+      const item = present(row);
+      if (item) distinct.set(item.id, item);
     }
     const contacts = [...distinct.values()].slice(0, 8);
-    // Never open a single contact automatically when HubSpot may have omitted
-    // more records from a truncated or failed search.
-    const result = contacts.length === 1 && !incomplete ? "match" : contacts.length ? "multiple" : "unknown";
+    const result = contacts.length === 1 ? "match" : contacts.length ? "multiple" : "unknown";
     return NextResponse.json(
       { result, contacts, phone },
       { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } },
