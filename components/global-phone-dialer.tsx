@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Copy, ExternalLink, Minimize2, Phone, PhoneCall, RefreshCw, X } from "lucide-react";
 import { normalizeWithAlloDialNumber } from "@/lib/withallo-phone";
-import { extractIncomingAlloPhone, incomingEventFields } from "@/lib/withallo-incoming-event";
+import { extractIncomingAlloPhone, extractOutgoingAlloPhone, extractAlloDialpadPhone, incomingEventFields } from "@/lib/withallo-incoming-event";
 
 const ALLO_ORIGIN = "https://web.withallo.com";
 const ALLO_EMBED_URL = ALLO_ORIGIN + "?variant=dialer";
@@ -42,6 +42,7 @@ export function GlobalPhoneDialer() {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [number, setNumber] = useState("");
+  const [numberSyncedFromAllo, setNumberSyncedFromAllo] = useState(false);
   const [ready, setReady] = useState(false);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [embedWarning, setEmbedWarning] = useState(false);
@@ -77,6 +78,18 @@ export function GlobalPhoneDialer() {
 
   useEffect(() => { setMounted(true); }, []);
 
+  const syncNumberFromAllo = useCallback((value: unknown) => {
+    const normalized = normalizeWithAlloDialNumber(value);
+    if (!normalized) return;
+    // Allo and Gando live on different origins. Only a verified postMessage
+    // from the embedded Allo window can update the parent input.
+    setNumber(normalized);
+    setNumberSyncedFromAllo(true);
+    setCopied(false);
+    pendingPhoneRef.current = null;
+    setNotice("");
+  }, []);
+
   const resolveIncoming = useCallback(async (payload: unknown, manual = false) => {
     const incomingData = asRecord(payload);
     const callerPhone = extractIncomingAlloPhone(payload);
@@ -88,6 +101,7 @@ export function GlobalPhoneDialer() {
     if (!manual && incomingDedup.current?.id === callId && incomingDedup.current.phone === callerPhone
         && now - incomingDedup.current.at < 35000) return;
     if (!manual) incomingDedup.current = { id: callId, at: now, phone: callerPhone };
+    if (!manual && callerPhone) syncNumberFromAllo(callerPhone);
 
     const request = ++lookupSequence.current;
     toggle(true);
@@ -145,7 +159,7 @@ export function GlobalPhoneDialer() {
     } finally {
       if (request === lookupSequence.current) setCallerLookupBusy(false);
     }
-  }, [router, toggle]);
+  }, [router, toggle, syncNumberFromAllo]);
 
   useEffect(() => {
     const onOpen = (event: Event) => {
@@ -153,6 +167,7 @@ export function GlobalPhoneDialer() {
       const rawPhone = detail?.phone || "";
       const normalized = normalizeWithAlloDialNumber(rawPhone);
       setNumber(rawPhone);
+      setNumberSyncedFromAllo(false);
       setNotice("");
       setCopied(false);
       if (rawPhone && !normalized) {
@@ -167,7 +182,7 @@ export function GlobalPhoneDialer() {
     };
     window.addEventListener("gando:open-dialer", onOpen);
     return () => window.removeEventListener("gando:open-dialer", onOpen);
-  }, [sendDial, toggle, resolveIncoming]);
+  }, [sendDial, toggle, resolveIncoming, syncNumberFromAllo]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -188,6 +203,13 @@ export function GlobalPhoneDialer() {
         void resolveIncoming(data.payload ?? data.data ?? data);
       } else if (data.type === "outgoing_call") {
         setCallState("Appel sortant en cours");
+        const dialed = extractOutgoingAlloPhone(data.payload ?? data.data ?? data);
+        if (dialed) syncNumberFromAllo(dialed);
+      } else if (["dialpad_changed", "dialpad_number_changed", "dialer_number_changed", "phone_number_changed", "number_changed"].includes(data.type || "")) {
+        // These update events are optional: Allo does not document a
+        // guarantee that typing inside the cross-origin iframe emits them.
+        const entered = extractAlloDialpadPhone(data.payload ?? data.data ?? data);
+        if (entered) syncNumberFromAllo(entered);
       } else if (data.type === "call_answered") {
         setCallState("Conversation en cours");
       } else if (data.type === "call_ended") {
@@ -219,7 +241,7 @@ export function GlobalPhoneDialer() {
     // form. Never make the test button silently inert in that situation.
     setIncoming({
       state: "error", phone: null, contacts: [],
-      message: "Saisissez le numéro à rechercher dans le champ juste au-dessus du bouton « Composer » de Gando (pas dans le clavier intégré à Allo), puis cliquez de nouveau sur « Tester la recherche CRM ».",
+      message: "Allo n’a pas encore transmis de numéro à Gando. La saisie dans le clavier Allo ne peut pas être lue directement avant qu’Allo envoie un événement. Pour tester immédiatement, indiquez le numéro dans le champ Gando situé au-dessus de « Composer ».",
     });
     toggle(true);
     phoneInputRef.current?.focus();
@@ -320,7 +342,7 @@ export function GlobalPhoneDialer() {
             ref={phoneInputRef}
             aria-label="Numéro de téléphone à appeler ou rechercher dans le CRM"
             value={number}
-            onChange={event => { setNumber(event.target.value); pendingPhoneRef.current = null; setCopied(false); }}
+            onChange={event => { setNumber(event.target.value); setNumberSyncedFromAllo(false); pendingPhoneRef.current = null; setCopied(false); }}
             onKeyDown={event => { if (event.key === "Enter") prefill(); }}
             placeholder="N° du contact à retrouver dans Gando…"
             inputMode="tel"
@@ -330,7 +352,7 @@ export function GlobalPhoneDialer() {
           <button type="button" onClick={() => void copy()} disabled={!normalized} title="Copier le numéro" aria-label="Copier le numéro" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border hover:bg-muted disabled:opacity-40">{copied ? <Check size={14}/> : <Copy size={14}/>}</button>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-          <p className="text-[11px] text-muted-foreground">Recherche dans le CRM Gando</p>
+          <p className="text-[11px] text-muted-foreground">{numberSyncedFromAllo ? "Numéro récupéré automatiquement depuis Allo" : "Recherche dans le CRM Gando"}</p>
           <button type="button" onClick={lookupFromDialer} disabled={callerLookupBusy}
             className="rounded-lg border border-border bg-card px-3 py-1.5 text-[11px] font-semibold hover:bg-muted disabled:opacity-40">
             {callerLookupBusy ? "Recherche en cours…" : "Tester la recherche CRM"}

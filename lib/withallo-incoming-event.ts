@@ -60,3 +60,69 @@ export function extractIncomingAlloPhone(payload: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * Allo's outbound events identify the recipient via "to", not "from"
+ * (which is often the Gando/Allo company line). Resolve only known
+ * dialed-number fields and validate the complete E.164 number.
+ */
+export function extractOutgoingAlloPhone(payload: unknown): string | null {
+  if (typeof payload === "string") return normalizeWithAlloDialNumber(payload);
+  const queue: unknown[] = [payload];
+  const seen = new Set<object>();
+  const nodes: Dict[] = [];
+  const nestedKeys = [
+    "call", "to", "callee", "recipient", "contact", "person",
+    "data", "payload", "details", "dialer", "event", "target",
+  ];
+  while (queue.length && seen.size < 18) {
+    const item = queue.shift();
+    const node = dict(item);
+    if (!node || seen.has(node)) continue;
+    seen.add(node);
+    nodes.push(node);
+    for (const key of nestedKeys) {
+      const next = node[key];
+      if (dict(next)) queue.push(next);
+    }
+  }
+  const prioritized = [
+    "to_number", "toNumber", "callee_number", "calleeNumber",
+    "dialed_number", "dialedNumber", "recipient_number", "recipientNumber",
+    "contact_number", "contactNumber", "to", "callee", "recipient",
+  ];
+  const fallback = ["phone_number", "phoneNumber", "number", "phone"];
+  for (const keys of [prioritized, fallback]) {
+    for (const node of nodes) {
+      for (const key of keys) {
+        const value = node[key];
+        if (typeof value !== "string") continue;
+        const normalized = normalizeWithAlloDialNumber(value);
+        if (normalized) return normalized;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Optional forward compatibility for a dialpad number update event if the
+ * embedded provider emits it. The published Allo docs currently guarantee
+ * call lifecycle events, not live keypad-change notifications.
+ */
+export function extractAlloDialpadPhone(payload: unknown): string | null {
+  if (typeof payload === "string") return normalizeWithAlloDialNumber(payload);
+  const root = dict(payload);
+  if (!root) return null;
+  const objects = [root, dict(root.data), dict(root.payload), dict(root.dialer), dict(root.input)];
+  for (const item of objects) {
+    if (!item) continue;
+    for (const key of ["phone_number", "phoneNumber", "dialed_number", "dialedNumber", "input_number", "inputNumber", "number", "value"]) {
+      const v = item[key];
+      if (typeof v !== "string") continue;
+      const phone = normalizeWithAlloDialNumber(v);
+      if (phone) return phone;
+    }
+  }
+  return null;
+}
