@@ -241,7 +241,7 @@ export function GlobalPhoneDialer() {
     // form. Never make the test button silently inert in that situation.
     setIncoming({
       state: "error", phone: null, contacts: [],
-      message: "Saisissez le numéro à rechercher dans le champ juste au-dessus du bouton « Composer » de Gando (pas dans le clavier intégré à Allo), puis cliquez de nouveau sur « Tester la recherche CRM ».",
+      message: "Allo n’a pas encore transmis de numéro à Gando. La saisie dans le clavier Allo ne peut pas être lue directement avant qu’Allo envoie un événement. Pour tester immédiatement, indiquez le numéro dans le champ Gando situé au-dessus de « Composer ».",
     });
     toggle(true);
     phoneInputRef.current?.focus();
