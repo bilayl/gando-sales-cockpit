@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, Copy, ExternalLink, Minimize2, Phone, PhoneCall, RefreshCw, X } from "lucide-react";
 import { normalizeWithAlloDialNumber } from "@/lib/withallo-phone";
 
@@ -15,7 +17,37 @@ type DialerEvent = {
   payload?: Record<string, unknown>;
 };
 
+type ContactMatch = { id: string; name: string; company: string | null; href: string };
+type IncomingResult = {
+  state: "loading" | "match" | "multiple" | "unknown" | "error" | "masked";
+  phone: string | null;
+  contacts: ContactMatch[];
+  message?: string;
+};
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+function extractIncomingPhone(payload: unknown): string | null {
+  const root = asRecord(payload);
+  // Allo's incoming_call is the authoritative direction. Never use a "to"
+  // number here, which would be Gando's own line.
+  const sources = [root, asRecord(root.caller), asRecord(root.call), asRecord(root.contact), asRecord(root.from)];
+  for (const value of sources) {
+    for (const field of ["from_number", "caller_number", "caller_phone", "phone_number", "from", "phone", "number"]) {
+      const candidate = value[field];
+      if (typeof candidate !== "string") continue;
+      const parsed = normalizeWithAlloDialNumber(candidate);
+      if (parsed) return parsed;
+    }
+  }
+  return null;
+}
+
 export function GlobalPhoneDialer() {
+  const router = useRouter();
+  const lookupSequence = useRef(0);
+  const incomingDedup = useRef<{ id: string; at: number } | null>(null);
+  const [incoming, setIncoming] = useState<IncomingResult | null>(null);
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [number, setNumber] = useState("");
@@ -53,6 +85,45 @@ export function GlobalPhoneDialer() {
 
   useEffect(() => { setMounted(true); }, []);
 
+  const resolveIncoming = useCallback(async (payload: unknown) => {
+    const incomingData = asRecord(payload);
+    const callerPhone = extractIncomingPhone(payload);
+    const callId = String(incomingData.call_id || incomingData.callId || incomingData.id || callerPhone || "unknown");
+    const now = Date.now();
+    if (incomingDedup.current?.id === callId && now - incomingDedup.current.at < 35000) return;
+    incomingDedup.current = { id: callId, at: now };
+
+    const request = ++lookupSequence.current;
+    toggle(true);
+    if (!callerPhone) {
+      setIncoming({ state: "masked", phone: null, contacts: [], message: "L'appelant n'a pas transmis de numéro exploitable." });
+      return;
+    }
+    setIncoming({ state: "loading", phone: callerPhone, contacts: [] });
+    try {
+      const response = await fetch("/api/withallo/caller?phone=" + encodeURIComponent(callerPhone), {
+        cache: "no-store", credentials: "same-origin",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (request !== lookupSequence.current) return;
+      if (!response.ok) throw new Error(data.error || "Le CRM n'a pas pu identifier ce numéro.");
+      const matches: ContactMatch[] = Array.isArray(data.contacts) ? data.contacts : [];
+      if (data.result === "match" && matches.length === 1 && /^\/contacts\/\d+$/.test(matches[0].href)) {
+        setIncoming({ state: "match", phone: callerPhone, contacts: matches, message: "Fiche contact ouverte automatiquement." });
+        router.push(matches[0].href);
+      } else if (data.result === "multiple" && matches.length) {
+        setIncoming({ state: "multiple", phone: callerPhone, contacts: matches, message: "Plusieurs contacts correspondent à ce numéro. Choisissez la bonne fiche." });
+      } else {
+        setIncoming({ state: "unknown", phone: callerPhone, contacts: [], message: "Aucun contact unique trouvé dans HubSpot pour ce numéro." });
+      }
+    } catch (error) {
+      if (request === lookupSequence.current) setIncoming({
+        state: "error", phone: callerPhone, contacts: [],
+        message: error instanceof Error ? error.message : "Impossible de retrouver l'appelant dans HubSpot.",
+      });
+    }
+  }, [router, toggle]);
+
   useEffect(() => {
     const onOpen = (event: Event) => {
       const detail = (event as CustomEvent<{ phone?: string }>).detail;
@@ -73,7 +144,7 @@ export function GlobalPhoneDialer() {
     };
     window.addEventListener("gando:open-dialer", onOpen);
     return () => window.removeEventListener("gando:open-dialer", onOpen);
-  }, [sendDial, toggle]);
+  }, [sendDial, toggle, resolveIncoming]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -90,12 +161,13 @@ export function GlobalPhoneDialer() {
         setAgentSignedIn(true);
       } else if (data.type === "incoming_call") {
         setCallState("Appel entrant");
-        toggle(true);
+        void resolveIncoming(data.payload);
       } else if (data.type === "outgoing_call") {
         setCallState("Appel sortant en cours");
       } else if (data.type === "call_answered") {
         setCallState("Conversation en cours");
       } else if (data.type === "call_ended") {
+        lookupSequence.current += 1;
         setCallState("Appel terminé");
         window.dispatchEvent(new Event("gando:withallo-call-ended"));
         window.dispatchEvent(new Event("gando:withallo-updated"));
@@ -188,6 +260,28 @@ export function GlobalPhoneDialer() {
           <button type="button" onClick={prefill} disabled={!normalized} title="Préremplir dans Allo" className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-40"><PhoneCall size={14}/> Composer</button>
           <button type="button" onClick={() => void copy()} disabled={!normalized} title="Copier le numéro" aria-label="Copier le numéro" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border hover:bg-muted disabled:opacity-40">{copied ? <Check size={14}/> : <Copy size={14}/>}</button>
         </div>
+        {incoming ? (
+          <div role="status" className="shrink-0 border-b border-primary/20 bg-primary/[0.045] px-3 py-3 text-xs leading-5">
+            <div className="flex items-center justify-between gap-2">
+              <strong>Appel entrant {incoming.phone ? "· " + incoming.phone : "· Numéro masqué"}</strong>
+              <button type="button" className="rounded-md p-1 hover:bg-muted" title="Masquer la fiche de l’appelant" onClick={() => setIncoming(null)}><X size={13}/></button>
+            </div>
+            <p className="mt-1 text-muted-foreground">{incoming.state === "loading" ? "Recherche dans les contacts HubSpot…" : incoming.message}</p>
+            {incoming.state === "match" && incoming.contacts[0] ? (
+              <Link href={incoming.contacts[0].href} className="mt-2 inline-flex font-semibold text-primary hover:underline">{incoming.contacts[0].name} · Voir la fiche</Link>
+            ) : null}
+            {incoming.state === "multiple" ? <div className="mt-2 space-y-1">
+              {incoming.contacts.map(item => (
+                <Link key={item.id} href={item.href} onClick={() => setIncoming(null)} className="block rounded-lg border border-border bg-background px-3 py-2 hover:bg-muted">
+                  <span className="font-semibold">{item.name}</span>{item.company ? <span className="ml-2 text-muted-foreground">{item.company}</span> : null}
+                </Link>
+              ))}
+            </div> : null}
+            {incoming.state === "unknown" || incoming.state === "masked" || incoming.state === "error" ? (
+              <Link href="/contacts" className="mt-2 inline-flex font-semibold text-primary hover:underline">Consulter les contacts CRM</Link>
+            ) : null}
+          </div>
+        ) : null}
         {notice ? <p role="status" className="border-b border-border bg-muted/30 px-3 py-2 text-xs leading-4">{notice}</p> : null}
         <div className="relative min-h-0 flex-1 overflow-y-auto bg-muted/20">
           <div className="mx-auto h-[640px] w-[376px] max-w-full overflow-hidden">
