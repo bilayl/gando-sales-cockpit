@@ -1,4 +1,5 @@
 import "server-only";
+import { getAlloCallInsights } from "@/lib/withallo-call-insights";
 import { withAlloRequest, listWithAlloNumbers, WithAlloError } from "@/lib/withallo";
 import { emptyMetrics, fromAlloMetric, metric, metricsFromRecords, recordsBreakdown, type CallRecord } from "@/lib/call-analytics-math";
 import type { CallAnalyticsRange, CallAnalyticsResponse, CallAnalyticsView, CallAnalyticsBreakdown, CallMetrics, CallStatsRow, CallFunnelItem } from "@/lib/call-analytics-types";
@@ -133,6 +134,11 @@ export async function withAlloCallAnalytics(args:{
   }
   if(view==="overview") {
     const base=await overview(range,selectedUser,selectedNumber);
+    const insights=await getAlloCallInsights({from:range.from,to:range.to,userId:selectedUser,phone:selectedNumber}).catch(error=>{
+      notes.push("Le détail des appels répondus et des transcriptions est temporairement indisponible : "+(error instanceof Error?error.message:"erreur Allo"));
+      return null;
+    });
+    if(insights?.partial)notes.push("Comptage des appels répondus et transcrits partiel au-delà de 500 appels. Réduisez la période.");
     const rows=breakdown==="user" ? toRows(base) : [];
     let partial=false;
     if(breakdown==="phone"&&canCompareTeam){
@@ -158,9 +164,14 @@ export async function withAlloCallAnalytics(args:{
       rows.push({id:selectedUser,name:u?.name||u?.email||"Mes appels",subtitle:u?.email||null,metrics:toMetrics(base)});
     }
     return {source:"allo",view,breakdown,period:range,metrics:toMetrics(base),rows,userOptions,phoneOptions,
-      filterId:selectedUser||selectedNumber,canCompareTeam,updatedAt:base.last_updated||null,funnel:[],notes,partial};
+      filterId:selectedUser||selectedNumber,canCompareTeam,updatedAt:base.last_updated||null,funnel:[],insights,notes,partial:partial||Boolean(insights?.partial)};
   }
   const direction=view==="inbound"?"INBOUND":"OUTBOUND";
+  const insights=await getAlloCallInsights({from:range.from,to:range.to,userId:selectedUser,phone:selectedNumber,direction}).catch(error=>{
+    notes.push("Le détail des réponses et transcriptions est momentanément indisponible : "+(error instanceof Error?error.message:"erreur Allo"));
+    return null;
+  });
+  if(insights?.partial)notes.push("Comptage des réponses et transcriptions partiel au-delà de 500 appels.");
   const names=new Map(users.map(x=>[x.id,x]));
   const [c,p,extra]=await Promise.all([
     searchCalls({from:range.from,to:range.to},direction,selectedUser,selectedNumber),
@@ -175,5 +186,5 @@ export async function withAlloCallAnalytics(args:{
   if(view==="inbound")notes.push("Le taux de réponse des entrants est calculé sur les appels Allo dont le statut est ANSWERED ou TRANSFERRED.");
   return {source:"allo",view,breakdown,period:range,metrics:metricsFromRecords(current,previous),rows,userOptions,phoneOptions,
     filterId:selectedUser||selectedNumber,canCompareTeam,updatedAt:extra?.lastUpdated||new Date().toISOString(),
-    funnel:extra?.funnel||[],notes,partial:c.partial||p.partial};
+    funnel:extra?.funnel||[],insights,notes,partial:c.partial||p.partial||Boolean(insights?.partial)};
 }

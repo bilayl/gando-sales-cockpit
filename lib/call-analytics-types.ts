@@ -8,12 +8,25 @@ export type CallStatsRow = { id: string; name: string; subtitle: string | null; 
 export type CallAnalyticsRange = { from: string; to: string; previousFrom: string; previousTo: string };
 export type CallStatsOption = { id: string; label: string };
 export type CallFunnelItem = { key: string; name: string; metric: CallMetric; rate: number | null };
+export type CallAnalyticsInsights = {
+  answered: number | null;
+  missedOrVoicemail: number | null;
+  unknownOutcome: number | null;
+  transcribed: number | null;
+  summarized: number | null;
+  actionedCalls: number | null;
+  actionSuggestions: number | null;
+  checkedCalls: number;
+  partial: boolean;
+  source: "Allo" | "HubSpot CRM";
+};
 export type CallAnalyticsResponse = {
   source: CallAnalyticsSource;
   view: CallAnalyticsView;
   breakdown: CallAnalyticsBreakdown;
   period: CallAnalyticsRange;
   metrics: CallMetrics;
+  insights?: CallAnalyticsInsights | null;
   rows: CallStatsRow[];
   userOptions: CallStatsOption[];
   phoneOptions: CallStatsOption[];
