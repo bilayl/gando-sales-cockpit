@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { KpiDataSourceHealth } from "@/components/kpi-data-source-health";
+import { KpiHistoricalAverages } from "@/components/kpi-historical-averages";
 import { KpiSystemDashboard } from "@/components/kpi-system-dashboard";
 import { KpiInsurancePayable } from "@/components/kpi-insurance-payable";
 import { KpiPageShell } from "@/components/kpi/kpi-page-shell";
@@ -15,9 +16,10 @@ export default async function KpiDataPage() {
   return (
     <KpiPageShell
       role={access.role}
-      title="Qualité des données"
-      description="Contrôler les sources, la fraîcheur, les rapprochements et la définition officielle des métriques utilisées dans le pilotage."
+      title="Données"
+      description="Moyennes historiques depuis le lancement, détail mensuel de tous les KPI et contrôle de la qualité des sources."
     >
+      <KpiHistoricalAverages />
       <KpiDataSourceHealth canEdit={access.role !== "commercial"} />
       <KpiInsurancePayable />
       <KpiSystemDashboard />
