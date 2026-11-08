@@ -32,6 +32,7 @@ type EligibleItem = {
 const SUCCESSFUL_STATUSES = new Set(["active", "close", "captured"]);
 const FEE_MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const PARTNER_API_SOURCE = "partner_api";
+const SOURCE_PAGE_SIZE = 500;
 
 function str(value: unknown) {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -50,7 +51,12 @@ function timestamp(value: unknown) {
 }
 function monthKey(value: number | null) {
   if (value == null) return null;
-  return new Date(value).toISOString().slice(0, 7);
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris", year: "numeric", month: "2-digit",
+  }).formatToParts(new Date(value));
+  const year = parts.find(part => part.type === "year")?.value;
+  const month = parts.find(part => part.type === "month")?.value;
+  return year && month ? year + "-" + month : null;
 }
 function rewardForDeposit(amountCents: number, tiers: Tier[]) {
   const tier = tiers.find(candidate => {
@@ -73,13 +79,39 @@ function isEffective(at: number | null, effectiveFrom: unknown, effectiveTo: unk
 }
 
 async function readSourceTable(table: string): Promise<MirrorRow[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("gando_source_records")
-    .select("source_id,payload")
-    .eq("source_table", table)
-    .order("source_id", { ascending: true });
-  if (error) throw error;
-  return (data || []) as MirrorRow[];
+  const result: MirrorRow[] = [];
+  for (let offset = 0; ; offset += SOURCE_PAGE_SIZE) {
+    const { data, error } = await getSupabaseAdmin()
+      .from("gando_source_records")
+      .select("source_id,payload")
+      .eq("source_table", table)
+      .order("source_id", { ascending: true })
+      .range(offset, offset + SOURCE_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as MirrorRow[];
+    result.push(...page);
+    if (page.length < SOURCE_PAGE_SIZE) return result;
+  }
+}
+
+/**
+ * The Gando deposit mirror exceeds 50,000 rows. A bare PostgREST select
+ * truncates at 1,000: RL Location's fees were calculated on an incomplete
+ * subset. Query the server-only RPC restricted to configured partners and
+ * Fleetee-linked accounts, then paginate it for future growth.
+ */
+async function readRelevantDeposits(): Promise<MirrorRow[]> {
+  const result: MirrorRow[] = [];
+  for (let offset = 0; ; offset += SOURCE_PAGE_SIZE) {
+    const { data, error } = await getSupabaseAdmin()
+      .rpc("kpi_partner_relevant_deposits")
+      .order("source_id", { ascending: true })
+      .range(offset, offset + SOURCE_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as MirrorRow[];
+    result.push(...page);
+    if (page.length < SOURCE_PAGE_SIZE) return result;
+  }
 }
 
 function buildDeposits(rows: MirrorRow[]): Deposit[] {
@@ -101,7 +133,7 @@ function buildDeposits(rows: MirrorRow[]): Deposit[] {
 function matchFees(deposits: Deposit[], fees: FeeOperation[]) {
   const byClient = new Map<string, Deposit[]>();
   for (const deposit of deposits) {
-    if (deposit.archived || !deposit.clientId) continue;
+    if (deposit.archived || !deposit.clientId || deposit.startAt == null) continue;
     const list = byClient.get(deposit.clientId) || [];
     list.push(deposit);
     byClient.set(deposit.clientId, list);
@@ -114,7 +146,9 @@ function matchFees(deposits: Deposit[], fees: FeeOperation[]) {
     const candidates = (byClient.get(fee.clientId) || [])
       .filter(deposit => !used.has(deposit.id))
       .map(deposit => {
-        const dates = [deposit.createdAt, deposit.updatedAt].filter((value): value is number => value != null);
+        // The fee is paid around activation. updatedAt can be months later
+        // (closure/capture) and must never misattribute a fee to that deposit.
+        const dates = [deposit.createdAt, deposit.startAt].filter((value): value is number => value != null);
         const gap = dates.length ? Math.min(...dates.map(value => Math.abs(fee.createdAt! - value))) : Number.POSITIVE_INFINITY;
         return { deposit, gap };
       })
@@ -152,11 +186,14 @@ function guaranteedDepositIds(captureRows: MirrorRow[], guaranteeRows: MirrorRow
 
 export async function GET() {
   try {
-    await requireCockpitAccess();
+    const access = await requireCockpitAccess();
+    if (!access.canAccessKpi) {
+      return NextResponse.json({ error: "Accès aux KPI non autorisé." }, { status: 403 });
+    }
     const admin = getSupabaseAdmin();
     const [accountsRows, depositRows, operationRows, captureRows, guaranteeRows, rulesResult, syncResult] = await Promise.all([
       readSourceTable("accounts"),
-      readSourceTable("deposits"),
+      readRelevantDeposits(),
       readSourceTable("client_operations"),
       readSourceTable("captures"),
       readSourceTable("guarantee_activations"),
@@ -264,14 +301,45 @@ export async function GET() {
       }
       const breakdown = [...breakdownMap.values()].sort((a, b) => b.dueCents - a.dueCents || a.accountName.localeCompare(b.accountName));
 
+      const activatedDeposits = actorDeposits.filter(deposit => deposit.startAt != null);
+      const ineligibleStatuses = activatedDeposits.filter(deposit => {
+        return !SUCCESSFUL_STATUSES.has(deposit.status);
+      }).length;
+      const missingSecuringFees = activatedDeposits.filter(deposit =>
+        SUCCESSFUL_STATUSES.has(deposit.status) && !feeByDeposit.has(deposit.id),
+      ).length;
+
       return {
         actorKey,
-        actorLabel: str(rule.actor_label),
+        actorLabel: actorKey === "rl" ? "RL Location" : str(rule.actor_label),
+        diagnostics: {
+          sourceDeposits: actorDeposits.length,
+          activatedDeposits: activatedDeposits.length,
+          pendingOrIncomplete: actorDeposits.length - activatedDeposits.length,
+          ineligibleStatuses,
+          missingSecuringFees,
+          excludedByTiers: actorKey === "rl" ? activatedDeposits.filter(deposit =>
+            SUCCESSFUL_STATUSES.has(deposit.status)
+            && feeByDeposit.has(deposit.id)
+            && rewardForDeposit(deposit.amountCents, tiers) <= 0,
+          ).length : 0,
+        },
         accountId: accountId || null,
         accountName: account ? str(account.display_name) || str(account.company_name) || null : null,
         mechanism: str(rule.mechanism),
         calculationMode,
         rateBps: rateBps || null,
+        tiers: actorKey === "rl" ? tiers : [],
+        depositDetails: actorKey === "rl" ? eligible.map(item => ({
+          id: item.deposit.id,
+          status: item.deposit.status,
+          activatedAt: item.deposit.startAt != null ? new Date(item.deposit.startAt).toISOString() : null,
+          feeAt: item.fee?.createdAt != null ? new Date(item.fee.createdAt).toISOString() : null,
+          amountCents: item.deposit.amountCents,
+          securingFeeCents: item.fee?.amountCents || 0,
+          dueCents: item.dueCents,
+          month: item.month,
+        })).sort((a, b) => b.month.localeCompare(a.month) || b.id.localeCompare(a.id)) : [],
         configured,
         eligibleDeposits: eligible.length,
         eligibleTdvCents: eligible.reduce((sum, item) => sum + item.deposit.amountCents, 0),
@@ -286,7 +354,7 @@ export async function GET() {
       };
     });
 
-    const currentMonth = new Date().toISOString().slice(0, 7);
+    const currentMonth = monthKey(Date.now()) || new Date().toISOString().slice(0, 7);
     const currentMonthDueCents = rows.reduce((sum, row) => sum + (row.monthly.find(month => month.month === currentMonth)?.dueCents || 0), 0);
 
     return NextResponse.json({
