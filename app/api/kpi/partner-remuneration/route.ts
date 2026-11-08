@@ -133,7 +133,7 @@ function buildDeposits(rows: MirrorRow[]): Deposit[] {
 function matchFees(deposits: Deposit[], fees: FeeOperation[]) {
   const byClient = new Map<string, Deposit[]>();
   for (const deposit of deposits) {
-    if (deposit.archived || !deposit.clientId) continue;
+    if (deposit.archived || !deposit.clientId || deposit.startAt == null) continue;
     const list = byClient.get(deposit.clientId) || [];
     list.push(deposit);
     byClient.set(deposit.clientId, list);
@@ -146,7 +146,9 @@ function matchFees(deposits: Deposit[], fees: FeeOperation[]) {
     const candidates = (byClient.get(fee.clientId) || [])
       .filter(deposit => !used.has(deposit.id))
       .map(deposit => {
-        const dates = [deposit.createdAt, deposit.updatedAt].filter((value): value is number => value != null);
+        // The fee is paid around activation. updatedAt can be months later
+        // (closure/capture) and must never misattribute a fee to that deposit.
+        const dates = [deposit.createdAt, deposit.startAt].filter((value): value is number => value != null);
         const gap = dates.length ? Math.min(...dates.map(value => Math.abs(fee.createdAt! - value))) : Number.POSITIVE_INFINITY;
         return { deposit, gap };
       })
