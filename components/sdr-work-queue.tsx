@@ -103,7 +103,7 @@ export function SdrWorkQueue({
             className="h-9 gap-2"
           >
             <PhoneCall size={15} />
-            Ouvrir la session d’appels
+            Démarrer la session
           </Button>
         </div>
       </div>
