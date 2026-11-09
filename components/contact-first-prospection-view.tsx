@@ -50,7 +50,7 @@ import {
   type ProspectionSegmentPreferences,
 } from "@/lib/prospection-segment-preferences";
 import { formatDate, initials } from "@/lib/utils";
-import { isWithinFrenchCallWindow } from "@/lib/call-timing";
+import { getSessionCallTimeForProperties } from "@/lib/call-timing";
 
 type Contact = { id: string; properties: Record<string, string | null | undefined> };
 type List = { listId: string; name: string; objectTypeId: string; size?: number };
@@ -113,7 +113,6 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
   const router = useRouter();
   const autoStartedRef = useRef(false);
   const [clock, setClock] = useState(Date.now);
-  const callWindowOpen = isWithinFrenchCallWindow(new Date(clock));
   const [lists, setLists] = useState<List[]>([]);
   const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
   const [owners, setOwners] = useState<Owner[]>([]);
@@ -259,11 +258,18 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
   const filteredContacts = useMemo(
     () => classified
       .filter(item => isRecommendationSegment || workFilter === "ALL" || item.decision.bucket === workFilter)
-      .map(item => item.contact),
-    [classified, workFilter, isRecommendationSegment],
+      .map(item => item.contact)
+      // Outside a session the CRM remains fully visible to everyone. Inside a
+      // session only show prospects currently in their own 9h–19h local window.
+      .filter(contact => !activeSessionId || (
+        Boolean(String(contact.properties.phone || contact.properties.mobilephone || "").trim())
+        && getSessionCallTimeForProperties(contact.properties, new Date(clock)).callNow
+      )),
+    [classified, workFilter, isRecommendationSegment, activeSessionId, clock],
   );
 
-  const currentSessionContact = activeSessionId ? (filteredContacts[0] ?? contacts[0] ?? null) : null;
+  const sessionHiddenCount = activeSessionId ? Math.max(0, contacts.length - filteredContacts.length) : 0;
+  const currentSessionContact = activeSessionId ? (filteredContacts[0] ?? null) : null;
   const actionableCount = isRecommendationSegment ? recommendationSummary.ACTIONABLE : classified.filter(item => item.decision.bucket === "ACTIONABLE").length;
   const opportunities = isRecommendationSegment ? recommendationSummary.OPPORTUNITY : classified.filter(item => item.decision.bucket === "OPPORTUNITY").length;
   const snoozed = isRecommendationSegment ? recommendationSummary.SNOOZED : classified.filter(item => item.decision.bucket === "SNOOZED").length;
@@ -382,7 +388,12 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
             <div>
               <h1 className="font-display text-lg font-bold tracking-tight">{pageTitle}</h1>
               {activeSessionId && sessionMeta ? (
-                <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-primary">{sessionMeta.remaining} contacts restant dans la session</strong> · {sessionMeta.totalItems} sélectionnés au départ · les contacts reportés ou exclus sortent automatiquement de la file.</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  <strong className="text-primary">{filteredContacts.length} contacts joignables maintenant</strong>
+                  {" · "}{sessionHiddenCount} hors créneau local ou sans numéro (masqués)
+                  {" · "}{sessionMeta.remaining} contacts au total dans la session.
+                  Les prospects masqués restent dans le CRM et reviennent automatiquement entre 9 h et 19 h chez eux.
+                </p>
               ) : isRecommendationSegment ? (
                 <p className="mt-0.5 text-xs text-muted-foreground"><strong className="text-primary">{filteredContacts.length} contacts visibles avec les filtres</strong> · {actionableCount} à appeler dans la base · {opportunities} opportunités · {snoozed} à rappeler · {excluded} exclus</p>
               ) : (
@@ -409,9 +420,9 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
             />
           ) : null}
 
-          {isRecommendationSegment && !callWindowOpen ? (
+          {isRecommendationSegment && activeSessionId ? (
             <div className="border-t border-border bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
-              Les fiches, notes et sessions restent accessibles à toute heure. Seul le bouton d’appel dépend des créneaux de France et de l’heure locale du prospect. Aucun contact n’est réservé à un SDR.
+              Seuls les contacts pouvant être appelés entre 9 h et 19 h à leur heure locale sont affichés dans la session. Aucun prospect n’est exclu du CRM ou réservé à un SDR.
             </div>
           ) : null}
 
@@ -536,7 +547,7 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
                       </TableRow>
                     );
                   })}
-                  {!loading && !filteredContacts.length ? <TableRow><TableCell colSpan={isRecommendationSegment ? 11 : 10} className="h-40 text-center text-muted-foreground">{activeSessionId ? "Session terminée : aucun contact restant." : "Aucun contact pour ces filtres."}</TableCell></TableRow> : null}
+                  {!loading && !filteredContacts.length ? <TableRow><TableCell colSpan={isRecommendationSegment ? 11 : 10} className="h-40 text-center text-muted-foreground">{activeSessionId ? "Aucun contact dans un créneau d’appel actuellement. Les contacts hors horaires restent dans le CRM et réapparaissent automatiquement dès que leur heure locale le permet." : "Aucun contact pour ces filtres."}</TableCell></TableRow> : null}
                 </TableBody>
               </Table>
             </div>
