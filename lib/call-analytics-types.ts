@@ -1,7 +1,7 @@
 export type CallAnalyticsSource = "allo" | "hubspot";
 export type CallAnalyticsView = "overview" | "outbound" | "inbound" | "power";
 export type CallAnalyticsBreakdown = "user" | "phone";
-export type CallMetric = { value: number | null; previous: number | null; change: number | null };
+export type CallMetric = { value: number; previous: number | null; change: number | null; available?: boolean };
 export type CallMetricKey = "calls" | "talkSeconds" | "longCalls" | "answerRate";
 export type CallMetrics = Record<CallMetricKey, CallMetric>;
 export type CallStatsRow = { id: string; name: string; subtitle: string | null; metrics: CallMetrics };

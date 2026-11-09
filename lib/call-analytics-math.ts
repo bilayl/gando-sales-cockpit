@@ -8,7 +8,7 @@ export function metric(value: number | null, previous: number | null, providedCh
   const change = clean == null ? null
     : providedChange != null && Number.isFinite(providedChange) ? providedChange
     : old != null && old !== 0 ? (clean - old) / Math.abs(old) : null;
-  return { value: clean, previous: old, change };
+  return { value: clean ?? 0, previous: old, change, available: clean !== null };
 }
 export const emptyMetrics = (): CallMetrics => ({
   calls: metric(0, 0),
