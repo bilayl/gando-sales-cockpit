@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { getCallRecommendations } from "@/lib/call-recommendations";
 import { CALL_WINDOW_LABEL, getBestCallTimeForProperties } from "@/lib/call-timing";
-import { listCockpitCompanyAssignments } from "@/lib/cockpit-company-assignment";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -41,25 +41,23 @@ export async function GET() {
       return { ...contact, properties, timing };
     });
 
-    const companyIds = [...new Set(timed
-      .map(contact => String(contact.properties.db_company_id || ""))
-      .filter(Boolean))];
-
-    // Assignment metadata must never prevent the call queue from loading.
-    const assignments = await listCockpitCompanyAssignments(companyIds).catch(error => {
-      console.error("Unable to load cockpit company assignments for /api/today", error);
-      return [];
-    });
-    const assignmentByCompany = new Map(assignments.map(row => [
-      String(row.company_id),
+    // Only explicit per-contact assignments determine SDR ownership.
+    // Company assignments must never implicitly assign their contacts.
+    const contactIds = timed.map(contact => contact.id).filter(Boolean);
+    const { data: assignments, error: assignmentsError } = contactIds.length
+      ? await getSupabaseAdmin().from("cockpit_contact_assignments")
+          .select("contact_id,assignee_cockpit_email").in("contact_id", contactIds)
+      : { data: [], error: null };
+    if (assignmentsError) throw assignmentsError;
+    const assignmentByContact = new Map((assignments || []).map(row => [
+      String(row.contact_id),
       String(row.assignee_cockpit_email || "").trim().toLowerCase(),
     ]));
 
     const callable = timed
       .filter(contact => contact.timing.callNow)
       .map(contact => {
-        const companyId = String(contact.properties.db_company_id || "");
-        const assignee = companyId ? assignmentByCompany.get(companyId) || null : null;
+        const assignee = assignmentByContact.get(contact.id) || null;
         const ownership = assignee === email ? "MINE" : assignee ? "OTHER" : "UNASSIGNED";
         return { ...contact, ownership, assignee };
       });
