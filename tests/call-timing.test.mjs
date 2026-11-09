@@ -87,6 +87,16 @@ test("session: local 9h–19h boundaries and weekend exclusion work independentl
   assert.equal(getSessionCallTimeForProperties(paris, new Date("2026-11-08T11:00:00Z")).callNow, false); // Sunday
 });
 
+test("session: Guadeloupe 971 postcode overrides a generic France country", () => {
+  const result = getSessionCallTimeForProperties(
+    { country: "France", zip: "97110", phone: "0123456789" },
+    new Date("2026-11-09T09:00:00Z"),
+  );
+  assert.equal(result.timezone, "America/Guadeloupe");
+  assert.equal(result.localTime, "05:00");
+  assert.equal(result.callNow, false);
+});
+
 test("session: missing prospect timezone is labeled as a cautious Paris fallback", () => {
   const unknown = getSessionCallTimeForProperties({}, new Date("2026-11-09T21:00:00Z"));
   assert.equal(unknown.timezone, "Europe/Paris");
