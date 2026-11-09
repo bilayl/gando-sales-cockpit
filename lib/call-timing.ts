@@ -11,6 +11,7 @@ export const CALL_TIMEZONE = "Europe/Paris";
 export const CALL_WINDOW_START_HOUR = 9;
 export const CALL_WINDOW_END_HOUR = 18;
 export const CALL_WINDOW_LABEL = "09:00–12:00 et 14:00–18:00";
+export const PROSPECT_CALL_WINDOW_LABEL = "09:00–19:00";
 const CALL_WINDOWS_MINUTES = [
   { start: 9 * 60, end: 12 * 60 },
   { start: 14 * 60, end: 18 * 60 },
@@ -69,8 +70,9 @@ function localParts(timezone: string, date: Date) {
   };
 }
 
-// The SDR's computer timezone and the prospect's timezone must never govern
-// whether the Gando calling button is enabled.
+// Only the time in France governs the SDR team schedule; the SDR computer
+// timezone must never change the decision. The prospect's local hour is checked
+// separately to avoid calling very early or very late.
 export function isWithinFrenchCallWindow(date = new Date()) {
   const france = localParts(CALL_TIMEZONE, date);
   const minutes = france.hour * 60 + france.minute;
@@ -85,10 +87,16 @@ export function getBestCallTimeForProperties(
   const resolved = resolveProspectTimezone(properties);
   const frenchTime = localParts(CALL_TIMEZONE, date);
   const frenchWeekday = !["Sat", "Sun"].includes(frenchTime.weekday);
-  const callNow = isWithinFrenchCallWindow(date);
-
-  // Keep the prospect's local time as information, but never use it to gate SDR calling.
   const prospectTime = resolved.timezone ? localParts(resolved.timezone, date) : null;
+  const franceWindowOpen = isWithinFrenchCallWindow(date);
+  // If the prospect timezone is known, protect their local rest time too.
+  // Do not exclude unknown-timezone contacts from browsing or preparation.
+  const prospectMinutes = prospectTime ? prospectTime.hour * 60 + prospectTime.minute : null;
+  const prospectWindowOpen = !prospectTime || (
+    !["Sat", "Sun"].includes(prospectTime.weekday)
+    && prospectMinutes !== null && prospectMinutes >= 9 * 60 && prospectMinutes < 19 * 60
+  );
+  const callNow = franceWindowOpen && prospectWindowOpen;
   return {
     timezone: resolved.timezone,
     localTime: prospectTime?.display ?? null,
@@ -96,9 +104,11 @@ export function getBestCallTimeForProperties(
     recommendedWindows: ["09:00–12:00", "14:00–18:00"],
     confidence: resolved.source === "crm_timezone" ? "high" : resolved.timezone ? "medium" : "low",
     reason: callNow
-      ? `Appel autorisé sur les créneaux ${CALL_WINDOW_LABEL} (heure de France).`
-      : frenchWeekday
-        ? `Hors créneau : appels ouverts de ${CALL_WINDOW_LABEL} (heure de France).`
-        : "Appels fermés le week-end (heure de France).",
+      ? `Appel possible : créneau France ${CALL_WINDOW_LABEL}, horaire raisonnable chez le prospect.`
+      : !franceWindowOpen
+        ? frenchWeekday
+          ? `Appels à préparer : créneaux France ${CALL_WINDOW_LABEL}. La fiche reste accessible.`
+          : "Appels fermés le week-end en France. La fiche reste accessible."
+        : `Trop tôt ou trop tard chez le prospect (appels entre ${PROSPECT_CALL_WINDOW_LABEL}, heure locale). La fiche reste accessible.`,
   };
 }
