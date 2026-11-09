@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, Loader2, Mail, MapPin, Phone, RefreshCw, Search, UserRound, UserRoundCheck, UserRoundX } from "lucide-react";
 import { PageHeader } from "@/components/cockpit/page-header";
+import { ManualContactAssignmentManager } from "@/components/manual-contact-assignment-manager";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -176,6 +177,7 @@ export function ProspectionContactsDirectory() {
                 ))}
               </SelectContent>
             </Select>
+            <ManualContactAssignmentManager contacts={contacts} />
             <Badge variant="secondary" className="h-8 gap-1.5 rounded-lg px-2.5 font-medium">
               <UserRoundCheck size={13} /> {filtered.length}
             </Badge>
