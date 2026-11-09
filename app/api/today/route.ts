@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { getCallRecommendations } from "@/lib/call-recommendations";
-import { getBestCallTimeForProperties } from "@/lib/call-timing";
+import { CALL_WINDOW_LABEL, getBestCallTimeForProperties } from "@/lib/call-timing";
 import { listCockpitCompanyAssignments } from "@/lib/cockpit-company-assignment";
 
 export const dynamic = "force-dynamic";
@@ -78,7 +78,7 @@ export async function GET() {
       availableCount: available.length,
       callableCount: callable.length,
       totalActionable: recommendations.summary.ACTIONABLE,
-      callWindow: "08:00–19:00",
+      callWindow: CALL_WINDOW_LABEL,
       generatedAt: now.toISOString(),
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
