@@ -82,7 +82,7 @@ async function outbound(range:CallAnalyticsRange,filter:Record<string,string[]>)
   });
   const data=obj(result.data),stages=obj(data.funnel);
   const funnel:CallFunnelItem[]=[
-    ["dials","Appels lancés"],["connected","Décrochés"],["conversations","Conversations > 1 min"],["conversions","Conversions taguées"],
+    ["dials","Appels lancés"],["connected","Connexions tél."],["conversations","Conversations > 1 min"],["conversions","Conversions taguées"],
   ].map(([key,name])=>{
     const stage=obj(stages[key]);
     return {key,name,metric:fromAlloMetric(stage.count),rate:stage.rate==null?null:numeric(stage.rate)};
