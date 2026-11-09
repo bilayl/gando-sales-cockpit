@@ -1,5 +1,3 @@
-import { getBestCallTimeForProperties } from "@/lib/call-timing";
-
 export type CompanyStage = "NEW" | "OPEN" | "ATTEMPTED_TO_CONTACT" | "CONNECTED" | "FOLLOW_UP" | "LATER" | "DEMO_SCHEDULED" | "OPEN_DEAL" | "WON" | "NOT_INTERESTED" | "LOST";
 
 type Company = { id: string; properties: Record<string, string | null | undefined> };
@@ -103,15 +101,8 @@ export function getCompanyProspectionDecision(
     return { bucket: "SNOOZED", priority: 80, priorityLabel: "À échéance", reason: "Prochaine action planifiée dans le futur" };
   }
 
-  const timing = getBestCallTimeForProperties(p, new Date(now));
-  if (!timing.callNow) {
-    return {
-      bucket: "SNOOZED",
-      priority: 79,
-      priorityLabel: timing.timezone ? "Hors créneau" : "Fuseau inconnu",
-      reason: timing.reason,
-    };
-  }
+  // Calling hours are a UI/session permission, not a prospect's pipeline state.
+  // Keep qualified leads in "À appeler" even outside opening hours.
 
   const overdueTasks = Number(p.qualification_overdue_tasks || 0);
   if (overdueTasks > 0) {
