@@ -359,7 +359,9 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
     return companies
       .filter(company => {
         const stage = deriveCompanyStage(company, now);
-        return getCompanyProspectionDecision(company, stage, now).bucket === "ACTIONABLE";
+        // Do not spend the first 100 session slots on locations where it is night.
+        return getCompanyProspectionDecision(company, stage, now).bucket === "ACTIONABLE"
+          && getSessionCallTimeForProperties(company.properties, new Date(now)).callNow;
       })
       .map(company => company.id)
       .slice(0, 100);
@@ -405,7 +407,17 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
         const stage = deriveCompanyStage(company, now);
         return { company, stage, summary: summaries[company.id], decision: getCompanyProspectionDecision(company, stage, now) };
       })
-      .filter(item => item.decision.bucket === "ACTIONABLE")
+      .filter(item => {
+        if (item.decision.bucket !== "ACTIONABLE") return false;
+        // Match the phone and time used by the actual Allo button: a task can
+        // supply a contact number different from the company switchboard.
+        const number = String(item.summary?.nextTask?.sourceContactPhone || item.company.properties.phone || "").trim();
+        if (!number) return false;
+        return getSessionCallTimeForProperties({
+          ...item.company.properties,
+          phone: number,
+        }, new Date(now)).callNow;
+      })
       .sort((a, b) => {
         const tasks = taskRank(a.summary) - taskRank(b.summary);
         if (tasks !== 0) return tasks;
@@ -589,7 +601,19 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
           ) : error ? (
             <div className="m-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>
           ) : !current ? (
-            <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><CheckCircle2 /></span><h3 className="mt-4 text-lg font-semibold">Session terminée</h3><p className="mt-1 text-sm text-muted-foreground">Tous les comptes actionnables de cette file ont été traités.</p></div></div>
+            <div className="grid min-h-0 flex-1 place-items-center px-6 py-10 text-center">
+              <div className="max-w-lg text-center">
+                <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-muted text-muted-foreground">
+                  {queue.length === 0 ? <CalendarClock /> : <CheckCircle2 />}
+                </span>
+                <h3 className="mt-4 text-lg font-semibold">{queue.length === 0 ? "Aucun loueur dans son créneau d’appel" : "Session terminée"}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {queue.length === 0
+                    ? "La session affiche uniquement les loueurs dont l’heure locale est comprise entre 9 h et 19 h en semaine, avec un numéro disponible. Les autres restent dans le CRM et seront proposés automatiquement à leur prochain créneau."
+                    : "Tous les comptes joignables de cette session ont été traités."}
+                </p>
+              </div>
+            </div>
           ) : (
             <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[380px_minmax(0,1fr)]">
               <aside className="min-h-0 overflow-y-auto border-b border-border bg-card p-5 xl:border-b-0 xl:border-r minari-scrollbar">
