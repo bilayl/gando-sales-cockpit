@@ -8,6 +8,7 @@ import { CompanyMultiFilter } from "@/components/company-multi-filter";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
 import { SdrWorkQueue } from "@/components/sdr-work-queue";
+import { ProspectionSession } from "@/components/prospection-session";
 import { PageHeader } from "@/components/cockpit/page-header";
 import { ProspectionPageSkeleton } from "@/components/prospection-page-skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -83,6 +84,8 @@ export function CompanyFirstProspectionView() {
 
   const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
+  const [sessionOpen, setSessionOpen] = useState(false);
+  const [sessionCompanies, setSessionCompanies] = useState<Company[]>([]);
   const [localError, setLocalError] = useState("");
   const [evaluationTime, setEvaluationTime] = useState(Date.now);
 
@@ -182,9 +185,15 @@ export function CompanyFirstProspectionView() {
     onError: error => setLocalError(error instanceof Error ? error.message : "Erreur de synchronisation"),
   });
 
-  // Enter the contact-based session flow; never claim a company.
+  // Restore the original company-first session panel. The selected companies
+  // come from the shared queue, never from company/SDR assignments.
+  // Starting a session only opens the panel: it claims no company or contact.
   function startSession() {
-    router.push("/prospection?mode=contacts&start=1");
+    const sharedCandidates = classified
+      .filter(item => item.decision.bucket === "ACTIONABLE")
+      .map(item => item.company);
+    setSessionCompanies(sharedCandidates);
+    setSessionOpen(true);
   }
 
   function handleStatusChange(id: string, stage: CompanyStage, updated?: Record<string, string | null | undefined>) {
@@ -361,6 +370,12 @@ export function CompanyFirstProspectionView() {
         ) : null}
       </div>
 
+      <ProspectionSession
+        open={sessionOpen}
+        onOpenChange={setSessionOpen}
+        companies={sessionCompanies}
+        onOpenCompany={id => router.push(`/companies/${id}`)}
+      />
       <NewCompanyDialog
         open={newCompanyOpen}
         onOpenChange={setNewCompanyOpen}
