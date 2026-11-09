@@ -40,13 +40,14 @@ export function resolveProspectTimezone(properties: Record<string, string | null
   const state = normalize(properties.state || properties.region);
   const city = normalize(properties.city);
   const phone = String(properties.phone || properties.mobilephone || "").replace(/[\s().-]/g, "");
+  const postcode = String(properties.zip || properties.postal_code || properties.postcode || "").trim();
   const place = `${country} ${state} ${city}`;
 
   if (phone.startsWith("+689") || place.includes("polynesie") || place.includes("tahiti")) return { timezone: "Pacific/Tahiti", source: "location" as const };
-  if (/^(?:\+590|00590|0(?:590|690|691))/.test(phone) || place.includes("guadeloupe") || place.includes("saint martin")) return { timezone: "America/Guadeloupe", source: "location" as const };
-  if (/^(?:\+596|00596|0(?:596|696|697))/.test(phone) || place.includes("martinique")) return { timezone: "America/Martinique", source: "location" as const };
-  if (/^(?:\+594|00594|0(?:594|694))/.test(phone) || place.includes("guyane") || place.includes("french guiana")) return { timezone: "America/Cayenne", source: "location" as const };
-  if (/^(?:\+262|00262|0(?:262|692|693))/.test(phone) || place.includes("reunion") || place.includes("mayotte")) return { timezone: place.includes("mayotte") ? "Indian/Mayotte" : "Indian/Reunion", source: "location" as const };
+  if (/^(?:\+590|00590|0(?:590|690|691))/.test(phone) || postcode.startsWith("971") || place.includes("guadeloupe") || place.includes("saint martin")) return { timezone: "America/Guadeloupe", source: "location" as const };
+  if (/^(?:\+596|00596|0(?:596|696|697))/.test(phone) || postcode.startsWith("972") || place.includes("martinique")) return { timezone: "America/Martinique", source: "location" as const };
+  if (/^(?:\+594|00594|0(?:594|694))/.test(phone) || postcode.startsWith("973") || place.includes("guyane") || place.includes("french guiana")) return { timezone: "America/Cayenne", source: "location" as const };
+  if (/^(?:\+262|00262|0(?:262|692|693))/.test(phone) || postcode.startsWith("974") || postcode.startsWith("976") || place.includes("reunion") || place.includes("mayotte")) return { timezone: postcode.startsWith("976") || place.includes("mayotte") ? "Indian/Mayotte" : "Indian/Reunion", source: "location" as const };
   if (phone.startsWith("+687") || place.includes("nouvelle caledonie") || place.includes("new caledonia")) return { timezone: "Pacific/Noumea", source: "location" as const };
   if (phone.startsWith("+33") || country === "france" || country === "fr") return { timezone: "Europe/Paris", source: "location" as const };
 
