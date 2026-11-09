@@ -309,15 +309,15 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
     }
   }
 
-  // Clicking "Démarrer les appels" on the Companies screen enters this queue
-  // and starts a contact session once the French calling window is open.
+  // A SDR may prepare a session at any time. Calling eligibility is evaluated
+  // per contact only when the SDR chooses to actually dial.
   useEffect(() => {
-    if (!autoStart || autoStartedRef.current || loading || !callWindowOpen
+    if (!autoStart || autoStartedRef.current || loading
       || sessionCreating || activeSessionId || !isRecommendationSegment
       || recommendationBucket !== "ACTIONABLE" || filteredContacts.length === 0) return;
     autoStartedRef.current = true;
     void createSession();
-  }, [autoStart, loading, callWindowOpen, sessionCreating, activeSessionId, isRecommendationSegment, recommendationBucket, filteredContacts.length]);
+  }, [autoStart, loading, sessionCreating, activeSessionId, isRecommendationSegment, recommendationBucket, filteredContacts.length]);
 
   async function markSessionContact(contactId: string) {
     if (!activeSessionId) return;
@@ -391,8 +391,8 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
             </div>
             <div className="flex items-center gap-2">
               {isRecommendationSegment && !activeSessionId && recommendationBucket === "ACTIONABLE" ? (
-                <Button size="sm" className="h-9 gap-1.5" onClick={() => void createSession()} disabled={sessionCreating || loading || !callWindowOpen || filteredContacts.length === 0}>
-                  {sessionCreating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} {callWindowOpen ? "Démarrer une session" : "Appels fermés jusqu’au prochain créneau"} · {Math.min(filteredContacts.length, 80)} ciblés
+                <Button size="sm" className="h-9 gap-1.5" onClick={() => void createSession()} disabled={sessionCreating || loading || filteredContacts.length === 0}>
+                  {sessionCreating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Préparer une session · {Math.min(filteredContacts.length, 80)} contacts
                 </Button>
               ) : null}
               {activeSessionId ? <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={leaveSession}><X size={14} /> Quitter la session</Button> : null}
@@ -405,14 +405,13 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
             <CallSessionPrep
               contact={currentSessionContact}
               remaining={sessionMeta?.remaining ?? filteredContacts.length}
-              allowCalling={callWindowOpen}
               onOpenContact={() => router.push(`/contacts/${currentSessionContact.id}`)}
             />
           ) : null}
 
           {isRecommendationSegment && !callWindowOpen ? (
             <div className="border-t border-border bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
-              Session consultable dès maintenant. Les appels sont possibles du lundi au vendredi de 9 h à 12 h et de 14 h à 18 h, heure de Paris.
+              Les fiches, notes et sessions restent accessibles à toute heure. Seul le bouton d’appel dépend des créneaux de France et de l’heure locale du prospect. Aucun contact n’est réservé à un SDR.
             </div>
           ) : null}
 
