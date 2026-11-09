@@ -1,6 +1,7 @@
 import "server-only";
 import { hubspotJson } from "@/lib/hubspot";
 import { epochBounds } from "@/lib/call-analytics-period";
+import { classifyHubSpotAnswer, isNrP } from "@/lib/call-outcome";
 import { emptyMetrics, metricsFromRecords, recordsBreakdown, type CallRecord } from "@/lib/call-analytics-math";
 import type { CallAnalyticsRange, CallAnalyticsResponse, CallAnalyticsView, CallAnalyticsBreakdown, CallStatsOption, CallAnalyticsInsights } from "@/lib/call-analytics-types";
 import type { CockpitAccess } from "@/lib/cockpit-access";
@@ -8,26 +9,15 @@ import type { CockpitAccess } from "@/lib/cockpit-access";
 type HubspotRow = { id: string; properties?: Record<string, string | null | undefined> };
 type HubspotSearch = { results?: HubspotRow[]; paging?: { next?: { after?: string } } };
 type HubspotOwner = { id: string; email?: string; firstName?: string; lastName?: string; teams?: unknown[] };
-const PROPERTIES = ["hs_timestamp","hubspot_owner_id","hs_call_title","hs_call_status","hs_call_disposition","hs_call_direction","hs_call_duration","hs_call_owner_talk_time","hs_call_to_number","hs_call_from_number","hs_inbound_call_answer_status","hs_call_has_transcript","hs_call_summary"];
-const CONNECTED_DISPOSITIONS = new Set([
-  "f240bbac-87c9-4f6e-bf70-924b57d47db7", // Connected
-  "a4c4c377-d246-4b32-a13b-75a56a4cd0ff", // Left live message
-  "2e7360c1-6b71-40e9-ab2b-30ae98a4678c", // Meeting booked
-]);
-const FAILED_DISPOSITIONS = new Set([
-  "9d9162e7-6cf3-4944-bf63-4dff82258764",
-  "73a0d17f-1163-4015-bdd5-ec830791da20",
-  "17b47fee-58de-441e-a44c-c6300d46f273",
-]);
-function callAnswered(p: Record<string, string | null | undefined>) {
-  const disposition = (p.hs_call_disposition || "").trim().toLowerCase();
-  if (CONNECTED_DISPOSITIONS.has(disposition)) return true;
-  if (FAILED_DISPOSITIONS.has(disposition)) return false;
-  if (/^(answered|yes|true)$/i.test(p.hs_inbound_call_answer_status || "")) return true;
-  if (/^(missed|no|false)$/i.test(p.hs_inbound_call_answer_status || "")) return false;
-  if (["MISSED","NO_ANSWER","BUSY","FAILED","CANCELED"].includes(p.hs_call_status || "")) return false;
-  // Completed without disposition is not proof that the recipient answered.
-  return false;
+const PROPERTIES = ["hs_timestamp","hubspot_owner_id","hs_call_title","hs_call_status","hs_call_disposition","hs_call_direction","hs_call_duration","hs_call_owner_talk_time","hs_call_to_number","hs_call_from_number","hs_inbound_call_answer_status","hs_call_has_transcript","hs_call_summary","hs_call_body","hs_call_has_voicemail","allo_tags"];
+function callAnswered(p:Record<string,string|null|undefined>) {
+  return classifyHubSpotAnswer(p)==="answered";
+}
+function callUnanswered(p:Record<string,string|null|undefined>) {
+  return classifyHubSpotAnswer(p)==="unanswered";
+}
+function callMarkedNrP(p:Record<string,string|null|undefined>) {
+  return [p.allo_tags,p.hs_call_title,p.hs_call_body].some(isNrP);
 }
 function isoNumber(value: string | null | undefined) {
   return (value || "").trim().replace(/[\s().-]/g,"") || null;
@@ -120,17 +110,18 @@ export async function hubspotCallAnalytics(args:{
   });
   const insights:CallAnalyticsInsights={
     answered:sourceRows.filter(x=>callAnswered(x.properties||{})).length,
-    missedOrVoicemail:sourceRows.filter(x=>["MISSED","NO_ANSWER","BUSY","FAILED","CANCELED"].includes(x.properties?.hs_call_status||"")).length,
+    nrp:sourceRows.filter(x=>callMarkedNrP(x.properties||{})).length,
+    missedOrVoicemail:sourceRows.filter(x=>callUnanswered(x.properties||{})).length,
     unknownOutcome:sourceRows.filter(x=>{
       const p=x.properties||{};
-      return !callAnswered(p)&&!["MISSED","NO_ANSWER","BUSY","FAILED","CANCELED"].includes(p.hs_call_status||"");
+      return classifyHubSpotAnswer(p)==="unknown";
     }).length,
     transcribed:sourceRows.filter(x=>String(x.properties?.hs_call_has_transcript||"").toLowerCase()==="true").length,
     summarized:sourceRows.filter(x=>Boolean(x.properties?.hs_call_summary)).length,
     actionedCalls:null,actionSuggestions:null,checkedCalls:sourceRows.length,partial:a.partial,source:"HubSpot CRM"
   };
   const notes=["Source HubSpot CRM : activités téléphoniques réellement enregistrées dans le CRM, y compris les anciens appels Onoff. Elles ne sont pas additionnées aux appels Allo.",
-    "Le taux de réponse s’appuie sur les dispositions HubSpot explicites. Le temps de conversation utilise le temps de parole s’il est renseigné, sinon la durée CRM des appels décrochés."];
+    "Le taux de réponse utilise les issues commerciales HubSpot : NRP, No answer, répondeur et messagerie ne comptent jamais comme répondus, même si le statut technique est COMPLETED."];
   if(view==="power")notes.push("HubSpot ne renseigne pas de manière fiable le mode Power Dialer dans les activités d’appel : aucun chiffre n’est attribué artificiellement à ce mode.");
   if(a.partial||b.partial)notes.push("Le volume de la période dépasse la limite de 4 000 appels par période : statistiques incomplètes. Réduisez la période.");
   return {source:"hubspot",view,breakdown,period:range,metrics:metricsFromRecords(phoneFiltered,oldPhoneFiltered),

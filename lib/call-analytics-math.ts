@@ -1,11 +1,14 @@
 import type { CallMetric, CallMetrics, CallMetricKey, CallStatsRow } from "@/lib/call-analytics-types";
 
-export function metric(value: number, previous: number | null, providedChange?: number | null): CallMetric {
-  const clean = Number.isFinite(value) ? value : 0;
+export function metric(value: number | null, previous: number | null, providedChange?: number | null): CallMetric {
+  // "Unknown" is not zero: the response rate must be omitted whenever an
+  // Allo page is missing or the source cannot be fully reconciled.
+  const clean = value != null && Number.isFinite(value) ? value : null;
   const old = previous != null && Number.isFinite(previous) ? previous : null;
-  const change = providedChange != null && Number.isFinite(providedChange) ? providedChange
+  const change = clean == null ? null
+    : providedChange != null && Number.isFinite(providedChange) ? providedChange
     : old != null && old !== 0 ? (clean - old) / Math.abs(old) : null;
-  return { value: clean, previous: old, change };
+  return { value: clean ?? 0, previous: old, change, available: clean !== null };
 }
 export const emptyMetrics = (): CallMetrics => ({
   calls: metric(0, 0),
@@ -48,6 +51,6 @@ export function recordsBreakdown(current: CallRecord[], previous: CallRecord[], 
     const prev = previous.filter(r => key(r) === id);
     const member = items[0] || prev[0];
     return row(id, by === "user" ? member.ownerName : member.phoneName, by === "user" ? member.ownerSubtitle : null, metricsFromRecords(items,prev));
-  }).sort((a,b) => b.metrics.calls.value - a.metrics.calls.value || a.name.localeCompare(b.name,"fr"));
+  }).sort((a,b) => (b.metrics.calls.value ?? 0) - (a.metrics.calls.value ?? 0) || a.name.localeCompare(b.name,"fr"));
 }
 export type { CallRecord };
