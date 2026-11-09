@@ -31,14 +31,15 @@ const METRICS: {key:CallMetricKey;label:string;short:string}[]=[
 ];
 const integer=new Intl.NumberFormat("fr-FR");
 const decimal=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:1});
-function number(n:number){return integer.format(Math.round(n));}
+function number(n:number|null){return n==null||!Number.isFinite(n)?"—":integer.format(Math.round(n));}
 function prettyDuration(n:number){
   const sec=Math.max(0,Math.round(n));
   if(sec>=3600) return Math.floor(sec/3600)+"h "+String(Math.floor((sec%3600)/60)).padStart(2,"0")+"m";
   if(sec>=60) return Math.floor(sec/60)+"m"+(sec%60 ? " "+String(sec%60).padStart(2,"0")+"s" : "");
   return sec+"s";
 }
-function value(key:CallMetricKey,n:number){
+function value(key:CallMetricKey,n:number|null){
+  if(n==null||!Number.isFinite(n))return "—";
   if(key==="talkSeconds")return prettyDuration(n);
   if(key==="answerRate")return decimal.format(n*100)+" %";
   return number(n);
@@ -77,7 +78,7 @@ function exportCsv(data:CallAnalyticsResponse){
   const rows=data.rows.map(row=>[
     data.source,data.view,data.breakdown,data.period.from,data.period.to,data.period.previousFrom,data.period.previousTo,
     row.name,row.subtitle||"",row.metrics.calls.value,row.metrics.calls.previous??"",row.metrics.talkSeconds.value,
-    row.metrics.longCalls.value,(row.metrics.answerRate.value*100).toFixed(2),
+    row.metrics.longCalls.value,row.metrics.answerRate.value==null?"":(row.metrics.answerRate.value*100).toFixed(2),
     row.metrics.calls.change==null?"":(row.metrics.calls.change*100).toFixed(2),
   ]);
   const content="\ufeff"+[header,...rows].map(r=>r.map(csvCell).join(";")).join("\r\n");
@@ -144,7 +145,7 @@ export function CallStatsDashboard() {
   },[source,view,period,breakdown,selected,customFrom,customTo,refresh]);
 
   const options=useMemo(()=>breakdown==="user"?data?.userOptions||[]:data?.phoneOptions||[],[data,breakdown]);
-  const max=useMemo(()=>Math.max(1,...(data?.rows||[]).map(r=>r.metrics[highlight].value)),[data,highlight]);
+  const max=useMemo(()=>Math.max(1,...(data?.rows||[]).map(r=>r.metrics[highlight].value??0)),[data,highlight]);
   const setSourceMode=(newSource:CallAnalyticsSource)=>{setSource(newSource);setSelected("");setBreakdown("user");};
   const setMode=(next:CallAnalyticsView)=>{setView(next);setSelected("");};
   const setGrouping=(next:CallAnalyticsBreakdown)=>{setBreakdown(next);setSelected("");};
@@ -217,20 +218,22 @@ export function CallStatsDashboard() {
               <div><h2 className="text-base font-semibold">Réponses, transcriptions et actions</h2><p className="mt-1 text-xs text-muted-foreground">Calculées sur {data.insights.checkedCalls} appels vérifiés dans {data.insights.source}{data.insights.partial?" · échantillon partiel":""}.</p></div>
               <Link href="/phone" className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">Consulter les appels et transcriptions <ArrowUpRight size={13}/></Link>
             </div>
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
               {[
-                {label:"Appels répondus",count:data.insights.answered,detail:"Résultat ANSWERED ou TRANSFERRED chez Allo"},
-                {label:"Sans réponse / messagerie",count:data.insights.missedOrVoicemail,detail:"Statuts explicitement non répondus"},
+                {label:"Appels répondus",count:data.insights.answered,detail:"Réponse identifiée, NRP et répondeurs exclus"},
+                {label:"Sans réponse / messagerie",count:data.insights.missedOrVoicemail,detail:"NRP, messagerie et autres issues non répondues"},
+                {label:"Dont NRP",count:data.insights.nrp??null,detail:"Sous-ensemble des appels sans réponse, non additionnable"},
                 {label:"Avec transcription",count:data.insights.transcribed,detail:"Transcription réellement fournie par la source"},
                 {label:"Avec actions à suivre",count:data.insights.actionedCalls,detail:"Actions proposées par le compte rendu Allo"},
-              ].map(item=><div key={item.label} className="rounded-2xl border border-border bg-card p-4 shadow-sm"><div className="text-xs font-semibold">{item.label}</div><div className="mt-3 text-2xl font-semibold">{item.count==null?"—":number(item.count)}</div><p className="mt-1 text-[11px] leading-4 text-muted-foreground">{item.detail}</p></div>)}
+              ].map(item=><div key={item.label} className="rounded-2xl border border-border bg-card p-4 shadow-sm"><div className="text-xs font-semibold">{item.label}</div><div className="mt-3 text-2xl font-semibold">{item.count==null?"—":(data.insights?.partial?"≥ ":"")+number(item.count)}</div><p className="mt-1 text-[11px] leading-4 text-muted-foreground">{item.detail}</p></div>)}
             </div>
-            {data.insights.unknownOutcome ? <p className="text-xs text-amber-600">{data.insights.unknownOutcome} appel(s) sans résultat exploitable : exclus du compteur « sans réponse ».</p> : null}
+            {data.insights.unknownOutcome ? <p className="text-xs text-amber-600">{data.insights.unknownOutcome} appel(s) au résultat inconnu : non considérés comme « répondus » et signalés séparément.</p> : null}
+            {data.insights.partial ? <p className="text-xs text-amber-600">Décompte minimum sur les appels vérifiés, et non total exhaustif : réduisez la période pour afficher un taux de réponse fiable.</p> : null}
             {data.insights.actionSuggestions != null ? <p className="text-xs text-muted-foreground">{data.insights.actionSuggestions} action(s) proposées par Allo sur les appels vérifiés. Elles restent à valider avant création d’une tâche CRM.</p> : null}
           </section> : null}
 
           {view==="outbound"&&data.funnel.length ? <section className="rounded-2xl border border-border bg-card p-5">
-            <div className="mb-4"><h2 className="text-base font-semibold">Entonnoir des appels sortants</h2><p className="mt-1 text-xs text-muted-foreground">Étapes fournies directement par l’API Allo · tous les appels sortants de la sélection.</p></div>
+            <div className="mb-4"><h2 className="text-base font-semibold">Entonnoir des appels sortants</h2><p className="mt-1 text-xs text-muted-foreground">Entonnoir technique fourni par Allo : « connexion » peut inclure NRP et répondeurs. Le véritable taux de réponse est corrigé séparément.</p></div>
             <div className="grid gap-3 sm:grid-cols-4">{data.funnel.map(item=><div key={item.key} className="rounded-xl border border-border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">{item.name}</p><p className="mt-1 text-2xl font-semibold">{number(item.metric.value)}</p><p className={"mt-1 text-xs "+percentClass(item.metric)}>{changeLabel(item.metric)}</p></div>)}</div>
           </section>:null}
 
@@ -248,8 +251,8 @@ export function CallStatsDashboard() {
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-[11px] font-bold">{row.name.slice(0,2).toUpperCase()}</span>
                     <div className="min-w-0"><p className="truncate text-xs font-semibold" title={row.name}>{row.name}</p>{row.subtitle?<p className="truncate text-[10px] text-muted-foreground">{row.subtitle}</p>:null}</div>
                   </div>
-                  <div className="h-8 overflow-hidden rounded-lg bg-muted/60"><div className="flex h-full items-center justify-end rounded-lg bg-primary/75 pr-2 text-[11px] font-semibold text-primary-foreground transition-all" style={{width:Math.max(row.metrics[highlight].value?3:0,Math.min(100,(row.metrics[highlight].value/max)*100))+"%"}}>
-                    {row.metrics[highlight].value>0?value(highlight,row.metrics[highlight].value):null}</div></div>
+                  <div className="h-8 overflow-hidden rounded-lg bg-muted/60"><div className="flex h-full items-center justify-end rounded-lg bg-primary/75 pr-2 text-[11px] font-semibold text-primary-foreground transition-all" style={{width:Math.max(row.metrics[highlight].value?3:0,Math.min(100,((row.metrics[highlight].value??0)/max)*100))+"%"}}>
+                    {row.metrics[highlight].value==null?"—":row.metrics[highlight].value>0?value(highlight,row.metrics[highlight].value):null}</div></div>
                   <div className="text-right"><span className={"text-[11px] font-semibold "+percentClass(row.metrics[highlight])}>{changeLabel(row.metrics[highlight])}</span></div>
                 </div>)}
               </div>}
