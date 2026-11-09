@@ -24,7 +24,6 @@ import {
   useOwners,
   useProspectionAssignments,
   useSegments,
-  type CockpitAssignment,
 } from "@/hooks/queries/use-prospection-reference-data";
 import { useCompanyProspectionParams } from "@/hooks/use-company-prospection-params";
 import { companyMatchesFilters } from "@/lib/company-multi-filters";
@@ -231,40 +230,14 @@ export function CompanyFirstProspectionView() {
     onError: error => setLocalError(error instanceof Error ? error.message : "Erreur de synchronisation"),
   });
 
-  const sessionMutation = useMutation({
-    mutationFn: async (companyIds: string[]) => {
-      const response = await fetch("/api/prospection/assignments", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ companyIds }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.message || payload.error || "Impossible d’attribuer la session");
-      return payload;
-    },
-    onError: error => setLocalError(error instanceof Error ? error.message : "Impossible de démarrer la session"),
-  });
-
-  async function startSession() {
+  // Opening a call session must NOT create or change a company assignment.
+  function startSession() {
     setLocalError("");
-    const payload = await sessionMutation.mutateAsync(sessionCandidates.slice(0, 100).map(company => company.id)).catch(() => null);
-    if (!payload) return;
-
-    const claimed = new Set((payload.claimedCompanyIds || []).map(String));
-    const selected = sessionCandidates.filter(company => claimed.has(company.id));
+    const selected = sessionCandidates.slice(0, 100);
     if (!selected.length) {
-      setLocalError("Aucune entreprise disponible : elles ont peut-être déjà été prises par un autre commercial.");
+      setLocalError("Aucun compte joignable dans la sélection. Choisissez des contacts depuis le répertoire pour les attribuer manuellement.");
       return;
     }
-
-    queryClient.setQueryData<CockpitAssignment[]>(queryKeys.prospection.assignments, current => {
-      const existing = current ?? [];
-      const preserved = existing.filter(item => !claimed.has(item.company_id));
-      return [...preserved, ...selected.map(company => ({
-        company_id: company.id,
-        assignee_cockpit_email: currentUserEmail,
-      }))];
-    });
     setSessionCompanies(selected);
     setSessionOpen(true);
   }
@@ -345,7 +318,7 @@ export function CompanyFirstProspectionView() {
           excludedCount={excluded}
           totalCount={classified.length}
           segmentName={currentList?.name}
-          loading={loading || sessionMutation.isPending}
+          loading={loading}
           onFilterChange={value => void setWorkFilter(value)}
           onStartSession={() => void startSession()}
         />

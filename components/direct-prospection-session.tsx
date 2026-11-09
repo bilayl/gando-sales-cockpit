@@ -21,17 +21,7 @@ export function DirectProspectionSession({ companyId }: { companyId: string }) {
       setLoading(true);
       setError("");
       try {
-        const assignmentResponse = await fetch("/api/prospection/assignments", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ companyIds: [companyId] }),
-          signal: controller.signal,
-        });
-        const assignmentPayload = await assignmentResponse.json().catch(() => ({}));
-        if (!assignmentResponse.ok) throw new Error(assignmentPayload.error || "Impossible d’attribuer ce lead.");
-        const claimed = new Set((assignmentPayload.claimedCompanyIds || []).map(String));
-        if (!claimed.has(companyId)) throw new Error("Ce lead est déjà attribué à un autre commercial.");
-
+        // Direct sessions never claim or reassign an enterprise.
         const response = await fetch(`/api/companies/${encodeURIComponent(companyId)}/centralized`, {
           cache: "no-store",
           signal: controller.signal,
