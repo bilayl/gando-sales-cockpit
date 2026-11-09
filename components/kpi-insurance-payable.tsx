@@ -27,11 +27,12 @@ type DecisionData = {
 
 const MONTHS = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sept", "Oct", "Nov", "Déc"];
 
-function euroFromCents(value: number | null | undefined, digits = 0) {
+function euroFromCents(value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—";
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
     currency: "EUR",
+    minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   }).format(value / 100);
 }
@@ -191,7 +192,8 @@ export function KpiInsurancePayable() {
       </div>
 
       <div className="border-t border-border bg-muted/10 px-4 py-2 text-[10px] leading-relaxed text-muted-foreground">
-        Le montant est calculé à partir des cautions activées rapprochées avec leurs frais. Le mois en cours reste provisoire jusqu’à clôture et synchronisation complète des données.
+        Prime estimée sur les cautions activées (date d’activation), à partir de la prise d’effet du contrat.
+        Les montants sont des charges calculées, pas des factures ou un solde impayé. Le mois en cours reste provisoire jusqu’à la synchronisation complète.
       </div>
     </Card>
   );
