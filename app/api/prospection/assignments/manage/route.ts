@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const email = normalizeEmail(body.assigneeEmail);
     const input = Array.isArray(body.companyIds) ? body.companyIds : [];
-    const companyIds = [...new Set(input.map((value: unknown) => String(value || "").trim()).filter(Boolean))];
+    const companyIds: string[] = [...new Set<string>(input.map((value: unknown) => String(value || "").trim()).filter((id: string) => id.length > 0))];
 
     if (!email || !companyIds.length || companyIds.length > 100 || input.length > 100) {
       return NextResponse.json({ error: "Choisissez un SDR et entre 1 et 100 entreprises." }, { status: 400 });
