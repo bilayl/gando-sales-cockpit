@@ -62,7 +62,9 @@ const HUBSPOT_NEGATIVE = new Set([
 
 export function classifyHubSpotAnswer(properties: Record<string, string | null | undefined>): AnswerOutcome {
   const status = normalized(properties.hs_call_status || "");
-  const disposition = normalized(properties.hs_call_disposition || "");
+  // HubSpot stores outcomes as UUIDs. Do NOT normalize hyphens away,
+  // otherwise a true Connected or No Answer disposition never matches.
+  const disposition = (properties.hs_call_disposition || "").trim().toLowerCase();
   const title = normalized(properties.hs_call_title || "");
   const body = normalized(properties.hs_call_body || "");
   const labels = [properties.allo_tags, properties.hs_call_disposition].flatMap(fields);
