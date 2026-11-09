@@ -46,7 +46,7 @@ function value(key:CallMetricKey,n:number|null){
 }
 function changeLabel(metric:CallMetric){
   if(metric.change==null){
-    if(metric.previous===0&&metric.value>0)return "Nouveau";
+    if(metric.previous===0&&metric.value!=null&&metric.value>0)return "Nouveau";
     return "—";
   }
   const n=metric.change*100;
@@ -252,7 +252,7 @@ export function CallStatsDashboard() {
                     <div className="min-w-0"><p className="truncate text-xs font-semibold" title={row.name}>{row.name}</p>{row.subtitle?<p className="truncate text-[10px] text-muted-foreground">{row.subtitle}</p>:null}</div>
                   </div>
                   <div className="h-8 overflow-hidden rounded-lg bg-muted/60"><div className="flex h-full items-center justify-end rounded-lg bg-primary/75 pr-2 text-[11px] font-semibold text-primary-foreground transition-all" style={{width:Math.max(row.metrics[highlight].value?3:0,Math.min(100,((row.metrics[highlight].value??0)/max)*100))+"%"}}>
-                    {row.metrics[highlight].value==null?"—":row.metrics[highlight].value>0?value(highlight,row.metrics[highlight].value):null}</div></div>
+                    {row.metrics[highlight].value==null?"—":(row.metrics[highlight].value??0)>0?value(highlight,row.metrics[highlight].value):null}</div></div>
                   <div className="text-right"><span className={"text-[11px] font-semibold "+percentClass(row.metrics[highlight])}>{changeLabel(row.metrics[highlight])}</span></div>
                 </div>)}
               </div>}
