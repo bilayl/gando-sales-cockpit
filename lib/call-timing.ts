@@ -43,10 +43,10 @@ export function resolveProspectTimezone(properties: Record<string, string | null
   const place = `${country} ${state} ${city}`;
 
   if (phone.startsWith("+689") || place.includes("polynesie") || place.includes("tahiti")) return { timezone: "Pacific/Tahiti", source: "location" as const };
-  if (phone.startsWith("+590") || place.includes("guadeloupe") || place.includes("saint martin")) return { timezone: "America/Guadeloupe", source: "location" as const };
-  if (phone.startsWith("+596") || place.includes("martinique")) return { timezone: "America/Martinique", source: "location" as const };
-  if (phone.startsWith("+594") || place.includes("guyane") || place.includes("french guiana")) return { timezone: "America/Cayenne", source: "location" as const };
-  if (phone.startsWith("+262") || place.includes("reunion") || place.includes("mayotte")) return { timezone: place.includes("mayotte") ? "Indian/Mayotte" : "Indian/Reunion", source: "location" as const };
+  if (/^(?:\+590|00590|0(?:590|690|691))/.test(phone) || place.includes("guadeloupe") || place.includes("saint martin")) return { timezone: "America/Guadeloupe", source: "location" as const };
+  if (/^(?:\+596|00596|0(?:596|696|697))/.test(phone) || place.includes("martinique")) return { timezone: "America/Martinique", source: "location" as const };
+  if (/^(?:\+594|00594|0(?:594|694))/.test(phone) || place.includes("guyane") || place.includes("french guiana")) return { timezone: "America/Cayenne", source: "location" as const };
+  if (/^(?:\+262|00262|0(?:262|692|693))/.test(phone) || place.includes("reunion") || place.includes("mayotte")) return { timezone: place.includes("mayotte") ? "Indian/Mayotte" : "Indian/Reunion", source: "location" as const };
   if (phone.startsWith("+687") || place.includes("nouvelle caledonie") || place.includes("new caledonia")) return { timezone: "Pacific/Noumea", source: "location" as const };
   if (phone.startsWith("+33") || country === "france" || country === "fr") return { timezone: "Europe/Paris", source: "location" as const };
 
@@ -110,5 +110,32 @@ export function getBestCallTimeForProperties(
           ? `Appels à préparer : créneaux France ${CALL_WINDOW_LABEL}. La fiche reste accessible.`
           : "Appels fermés le week-end en France. La fiche reste accessible."
         : `Trop tôt ou trop tard chez le prospect (appels entre ${PROSPECT_CALL_WINDOW_LABEL}, heure locale). La fiche reste accessible.`,
+  };
+}
+
+// The session remains accessible 24/7. Only outbound dialing uses the local
+// time of the prospect (not the SDR's location or another SDR's assignment).
+// When CRM geography is missing, France is a conservative fallback, explicitly
+// indicated in the UI so the SDR can verify the country before calling.
+export function getSessionCallTimeForProperties(
+  properties: Record<string, string | null | undefined>,
+  date = new Date(),
+): CallTiming {
+  const resolved = resolveProspectTimezone(properties);
+  const timezone = resolved.timezone || CALL_TIMEZONE;
+  const local = localParts(timezone, date);
+  const minutes = local.hour * 60 + local.minute;
+  const weekday = !["Sat", "Sun"].includes(local.weekday);
+  const callNow = weekday && minutes >= 9 * 60 && minutes < 19 * 60;
+  const fallbackNotice = resolved.timezone ? "" : " Fuseau non renseigné : heure de Paris utilisée par défaut, localisation à confirmer.";
+  return {
+    timezone,
+    localTime: local.display,
+    callNow,
+    recommendedWindows: [PROSPECT_CALL_WINDOW_LABEL],
+    confidence: resolved.source === "crm_timezone" ? "high" : resolved.timezone ? "medium" : "low",
+    reason: callNow
+      ? `Appel possible entre ${PROSPECT_CALL_WINDOW_LABEL} chez le prospect.${fallbackNotice}`
+      : `À appeler plus tard : ${local.display} chez le prospect (${timezone}). Appels prévus entre ${PROSPECT_CALL_WINDOW_LABEL} du lundi au vendredi. Fiche et session disponibles.${fallbackNotice}`,
   };
 }
