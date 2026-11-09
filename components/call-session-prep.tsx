@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PostCallEmailButton } from "@/components/post-call-email-button"
 import { WithAlloCallButton } from "@/components/withallo-call-button"
-import { getBestCallTimeForProperties } from "@/lib/call-timing"
+import { getSessionCallTimeForProperties } from "@/lib/call-timing"
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach"
 
 type Contact = {
@@ -66,7 +66,7 @@ export function CallSessionPrep({ contact, remaining, allowCalling = true, onOpe
   const companyName = p.company || activityData?.companies?.[0]?.properties?.name || p.name || ""
   const email = p.email || ""
   const phone = String(p.phone || p.mobilephone || "").trim()
-  const timing = getBestCallTimeForProperties(p, new Date(clock))
+  const timing = getSessionCallTimeForProperties(p, new Date(clock))
   const canDial = allowCalling && timing.callNow
   const coach = useMemo(() => buildCallObjectionCoach({
     properties: p,
@@ -83,10 +83,13 @@ export function CallSessionPrep({ contact, remaining, allowCalling = true, onOpe
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="gap-1"><PhoneCall size={12} /> Appel en cours</Badge>
             <span className="text-sm font-semibold">{name}</span>
-            {p.db_call_local_time ? <Badge variant="secondary" className="gap-1"><Clock3 size={11} /> {p.db_call_local_time} heure locale · {p.db_call_timezone}</Badge> : null}
+            <Badge variant={timing.callNow ? "secondary" : "outline"} className="gap-1">
+              <Clock3 size={11} /> {timing.localTime} heure locale · {timing.timezone}
+            </Badge>
+            <Badge variant={timing.callNow ? "secondary" : "outline"}>{timing.callNow ? "Appel possible" : "À appeler plus tard"}</Badge>
             <span className="text-xs text-muted-foreground">· {remaining} contact{remaining > 1 ? "s" : ""} restant{remaining > 1 ? "s" : ""}</span>
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">Le Cockpit centralise uniquement les informations utiles du CRM pour préparer l’appel.</div>
+          <div className="mt-1 text-[11px] text-muted-foreground">Fiche accessible à toute heure. Les appels se font de 9 h à 19 h, heure locale du prospect, du lundi au vendredi.</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canDial && phone ? (
