@@ -49,36 +49,36 @@ export async function GET() {
       ? await getSupabaseAdmin().from("cockpit_contact_assignments")
           .select("contact_id,assignee_cockpit_email").in("contact_id", contactIds)
       : { data: [], error: null };
-    if (assignmentsError) throw assignmentsError;
+    // Assignment lookup is optional metadata: failure must never block another SDR.
+    if (assignmentsError) console.warn("Contact assignments unavailable in /api/today:", assignmentsError.message);
     const assignmentByContact = new Map((assignments || []).map(row => [
       String(row.contact_id),
       String(row.assignee_cockpit_email || "").trim().toLowerCase(),
     ]));
 
-    // Keep the contact queue visible for preparation during the 12h–14h break.
-    // Actual outbound dialing remains disabled in the UI until the France window opens.
-    const callable = timed
-      .filter(contact => Boolean(String(contact.properties.phone || contact.properties.mobilephone || "").trim()))
-      .map(contact => {
-        const assignee = assignmentByContact.get(contact.id) || null;
-        const ownership = assignee === email ? "MINE" : assignee ? "OTHER" : "UNASSIGNED";
-        return { ...contact, ownership, assignee };
-      });
-
-    const mine = callable
-      .filter(contact => contact.ownership === "MINE")
-      .sort((a, b) => Number(b.properties.db_call_score || 0) - Number(a.properties.db_call_score || 0));
-    const available = callable
-      .filter(contact => contact.ownership === "UNASSIGNED")
-      .sort((a, b) => Number(b.properties.db_call_score || 0) - Number(a.properties.db_call_score || 0));
+    // Entire shared pool remains available to every SDR throughout the day.
+    // Other people's manual assignments are metadata only, not a filter.
+    const sharedQueue = timed.map(contact => {
+      const assignee = assignmentByContact.get(contact.id) || null;
+      const ownership = assignee === email ? "MINE" : assignee ? "OTHER" : "UNASSIGNED";
+      return { ...contact, ownership, assignee };
+    });
+    const score = (contact: typeof sharedQueue[number]) => Number(contact.properties.db_call_score || 0);
+    const mine = sharedQueue.filter(contact => contact.ownership === "MINE").sort((a, b) => score(b) - score(a));
+    const available = sharedQueue.filter(contact => contact.ownership === "UNASSIGNED").sort((a, b) => score(b) - score(a));
+    const other = sharedQueue.filter(contact => contact.ownership === "OTHER").sort((a, b) => score(b) - score(a));
+    const callable = sharedQueue.filter(contact =>
+      contact.timing.callNow && Boolean(String(contact.properties.phone || contact.properties.mobilephone || "").trim())
+    );
 
     return NextResponse.json({
       member: { email, role: access.role, displayName: access.displayName || null },
-      results: [...mine, ...available].slice(0, 250),
+      results: [...mine, ...available, ...other].slice(0, 250),
       mineCount: mine.length,
       availableCount: available.length,
-      callableCount: callWindowOpen ? mine.length + available.length : 0,
-      readyCount: mine.length + available.length,
+      otherCount: other.length,
+      callableCount: callable.length,
+      readyCount: sharedQueue.length,
       callWindowOpen,
       totalActionable: recommendations.summary.ACTIONABLE,
       callWindow: CALL_WINDOW_LABEL,
