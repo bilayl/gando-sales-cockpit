@@ -38,7 +38,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach";
 import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
-import { getBestCallTimeForProperties } from "@/lib/call-timing";
+import { getSessionCallTimeForProperties } from "@/lib/call-timing";
 import { useProspectionSessionData, type ProspectionTaskSummary as TaskSummary } from "@/hooks/queries/use-prospection-session";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useProspectionStore } from "@/stores/prospection-store";
@@ -200,7 +200,7 @@ function CompanyProfilePanel({
   const email = referenceContact.email || p.email || "";
   const contactName = [referenceContact.firstname, referenceContact.lastname].filter(Boolean).join(" ") || email || "Contact à qualifier";
   const primaryPhone = referenceContact.mobilephone || referenceContact.phone || p.phone || "";
-  const timing = getBestCallTimeForProperties({
+  const timing = getSessionCallTimeForProperties({
     ...p, ...referenceContact,
     phone: primaryPhone, country: referenceContact.country || p.country,
     city: referenceContact.city || p.city, state: referenceContact.state || p.state,
@@ -561,7 +561,7 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
   const p = current?.company.properties || {};
   const task = current?.summary?.nextTask || null;
   const currentPhone = String(task?.sourceContactPhone || p.phone || "").trim();
-  const currentTiming = getBestCallTimeForProperties({ ...p, phone: currentPhone }, new Date(evaluationTime));
+  const currentTiming = getSessionCallTimeForProperties({ ...p, phone: currentPhone }, new Date(evaluationTime));
   const currentReminder = p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date;
   const needsReminder = outcome === "FOLLOW_UP" || outcome === "NO_ANSWER" || outcome === "WRONG_CONTACT";
   const withalloReady = Boolean(withallo?.configured && withallo?.connected === true);
@@ -599,15 +599,27 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                     <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-lg font-bold tracking-tight">{p.name || p.domain || "Entreprise sans nom"}</h2><Badge variant="secondary">{current.decision.priorityLabel}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{[p.city, p.country, p.domain].filter(Boolean).join(" · ") || "Aucune localisation"}</p></div>
                   </div>
 
-                  <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">À faire maintenant</div><div className="mt-1 text-sm font-semibold">{current.decision.reason}</div><div className="mt-2 text-xs text-muted-foreground">{taskLabel(current.summary)}</div></div>
+                  <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">{currentPhone && currentTiming.callNow ? "À faire maintenant" : "À préparer"}</div><div className="mt-1 text-sm font-semibold">{current.decision.reason}</div><div className="mt-2 text-xs text-muted-foreground">{taskLabel(current.summary)}</div></div>
 
                   {task ? (
                     <div className="rounded-xl border border-border bg-background p-4">
-                      <div className="flex items-start gap-3"><span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-primary"><ListTodo size={16} /></span><div className="min-w-0 flex-1"><div className="font-semibold">{task.subject}</div><div className="mt-1.5 space-y-1 text-xs text-muted-foreground"><div className="inline-flex items-center gap-1"><CalendarClock size={12} /> {formatDateTime(task.dueAt)}</div>{task.sourceContactName ? <div>{task.sourceContactName}{task.sourceContactJobTitle ? ` · ${task.sourceContactJobTitle}` : ""}</div> : <div>Tâche entreprise</div>}{task.sourceContactPhone ? <a href={`tel:${task.sourceContactPhone}`} className="inline-flex items-center gap-1 text-primary hover:underline"><Phone size={12} /> {task.sourceContactPhone}</a> : null}</div></div></div>
+                      <div className="flex items-start gap-3"><span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-primary"><ListTodo size={16} /></span><div className="min-w-0 flex-1"><div className="font-semibold">{task.subject}</div><div className="mt-1.5 space-y-1 text-xs text-muted-foreground"><div className="inline-flex items-center gap-1"><CalendarClock size={12} /> {formatDateTime(task.dueAt)}</div>{task.sourceContactName ? <div>{task.sourceContactName}{task.sourceContactJobTitle ? ` · ${task.sourceContactJobTitle}` : ""}</div> : <div>Tâche entreprise</div>}{task.sourceContactPhone ? <span className="inline-flex items-center gap-1"><Phone size={12} /> {task.sourceContactPhone}</span> : null}</div></div></div>
                     </div>
                   ) : null}
 
                   <div className="grid grid-cols-2 gap-2"><div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Dernier résultat</div><div className="mt-1 truncate text-sm font-semibold">{p.statut_de_lappel || STAGE_LABELS[current.stage]}</div></div><div className="rounded-lg border border-border p-3"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Échéance</div><div className="mt-1 truncate text-sm font-semibold">{formatDateTime(currentReminder)}</div></div></div>
+
+                  <div className="rounded-xl border border-border bg-background p-3 text-xs leading-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={currentPhone && currentTiming.callNow ? "secondary" : "outline"}>
+                        {currentPhone && currentTiming.callNow ? "Appel possible" : "À appeler plus tard"}
+                      </Badge>
+                      <span className="font-semibold">
+                        Heure locale : {currentTiming.localTime || "—"} · {currentTiming.timezone || "À confirmer"}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-muted-foreground">Appels de 9 h à 19 h chez le prospect, en semaine. La fiche reste ouverte à toute heure.</div>
+                  </div>
 
                   <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3 text-xs leading-5">
                     <div className="font-semibold text-primary">Téléphone Allo intégré</div>
