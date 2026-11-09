@@ -9,6 +9,7 @@ import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
 import { ProspectionSession } from "@/components/prospection-session";
 import { SdrWorkQueue } from "@/components/sdr-work-queue";
+import { ProspectionAssignmentManager } from "@/components/prospection-assignment-manager";
 import { PageHeader } from "@/components/cockpit/page-header";
 import { ProspectionPageSkeleton } from "@/components/prospection-page-skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -93,6 +94,7 @@ export function CompanyFirstProspectionView() {
   const [sessionCompanies, setSessionCompanies] = useState<Company[]>([]);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [localError, setLocalError] = useState("");
+  const [assignedOnly, setAssignedOnly] = useState(false);
   const [evaluationTime, setEvaluationTime] = useState(Date.now);
 
   const companiesQuery = useCompanies(segmentId);
@@ -155,9 +157,11 @@ export function CompanyFirstProspectionView() {
         .join(" ")
         .toLowerCase();
       const stage = deriveCompanyStage(company);
-      return (!needle || haystack.includes(needle)) && companyMatchesFilters(p, filters, stage);
+      return (!needle || haystack.includes(needle))
+        && companyMatchesFilters(p, filters, stage)
+        && (!assignedOnly || assignmentByCompanyId.get(company.id) === currentUserEmail);
     });
-  }, [companies, query, filters]);
+  }, [companies, query, filters, assignedOnly, assignmentByCompanyId, currentUserEmail]);
 
   const classified = useMemo(() => {
     const now = evaluationTime;
@@ -182,6 +186,7 @@ export function CompanyFirstProspectionView() {
   const sessionCandidates = useMemo(() => actionableCompanies.filter(company => {
     const assignee = assignmentByCompanyId.get(company.id);
     return (!assignee || assignee === currentUserEmail)
+      && Boolean(String(company.properties.phone || company.properties.mobilephone || "").trim())
       && getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow;
   }), [actionableCompanies, assignmentByCompanyId, currentUserEmail, evaluationTime]);
 
@@ -356,6 +361,14 @@ export function CompanyFirstProspectionView() {
           </div>
 
           <CompanyMultiFilter companies={companies} owners={owners} value={filters} onChange={value => void setFilters(value)} />
+          <Button variant={assignedOnly ? "secondary" : "outline"} size="sm" className="h-8 shrink-0" onClick={() => setAssignedOnly(value => !value)}>
+            Mes entreprises
+          </Button>
+          <ProspectionAssignmentManager
+            companies={classified.filter(item => item.decision.bucket === "ACTIONABLE").map(item => item.company)}
+            assignments={assignments}
+            onAssigned={() => void queryClient.invalidateQueries({ queryKey: queryKeys.prospection.assignments })}
+          />
           <div className="relative min-w-[180px] flex-1 sm:max-w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
