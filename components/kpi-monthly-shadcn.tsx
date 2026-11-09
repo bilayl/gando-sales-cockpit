@@ -43,6 +43,18 @@ type ActivatedDeposit = {
   amountCents: number
 }
 
+type InsuranceMonth = {
+  month: string
+  partial: boolean
+  cautions: number
+  tdvCents: number
+  insuranceCostCents: number
+}
+type InsuranceDecisionResponse = {
+  actual?: InsuranceMonth[]
+  forecast?: { trailing?: { insuranceRateBps?: number; insuranceEffectiveFrom?: string } }
+}
+
 type NumericKey = Exclude<keyof KpiRow, "id" | "year" | "monthNumber" | "month">
 
 type Derived = {
@@ -174,12 +186,13 @@ function integer(value: number | null | undefined) {
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)
 }
 
-function euroCents(value: number | null | undefined) {
+function euroCents(value: number | null | undefined, digits = 0) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
     currency: "EUR",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(value / 100)
 }
 
@@ -261,6 +274,11 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
   const [activatedDeposits, setActivatedDeposits] = useState<ActivatedDeposit[]>([])
   const [activationsLoading, setActivationsLoading] = useState(false)
   const [activationsError, setActivationsError] = useState("")
+  const [insuranceMonths, setInsuranceMonths] = useState<InsuranceMonth[]>([])
+  const [insuranceRateBps, setInsuranceRateBps] = useState<number | null>(null)
+  const [insuranceEffectiveMonth, setInsuranceEffectiveMonth] = useState("2026-09")
+  const [insuranceLoading, setInsuranceLoading] = useState(true)
+  const [insuranceError, setInsuranceError] = useState("")
 
   async function load() {
     setLoading(true)
@@ -279,8 +297,45 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
 
   useEffect(() => { void load() }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await fetch("/api/kpi/decision-intelligence", { cache: "no-store" })
+        const body = await response.json() as InsuranceDecisionResponse & { error?: string }
+        if (!response.ok) throw new Error(body.error || "Impossible de charger les primes d’assurance.")
+        if (cancelled) return
+        setInsuranceMonths(Array.isArray(body.actual) ? body.actual : [])
+        setInsuranceRateBps(body.forecast?.trailing?.insuranceRateBps ?? null)
+        setInsuranceEffectiveMonth(body.forecast?.trailing?.insuranceEffectiveFrom?.slice(0, 7) || "2026-09")
+        setInsuranceError("")
+      } catch (reason) {
+        if (!cancelled) setInsuranceError(reason instanceof Error ? reason.message : "Primes d’assurance indisponibles.")
+      } finally {
+        if (!cancelled) setInsuranceLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   const sortedRows = useMemo(() => [...rows].sort((a, b) => monthIndex(a) - monthIndex(b)), [rows])
   const actualRows = useMemo(() => sortedRows.filter(isFilled), [sortedRows])
+  const insuranceByMonth = useMemo(
+    () => new Map(insuranceMonths.filter(row => row.month >= insuranceEffectiveMonth).map(row => [row.month, row])),
+    [insuranceMonths, insuranceEffectiveMonth],
+  )
+
+  // Include insurance months even when the manually entered monthly KPI fields are blank.
+  const historyRows = useMemo(() => {
+    const byMonth = new Map(actualRows.map(row => [rowKey(row.year, row.monthNumber), row]))
+    for (const insurance of insuranceMonths) {
+      if (insurance.month < insuranceEffectiveMonth || byMonth.has(insurance.month)) continue
+      const [year, monthNumber] = insurance.month.split("-").map(Number)
+      if (!Number.isInteger(year) || !Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12) continue
+      byMonth.set(insurance.month, sortedRows.find(row => rowKey(row.year, row.monthNumber) === insurance.month) || blankRow(year, monthNumber))
+    }
+    return [...byMonth.values()].sort((a, b) => monthIndex(a) - monthIndex(b))
+  }, [actualRows, sortedRows, insuranceMonths, insuranceEffectiveMonth])
 
   useEffect(() => {
     if (selectedMonth || !actualRows.length) return
@@ -489,6 +544,12 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
                 <SelectContent>{sortedRows.map(row => <SelectItem key={rowKey(row.year, row.monthNumber)} value={rowKey(row.year, row.monthNumber)}>{row.month} {row.year}</SelectItem>)}</SelectContent>
               </Select>
               {selected ? <span className="text-[11px] text-muted-foreground">{SOURCE_FIELDS.filter(field => selected[field.key] != null).length}/{SOURCE_FIELDS.length} sources renseignées</span> : null}
+              {selected && selectedMonth >= insuranceEffectiveMonth ? (
+                <Badge variant="outline" className="h-7 text-[11px]">
+                  Prime assurance : {insuranceLoading ? "Calcul…" : euroCents(insuranceByMonth.get(selectedMonth)?.insuranceCostCents, 2)}
+                  {insuranceByMonth.get(selectedMonth)?.partial ? " · provisoire" : ""}
+                </Badge>
+              ) : null}
             </div>
             {canEdit ? <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setEditing(current => !current)}><Pencil size={14} />{editing ? "Fermer" : "Saisir / corriger"}</Button> : null}
           </div>
@@ -600,10 +661,60 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
             <div className="border-b border-border px-4 py-3">
               <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/70">Historique</div>
               <div className="mt-0.5 text-sm font-semibold">Réel + ratios calculés</div>
+              <div className="mt-1 text-[10px] leading-4 text-muted-foreground">
+                Prime d’assurance à payer depuis septembre 2026, calculée sur chaque caution activée
+                {insuranceRateBps == null ? "" : " · taux " + (insuranceRateBps / 100).toLocaleString("fr-FR", { minimumFractionDigits: 2 }) + " %"}.
+                Montant calculé, sans suivi des factures déjà réglées.
+              </div>
             </div>
-            <Table className="min-w-[1050px] text-[11px]">
-              <TableHeader className="bg-muted/35"><TableRow><TableHead className="sticky left-0 z-10 bg-muted/95 pl-4">Mois</TableHead><TableHead>CA</TableHead><TableHead>Δ CA</TableHead><TableHead>TDV</TableHead><TableHead>Take rate</TableHead><TableHead>Cautions</TableHead><TableHead>Δ cautions</TableHead><TableHead>MAU</TableHead><TableHead>Cautions / MAU</TableHead><TableHead>ARPU</TableHead><TableHead>Caution moy.</TableHead></TableRow></TableHeader>
-              <TableBody>{[...actualRows].reverse().map(row => { const derived = derivedByMonth.get(rowKey(row.year, row.monthNumber)); return <TableRow key={rowKey(row.year, row.monthNumber)} onClick={() => setSelectedMonth(rowKey(row.year, row.monthNumber))} className="group cursor-pointer"><TableCell className="sticky left-0 bg-card pl-4 font-semibold group-hover:bg-muted/50">{row.month} {row.year}</TableCell><TableCell>{euro(row.revenue, 2)}</TableCell><TableCell><TrendBadge value={derived?.revenueGrowth ?? null} /></TableCell><TableCell>{euro(row.tdv)}</TableCell><TableCell>{percent(derived?.takeRate, 2)}</TableCell><TableCell>{integer(row.deposits)}</TableCell><TableCell><TrendBadge value={derived?.depositGrowth ?? null} /></TableCell><TableCell>{integer(row.activeRenters)}</TableCell><TableCell>{decimal(derived?.depositsPerRenter, 2)}</TableCell><TableCell>{euro(derived?.arpu, 2)}</TableCell><TableCell>{euro(derived?.avgDeposit)}</TableCell></TableRow> })}</TableBody>
+            {insuranceError ? (
+              <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-xs text-destructive">
+                Primes d’assurance indisponibles : {insuranceError}. Les autres indicateurs restent accessibles.
+              </div>
+            ) : null}
+            <Table className="min-w-[1260px] text-[11px]">
+              <TableHeader className="bg-muted/35">
+                <TableRow>
+                  <TableHead className="sticky left-0 z-10 bg-muted/95 pl-4">Mois</TableHead>
+                  <TableHead>CA</TableHead>
+                  <TableHead>Δ CA</TableHead>
+                  <TableHead>TDV</TableHead>
+                  <TableHead>Take rate</TableHead>
+                  <TableHead>Cautions</TableHead>
+                  <TableHead>Δ cautions</TableHead>
+                  <TableHead>MAU</TableHead>
+                  <TableHead>Cautions / MAU</TableHead>
+                  <TableHead>ARPU</TableHead>
+                  <TableHead>Caution moy.</TableHead>
+                  <TableHead className="whitespace-nowrap text-right">Prime assurance à payer</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...historyRows].reverse().map(row => {
+                  const key = rowKey(row.year, row.monthNumber)
+                  const derived = derivedByMonth.get(key)
+                  const insurance = insuranceByMonth.get(key)
+                  return (
+                    <TableRow key={key} onClick={() => setSelectedMonth(key)} className="group cursor-pointer">
+                      <TableCell className="sticky left-0 bg-card pl-4 font-semibold group-hover:bg-muted/50">{row.month} {row.year}</TableCell>
+                      <TableCell>{euro(row.revenue, 2)}</TableCell>
+                      <TableCell><TrendBadge value={derived?.revenueGrowth ?? null} /></TableCell>
+                      <TableCell>{euro(row.tdv)}</TableCell>
+                      <TableCell>{percent(derived?.takeRate, 2)}</TableCell>
+                      <TableCell>{integer(row.deposits)}</TableCell>
+                      <TableCell><TrendBadge value={derived?.depositGrowth ?? null} /></TableCell>
+                      <TableCell>{integer(row.activeRenters)}</TableCell>
+                      <TableCell>{decimal(derived?.depositsPerRenter, 2)}</TableCell>
+                      <TableCell>{euro(derived?.arpu, 2)}</TableCell>
+                      <TableCell>{euro(derived?.avgDeposit)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-right font-semibold tabular-nums">
+                        {key < insuranceEffectiveMonth ? "—" : insuranceLoading ? "Calcul…" : euroCents(insurance?.insuranceCostCents, 2)}
+                        {insurance?.partial ? <Badge variant="secondary" className="ml-2 h-5 text-[9px]">En cours</Badge> : null}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
             </Table>
           </section>
         </TabsContent>
