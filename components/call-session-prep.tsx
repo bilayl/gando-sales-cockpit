@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PostCallEmailButton } from "@/components/post-call-email-button"
 import { WithAlloCallButton } from "@/components/withallo-call-button"
+import { getBestCallTimeForProperties } from "@/lib/call-timing"
 import { buildCallObjectionCoach } from "@/lib/call-objection-coach"
 
 type Contact = {
@@ -26,6 +27,12 @@ function contextValue(value?: string | null) {
 
 export function CallSessionPrep({ contact, remaining, allowCalling = true, onOpenContact }: Props) {
   const [open, setOpen] = useState(true)
+  const [clock, setClock] = useState(Date.now)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
   const [activityData, setActivityData] = useState<any>(null)
 
   useEffect(() => {
@@ -59,6 +66,8 @@ export function CallSessionPrep({ contact, remaining, allowCalling = true, onOpe
   const companyName = p.company || activityData?.companies?.[0]?.properties?.name || p.name || ""
   const email = p.email || ""
   const phone = String(p.phone || p.mobilephone || "").trim()
+  const timing = getBestCallTimeForProperties(p, new Date(clock))
+  const canDial = allowCalling && timing.callNow
   const coach = useMemo(() => buildCallObjectionCoach({
     properties: p,
     notes: activityData?.notes || [],
@@ -80,11 +89,11 @@ export function CallSessionPrep({ contact, remaining, allowCalling = true, onOpe
           <div className="mt-1 text-[11px] text-muted-foreground">Le Cockpit centralise uniquement les informations utiles du CRM pour préparer l’appel.</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {allowCalling && phone ? (
+          {canDial && phone ? (
             <WithAlloCallButton phone={phone} label="Appeler ce contact avec Allo" className="h-9 px-4" />
           ) : (
-            <span className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground">
-              {phone ? "Appels ouverts de 9h à 12h et 14h à 18h (Paris)" : "Numéro non renseigné"}
+            <span title={timing.reason} className="max-w-[340px] rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground">
+              {phone ? timing.reason : "Numéro non renseigné — fiche toujours accessible"}
             </span>
           )}
           <PostCallEmailButton
