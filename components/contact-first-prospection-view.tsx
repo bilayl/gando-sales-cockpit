@@ -416,7 +416,7 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
             <CallSessionPrep
               contact={currentSessionContact}
               remaining={sessionMeta?.remaining ?? filteredContacts.length}
-              onOpenContact={() => router.push(`/contacts/${currentSessionContact.id}`)}
+              onOpenContact={() => window.open(`/contacts/${encodeURIComponent(currentSessionContact.id)}`, "_blank", "noopener,noreferrer")}
             />
           ) : null}
 
