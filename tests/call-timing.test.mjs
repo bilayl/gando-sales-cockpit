@@ -47,7 +47,11 @@ test("afternoon France calls work for the Antilles after local 9h, but not in Ea
 });
 
 test("prospect local daytime has an exact 9:00 and 19:00 boundary", () => {
-  assert.equal(getBestCallTimeForProperties({ timezone: "America/Guadeloupe" }, new Date("2026-11-09T13:59:00Z")).callNow, false); // 08:59 local
-  assert.equal(getBestCallTimeForProperties({ timezone: "America/Guadeloupe" }, new Date("2026-11-09T14:00:00Z")).callNow, true); // 09:00 local
+  const beforeGuadeloupe = getBestCallTimeForProperties({ timezone: "America/Guadeloupe" }, new Date("2026-11-09T12:59:00Z"));
+  const openingGuadeloupe = getBestCallTimeForProperties({ timezone: "America/Guadeloupe" }, new Date("2026-11-09T13:00:00Z"));
+  assert.equal(beforeGuadeloupe.localTime, "08:59");
+  assert.equal(beforeGuadeloupe.callNow, false);
+  assert.equal(openingGuadeloupe.localTime, "09:00");
+  assert.equal(openingGuadeloupe.callNow, true);
   assert.equal(getBestCallTimeForProperties({ timezone: "Asia/Dubai" }, new Date("2026-11-09T15:00:00Z")).callNow, false); // 19:00 local
 });
