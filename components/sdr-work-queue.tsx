@@ -91,9 +91,9 @@ export function SdrWorkQueue({
           </div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             <strong className="text-foreground">{actionableCount} entreprise{actionableCount > 1 ? "s" : ""} à traiter dans cette sélection.</strong>
-            {" "}La session d’appels utilise les contacts disponibles, indépendamment des anciennes attributions d’entreprises.
-            {" "}Créneaux : 9h–12h et 14h–18h, heure de Paris.
-            {!callWindowOpen ? " Vous pouvez préparer la session maintenant ; les appels reprendront au prochain créneau." : ""}
+            {" "}Fiches partagées entre tous les SDR : aucune attribution ne bloque la consultation ou la préparation.
+            {" "}Seul l’appel est soumis aux horaires France (9h–12h, 14h–18h) et à l’heure locale du prospect.
+            {!callWindowOpen ? " Vous pouvez ouvrir les fiches et préparer vos appels dès maintenant." : ""}
           </p>
         </div>
 
@@ -103,7 +103,7 @@ export function SdrWorkQueue({
             className="h-9 gap-2"
           >
             <PhoneCall size={15} />
-            {callWindowOpen ? "Démarrer les appels" : "Préparer les appels"}
+            Ouvrir la session d’appels
           </Button>
         </div>
       </div>

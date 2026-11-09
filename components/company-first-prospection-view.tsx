@@ -17,12 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCompanies, type CompanyRecord as Company } from "@/hooks/queries/use-companies";
-import {
-  useCurrentCockpitUser,
-  useOwners,
-  useProspectionAssignments,
-  useSegments,
-} from "@/hooks/queries/use-prospection-reference-data";
+import { useOwners, useSegments } from "@/hooks/queries/use-prospection-reference-data";
 import { useCompanyProspectionParams } from "@/hooks/use-company-prospection-params";
 import { companyMatchesFilters } from "@/lib/company-multi-filters";
 import { compareCompanyProspectionPriority, getCompanyProspectionDecision } from "@/lib/company-prospection-priority";
@@ -89,20 +84,15 @@ export function CompanyFirstProspectionView() {
   const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [localError, setLocalError] = useState("");
-  const [assignedOnly, setAssignedOnly] = useState(false);
   const [evaluationTime, setEvaluationTime] = useState(Date.now);
 
   const companiesQuery = useCompanies(segmentId);
   const segmentsQuery = useSegments();
   const ownersQuery = useOwners();
-  const currentUserQuery = useCurrentCockpitUser();
-  const assignmentsQuery = useProspectionAssignments();
 
   const companies = companiesQuery.data?.results ?? [];
   const total = companiesQuery.data?.total ?? 0;
   const owners = ownersQuery.data ?? [];
-  const assignments = assignmentsQuery.data ?? [];
-  const currentUserEmail = String(currentUserQuery.data?.email || "").trim().toLowerCase();
   const lists = useMemo(
     () => (segmentsQuery.data ?? []).filter(item => item.objectTypeId === "0-2"),
     [segmentsQuery.data],
@@ -138,11 +128,6 @@ export function CompanyFirstProspectionView() {
     [item.firstName, item.lastName].filter(Boolean).join(" ") || item.email || item.id,
   ])), [owners]);
 
-  const assignmentByCompanyId = useMemo(() => new Map(assignments.map(assignment => [
-    assignment.company_id,
-    String(assignment.assignee_cockpit_email || "").trim().toLowerCase(),
-  ])), [assignments]);
-
   const baseFiltered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return companies.filter(company => {
@@ -153,10 +138,9 @@ export function CompanyFirstProspectionView() {
         .toLowerCase();
       const stage = deriveCompanyStage(company);
       return (!needle || haystack.includes(needle))
-        && companyMatchesFilters(p, filters, stage)
-        && (!assignedOnly || assignmentByCompanyId.get(company.id) === currentUserEmail);
+        && companyMatchesFilters(p, filters, stage);
     });
-  }, [companies, query, filters, assignedOnly, assignmentByCompanyId, currentUserEmail]);
+  }, [companies, query, filters]);
 
   const classified = useMemo(() => {
     const now = evaluationTime;
@@ -222,9 +206,8 @@ export function CompanyFirstProspectionView() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.companies.detail(id) });
   }
 
-  const loading = companiesQuery.isPending || segmentsQuery.isPending || ownersQuery.isPending
-    || currentUserQuery.isPending || assignmentsQuery.isPending;
-  const queryError = [companiesQuery.error, segmentsQuery.error, ownersQuery.error, assignmentsQuery.error]
+  const loading = companiesQuery.isPending || segmentsQuery.isPending || ownersQuery.isPending;
+  const queryError = [companiesQuery.error, segmentsQuery.error, ownersQuery.error]
     .find(Boolean);
   const error = localError
     || (companiesQuery.data?.truncated ? "Le volume est très important : seuls les 10 000 premiers comptes ont été chargés." : "")
@@ -291,9 +274,6 @@ export function CompanyFirstProspectionView() {
           </div>
 
           <CompanyMultiFilter companies={companies} owners={owners} value={filters} onChange={value => void setFilters(value)} />
-          <Button variant={assignedOnly ? "secondary" : "outline"} size="sm" className="h-8 shrink-0" onClick={() => setAssignedOnly(value => !value)}>
-            Mes entreprises
-          </Button>
           <div className="relative min-w-[180px] flex-1 sm:max-w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -337,13 +317,12 @@ export function CompanyFirstProspectionView() {
                   <TableHead className="hidden w-[150px] lg:table-cell">Rappel prévu</TableHead>
                   <TableHead className="hidden 2xl:table-cell">Contacts</TableHead>
                   <TableHead className="hidden 2xl:table-cell">Deals</TableHead>
-                  <TableHead className="hidden w-[180px] xl:table-cell">Commercial</TableHead>
                   <TableHead className="hidden 2xl:table-cell">Dernière activité</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={11} className="h-52 text-center"><Loader2 className="mx-auto animate-spin text-muted-foreground" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={10} className="h-52 text-center"><Loader2 className="mx-auto animate-spin text-muted-foreground" /></TableCell></TableRow>
                 ) : filtered.map(company => {
                   const p = company.properties;
                   const stage = deriveCompanyStage(company);
@@ -369,13 +348,12 @@ export function CompanyFirstProspectionView() {
                       <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">{stage === "LATER" || stage === "FOLLOW_UP" ? formatDate(p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date) : "—"}</TableCell>
                       <TableCell className="hidden 2xl:table-cell">{p.qualification_contacts_count || p.num_associated_contacts || 0}</TableCell>
                       <TableCell className="hidden 2xl:table-cell">{p.qualification_deals_count || p.num_associated_deals || 0}</TableCell>
-                      <TableCell className="hidden truncate xl:table-cell">{assignmentByCompanyId.get(company.id) || "Non attribuée"}</TableCell>
                       <TableCell className="hidden text-xs text-muted-foreground 2xl:table-cell">{formatDate(p.qualification_last_activity_at || p.notes_last_updated || p.hs_last_sales_activity_timestamp)}</TableCell>
                     </TableRow>
                   );
                 })}
                 {!loading && !filtered.length ? (
-                  <TableRow><TableCell colSpan={11} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={10} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow>
                 ) : null}
               </TableBody>
             </Table>

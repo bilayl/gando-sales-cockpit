@@ -156,7 +156,12 @@ function CompanyProfilePanel({
   onOpenCompany: (companyId: string) => void;
 }) {
   const [data, setData] = useState<any>(null);
+  const [clock, setClock] = useState(Date.now);
   const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -181,7 +186,6 @@ function CompanyProfilePanel({
   }, [companyId]);
 
   const p = data?.company?.properties || fallbackCompany.properties;
-  const timing = getBestCallTimeForProperties(p);
   const contacts = data?.contacts || [];
   const emailContact = contacts.find((contact: any) => contact?.properties?.email) || contacts[0] || null;
   const referenceContact = emailContact?.properties || contacts[0]?.properties || {};
@@ -196,6 +200,11 @@ function CompanyProfilePanel({
   const email = referenceContact.email || p.email || "";
   const contactName = [referenceContact.firstname, referenceContact.lastname].filter(Boolean).join(" ") || email || "Contact à qualifier";
   const primaryPhone = referenceContact.mobilephone || referenceContact.phone || p.phone || "";
+  const timing = getBestCallTimeForProperties({
+    ...p, ...referenceContact,
+    phone: primaryPhone, country: referenceContact.country || p.country,
+    city: referenceContact.city || p.city, state: referenceContact.state || p.state,
+  }, new Date(clock));
 
   const timeline = useMemo(() => {
     if (!data) return [];
@@ -254,7 +263,9 @@ function CompanyProfilePanel({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {primaryPhone ? <WithAlloCallButton phone={primaryPhone} /> : null}
+              {primaryPhone && timing.callNow ? <WithAlloCallButton phone={primaryPhone} /> : (
+                <span className="text-xs text-muted-foreground">{primaryPhone ? timing.reason : "Pas de numéro renseigné"}</span>
+              )}
               <Button asChild size="sm" variant="outline"><a href="/phone"><Phone size={14} /> Téléphone Allo</a></Button>
               {email ? <Button asChild size="sm" variant="outline"><a href={`mailto:${email}`}><Mail size={14} /> Email</a></Button> : null}
               {p.domain ? <Button asChild size="sm" variant="outline"><a href={`https://${p.domain}`} target="_blank" rel="noreferrer"><Globe size={14} /> Site web</a></Button> : null}
@@ -353,6 +364,12 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
       .map(company => company.id)
       .slice(0, 100);
   }, [companies, evaluationTime]);
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setInterval(() => setEvaluationTime(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [open]);
 
   useEffect(() => {
     const onPanelToggle = (event: Event) => {
@@ -543,6 +560,8 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
 
   const p = current?.company.properties || {};
   const task = current?.summary?.nextTask || null;
+  const currentPhone = String(task?.sourceContactPhone || p.phone || "").trim();
+  const currentTiming = getBestCallTimeForProperties({ ...p, phone: currentPhone }, new Date(evaluationTime));
   const currentReminder = p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date;
   const needsReminder = outcome === "FOLLOW_UP" || outcome === "NO_ANSWER" || outcome === "WRONG_CONTACT";
   const withalloReady = Boolean(withallo?.configured && withallo?.connected === true);
@@ -594,7 +613,13 @@ export function ProspectionSession({ open, onOpenChange, companies, onOpenCompan
                     <div className="font-semibold text-primary">Téléphone Allo intégré</div>
                     <div className="mt-0.5 text-muted-foreground">{withalloReady ? "Utilisez le téléphone Allo intégré au Cockpit pour appeler directement depuis cette session." : "Le composeur Allo nécessite l’autorisation d’intégration de room.gando.pro par Allo. La clé API ne suffit pas."}</div>
                   </div>
-                  {p.phone || task?.sourceContactPhone ? <WithAlloCallButton phone={String(task?.sourceContactPhone || p.phone)} label="Appeler depuis le Cockpit" className="h-11 w-full" /> : <Button asChild className="w-full" variant="outline"><a href="/phone">Ouvrir Allo</a></Button>}
+                  {currentPhone && currentTiming.callNow ? (
+                    <WithAlloCallButton phone={currentPhone} label="Appeler depuis le Cockpit" className="h-11 w-full" />
+                  ) : (
+                    <p className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs leading-5 text-muted-foreground">
+                      {currentPhone ? currentTiming.reason : "Aucun numéro. La fiche reste accessible pour préparer le prospect."}
+                    </p>
+                  )}
 
                   <div className="space-y-2 border-t border-border pt-4">
                     <Button className="w-full" size="lg" onClick={openFinish}><CheckCircle2 size={17} /> Terminer l’appel</Button>

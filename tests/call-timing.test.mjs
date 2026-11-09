@@ -28,13 +28,30 @@ test("Calling hours apply to France on weekdays only", () => {
   assert.equal(on("2026-11-08T09:00:00Z"), false); // Sunday
   assert.equal(on("2026-11-07T13:00:00Z"), false); // Saturday
 });
-test("SDR/prospect timezone and missing prospect timezone do not disable button", () => {
-  const date = new Date("2026-11-09T08:30:00Z");
-  const paris = getBestCallTimeForProperties({ timezone: "Europe/Paris" }, date);
-  const tokyo = getBestCallTimeForProperties({ timezone: "Asia/Tokyo" }, date);
-  const guadeloupe = getBestCallTimeForProperties({ timezone: "America/Guadeloupe" }, date);
-  const unknown = getBestCallTimeForProperties({}, date);
-  assert.deepEqual([paris.callNow,tokyo.callNow,guadeloupe.callNow,unknown.callNow],[true,true,true,true]);
-  assert.notEqual(paris.localTime,guadeloupe.localTime);
-  assert.equal(unknown.localTime,null);
+test("prospect in Guadeloupe can be prepared from 9h Paris but not called at 4h locally", () => {
+  const morning = new Date("2026-11-09T08:30:00Z"); // 09:30 Paris, 04:30 Guadeloupe
+  const paris = getBestCallTimeForProperties({ timezone: "Europe/Paris" }, morning);
+  const guadeloupe = getBestCallTimeForProperties({ timezone: "America/Guadeloupe" }, morning);
+  const unknown = getBestCallTimeForProperties({}, morning);
+  assert.equal(paris.callNow, true);
+  assert.equal(guadeloupe.callNow, false);
+  assert.match(guadeloupe.reason, /Trop tôt|trop tard/);
+  assert.equal(unknown.callNow, true);
+  assert.equal(unknown.localTime, null);
+});
+
+test("afternoon France calls work for the Antilles after local 9h, but not in East Asia at night", () => {
+  const afternoon = new Date("2026-11-09T14:00:00Z"); // 15:00 Paris, 10:00 Guadeloupe
+  assert.equal(getBestCallTimeForProperties({ phone: "+590690000000" }, afternoon).callNow, true);
+  assert.equal(getBestCallTimeForProperties({ timezone: "Asia/Tokyo" }, afternoon).callNow, false);
+});
+
+test("prospect local daytime has an exact 9:00 and 19:00 boundary", () => {
+  const beforeGuadeloupe = getBestCallTimeForProperties({ timezone: "America/Guadeloupe" }, new Date("2026-11-09T12:59:00Z"));
+  const openingGuadeloupe = getBestCallTimeForProperties({ timezone: "America/Guadeloupe" }, new Date("2026-11-09T13:00:00Z"));
+  assert.equal(beforeGuadeloupe.localTime, "08:59");
+  assert.equal(beforeGuadeloupe.callNow, false);
+  assert.equal(openingGuadeloupe.localTime, "09:00");
+  assert.equal(openingGuadeloupe.callNow, true);
+  assert.equal(getBestCallTimeForProperties({ timezone: "Asia/Dubai" }, new Date("2026-11-09T15:00:00Z")).callNow, false); // 19:00 local
 });

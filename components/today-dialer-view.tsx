@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTodayDashboard, type TodayContact as Contact, type TodayTask as Task } from "@/hooks/queries/use-today-dashboard";
 import { queryKeys } from "@/lib/query/query-keys";
+import { getBestCallTimeForProperties, isWithinFrenchCallWindow } from "@/lib/call-timing";
 
 const ONOFF_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
 
@@ -140,15 +141,21 @@ export function TodayDialerView() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [clock, setClock] = useState(Date.now);
+  useEffect(() => {
+    const interval = window.setInterval(() => setClock(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const results = today?.results || [];
-  const callWindowOpen = today?.callWindowOpen === true;
+  const callWindowOpen = isWithinFrenchCallWindow(new Date(clock));
   const selected = useMemo(
     () => results.find(contact => contact.id === selectedId) || results[0] || null,
     [results, selectedId],
   );
   const p = selected?.properties || {};
   const selectedNumber = numberFor(selected);
+  const selectedTiming = getBestCallTimeForProperties(p, new Date(clock));
   const apiHealthy = Boolean(onoff?.configured && onoff?.connected !== false);
 
   // Important: the dashboard is global. Assignment is display metadata only, never a filter.
@@ -314,7 +321,9 @@ export function TodayDialerView() {
                       <h2 className="text-[25px] font-semibold tracking-[-0.035em]">{fullName(selected)}</h2>
                       <div className="mt-1 text-[14px] text-muted-foreground">{p.jobtitle || "Fonction à qualifier"}{p.company ? ` · ${p.company}` : ""}</div>
                     </div>
-                    <Badge className={selected.ownership === "MINE" ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300" : "bg-muted text-muted-foreground hover:bg-muted"}>{selected.ownership === "MINE" ? "À moi" : "Disponible"}</Badge>
+                    <Badge className={selected.ownership === "MINE" ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300" : "bg-muted text-muted-foreground hover:bg-muted"}>
+                      {selected.ownership === "MINE" ? "À moi" : selected.ownership === "OTHER" ? "Attribué · accès partagé" : "Disponible à tous"}
+                    </Badge>
                   </div>
 
                   <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -330,12 +339,12 @@ export function TodayDialerView() {
                   </div>
 
                   <div className="mt-7 flex flex-wrap gap-2">
-                    {callWindowOpen && selectedNumber ? (
+                    {selectedTiming.callNow && selectedNumber ? (
                       <WithAlloCallButton phone={selectedNumber} label="Appeler maintenant avec Allo" className="h-11 rounded-xl px-6 text-sm" />
                     ) : (
-                      <Button className="h-11 rounded-xl px-6" disabled>
-                        <Phone className="mr-2 h-4 w-4" />{selectedNumber ? "Hors créneau d’appels France" : "Numéro indisponible"}
-                      </Button>
+                      <span className="max-w-[350px] rounded-xl border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground" title={selectedTiming.reason}>
+                        {selectedNumber ? selectedTiming.reason : "Numéro indisponible — fiche consultable"}
+                      </span>
                     )}
                     {p.email ? <Button variant="outline" className="h-11 rounded-xl" asChild><a href={`mailto:${p.email}`}><Mail className="mr-2 h-4 w-4" />Email</a></Button> : null}
                     <Button variant="outline" className="h-11 rounded-xl" asChild><Link href={`/contacts/${selected.id}`}>Voir la fiche <ExternalLink className="ml-2 h-3.5 w-3.5" /></Link></Button>
