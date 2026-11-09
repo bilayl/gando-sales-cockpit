@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
-import { claimCockpitCompanies, listCockpitCompanyAssignments } from "@/lib/cockpit-company-assignment";
+import { listCockpitCompanyAssignments } from "@/lib/cockpit-company-assignment";
 import { apiError } from "@/lib/hubspot";
 
 export const dynamic = "force-dynamic";
@@ -14,16 +14,14 @@ export async function GET() {
   }
 }
 
-export async function POST(request: NextRequest) {
+// Legacy company claiming has been retired: SDR ownership belongs to contacts.
+export async function POST() {
   try {
-    const access = await requireCockpitAccess();
-    if (!access.email) return NextResponse.json({ error: "EMAIL_REQUIRED" }, { status: 400 });
-    const body = await request.json().catch(() => ({}));
-    const companyIds = (Array.isArray(body.companyIds) ? body.companyIds : []).map(String).slice(0, 500);
-    const claimedCompanyIds = await claimCockpitCompanies(companyIds, access.email);
-    return NextResponse.json({ claimedCompanyIds }, { headers: { "cache-control": "no-store" } });
+    await requireCockpitAccess();
+    return NextResponse.json({
+      error: "Attribution automatique d'entreprises désactivée. Attribuez le contact manuellement dans CRM → Contacts.",
+    }, { status: 410 });
   } catch (error) {
     return apiError(error);
   }
 }
-
