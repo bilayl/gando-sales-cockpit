@@ -11,11 +11,7 @@ export type SdrWorkFilter = ProspectionBucket | "ALL";
 type Props = {
   activeFilter: SdrWorkFilter;
   actionableCount: number;
-  callableNowCount: number;
-  assignedTotalCount: number;
-  assignedInSelectionCount: number;
-  blockedByTimingCount: number;
-  unassignedCount: number;
+  callWindowOpen: boolean;
   opportunitiesCount: number;
   snoozedCount: number;
   excludedCount: number;
@@ -67,11 +63,7 @@ const buckets: Array<{
 export function SdrWorkQueue({
   activeFilter,
   actionableCount,
-  callableNowCount,
-  assignedTotalCount,
-  assignedInSelectionCount,
-  blockedByTimingCount,
-  unassignedCount,
+  callWindowOpen,
   opportunitiesCount,
   snoozedCount,
   excludedCount,
@@ -98,25 +90,20 @@ export function SdrWorkQueue({
             {segmentName ? <Badge variant="outline" className="max-w-[240px] truncate">{segmentName}</Badge> : null}
           </div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            <strong className="text-foreground">{callableNowCount} entreprise{callableNowCount > 1 ? "s" : ""} disponible{callableNowCount > 1 ? "s" : ""} pour les appels maintenant</strong>
-            {` · ${assignedTotalCount} attribuée${assignedTotalCount > 1 ? "s" : ""} à votre compte, dont ${assignedInSelectionCount} dans cette sélection`}
-            {blockedByTimingCount ? ` · ${blockedByTimingCount} hors créneau France` : ""}
-            {unassignedCount ? ` · ${unassignedCount} encore non attribuée${unassignedCount > 1 ? "s" : ""} dans cette sélection` : ""}.
-            {callableNowCount === 0 && !loading ? " Vérifiez les filtres et le segment. Les appels sont ouverts du lundi au vendredi de 9h à 12h et de 14h à 18h (heure de Paris)." : ""}
+            <strong className="text-foreground">{actionableCount} entreprise{actionableCount > 1 ? "s" : ""} à traiter dans cette sélection.</strong>
+            {" "}La session d’appels utilise les contacts disponibles, indépendamment des anciennes attributions d’entreprises.
+            {" "}Créneaux : 9h–12h et 14h–18h, heure de Paris.
+            {!callWindowOpen ? " Vous pouvez préparer la session maintenant ; les appels reprendront au prochain créneau." : ""}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Button
-            disabled={loading || callableNowCount === 0}
             onClick={onStartSession}
             className="h-9 gap-2"
           >
             <PhoneCall size={15} />
-            Démarrer les appels
-            {callableNowCount > 0 ? (
-              <Badge variant="secondary" className="bg-background/80 text-foreground">{callableNowCount}</Badge>
-            ) : null}
+            {callWindowOpen ? "Démarrer les appels" : "Préparer les appels"}
           </Button>
         </div>
       </div>

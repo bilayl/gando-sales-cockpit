@@ -5,22 +5,32 @@ import {
   type SalesCallSessionItemStatus,
 } from "@/lib/call-recommendations";
 import { createFilteredSalesCallSession } from "@/lib/call-session-builder";
-import { apiError, isHubSpotAuthenticated } from "@/lib/hubspot";
-import { requireCockpitAccess } from "@/lib/cockpit-access";
+import { apiError } from "@/lib/hubspot";
+import { requireCockpitAccess, type CockpitAccess } from "@/lib/cockpit-access";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
-async function requireAuth() {
-  return isHubSpotAuthenticated();
+// SDRs use their Cockpit session; an extra personal HubSpot login is not required.
+async function requireOwnedSession(sessionId: string, access: CockpitAccess) {
+  const { data: session, error } = await getSupabaseAdmin()
+    .from("sales_call_sessions")
+    .select("id,created_by")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!session) throw Object.assign(new Error("Session d’appels introuvable."), { status: 404 });
+  if (!access.canManageTeam && String(session.created_by || "").toLowerCase() !== String(access.email || "").toLowerCase()) {
+    throw Object.assign(new Error("Cette session est attribuée à un autre commercial."), { status: 403 });
+  }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    if (!(await requireAuth())) {
-      return NextResponse.json({ error: "UNAUTHORIZED", message: "Reconnectez HubSpot pour continuer." }, { status: 401 });
-    }
+    const access = await requireCockpitAccess();
     const sessionId = new URL(request.url).searchParams.get("id");
     if (!sessionId) return NextResponse.json({ error: "SESSION_REQUIRED" }, { status: 400 });
+    await requireOwnedSession(sessionId, access);
     return NextResponse.json(await getSalesCallSession(sessionId), { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return apiError(error);
@@ -29,15 +39,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!(await requireAuth())) {
-      return NextResponse.json({ error: "UNAUTHORIZED", message: "Reconnectez HubSpot pour continuer." }, { status: 401 });
-    }
     const access = await requireCockpitAccess();
     const body = await request.json().catch(() => ({}));
     if (!access.email) {
       return NextResponse.json({
         error: "EMAIL_REQUIRED",
-        message: "Votre compte Cockpit doit disposer d’une adresse email pour recevoir des entreprises.",
+        message: "Votre compte Cockpit doit disposer d’une adresse email pour ouvrir une session de contacts.",
       }, { status: 400 });
     }
     const result = await createFilteredSalesCallSession({
@@ -54,9 +61,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    if (!(await requireAuth())) {
-      return NextResponse.json({ error: "UNAUTHORIZED", message: "Reconnectez HubSpot pour continuer." }, { status: 401 });
-    }
+    const access = await requireCockpitAccess();
     const body = await request.json();
     const sessionId = String(body?.sessionId || "").trim();
     const hubspotContactId = String(body?.contactId || "").trim();
@@ -65,6 +70,7 @@ export async function PATCH(request: NextRequest) {
     if (!["QUEUED", "CALLED", "SKIPPED", "REMOVED"].includes(status)) {
       return NextResponse.json({ error: "INVALID_STATUS" }, { status: 400 });
     }
+    await requireOwnedSession(sessionId, access);
     const result = await updateSalesCallSessionItem({
       sessionId,
       hubspotContactId,

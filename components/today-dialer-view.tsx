@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -22,7 +21,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { AddContactButton } from "@/components/add-contact-button";
-import { ProspectionSession } from "@/components/prospection-session";
+import { WithAlloCallButton } from "@/components/withallo-call-button";
 import { PageHeader } from "@/components/cockpit/page-header";
 import { Stat } from "@/components/cockpit/stat";
 import { Badge } from "@/components/ui/badge";
@@ -31,8 +30,6 @@ import { useTodayDashboard, type TodayContact as Contact, type TodayTask as Task
 import { queryKeys } from "@/lib/query/query-keys";
 
 const ONOFF_EXTENSION_URL = "https://chromewebstore.google.com/detail/onoff-business-click2call/jbfkkljambdhjlkcfkcbpjfkkamkccfm";
-
-type Company = { id: string; properties: Record<string, string | null | undefined> };
 
 type UnifiedAction =
   | { kind: "TASK"; key: string; priority: number; at: number; task: Task; overdue: boolean }
@@ -131,7 +128,6 @@ function meetingStart(meeting: any) {
 }
 
 export function TodayDialerView() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const dashboard = useTodayDashboard();
   const today = dashboard.today.data ?? null;
@@ -144,10 +140,9 @@ export function TodayDialerView() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [sessionOpen, setSessionOpen] = useState(false);
-  const [sessionCompany, setSessionCompany] = useState<Company | null>(null);
 
   const results = today?.results || [];
+  const callWindowOpen = today?.callWindowOpen === true;
   const selected = useMemo(
     () => results.find(contact => contact.id === selectedId) || results[0] || null,
     [results, selectedId],
@@ -267,53 +262,6 @@ export function TodayDialerView() {
     ]);
   }
 
-  async function resolveCompanyIds(contact: Contact) {
-    let candidate = String(contact.properties.db_company_id || "").trim();
-    if (!candidate) {
-      const response = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}/centralized`, { cache: "no-store" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Impossible de charger le contact.");
-      candidate = String(payload.companies?.[0]?.id || "").trim();
-    }
-    if (!candidate) return null;
-
-    const response = await fetch(`/api/prospection/company-id/${encodeURIComponent(candidate)}`, { cache: "no-store" });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || "Impossible de résoudre l’entreprise.");
-    const hubspotId = String(payload.hubspotId || "").trim();
-    if (!hubspotId) return null;
-    return hubspotId;
-  }
-
-  const sessionMutation = useMutation({
-    mutationFn: async (contact: Contact) => {
-      const hubspotId = await resolveCompanyIds(contact);
-      if (!hubspotId) return null; // Contact without a linked company: open the contact directly.
-      const companyResponse = await fetch(`/api/companies/${encodeURIComponent(hubspotId)}/centralized`, { cache: "no-store" });
-      const companyPayload = await companyResponse.json().catch(() => ({}));
-      if (!companyResponse.ok || !companyPayload.company) throw new Error(companyPayload.error || "Impossible de charger la session d’appel.");
-      return companyPayload.company as Company;
-    },
-    onMutate: () => setMessage(""),
-    onSuccess: (company, contact) => {
-      if (!company) {
-        router.push(`/contacts/${encodeURIComponent(contact.id)}`);
-        return;
-      }
-      setSessionCompany(company);
-      setSessionOpen(true);
-    },
-    onError: error => {
-      setMessage(error instanceof Error ? error.message : "Impossible d’ouvrir la session d’appel.");
-    },
-  });
-
-  async function openCallSession(contact = selected) {
-    if (!contact || sessionMutation.isPending) return;
-    setSelectedId(contact.id);
-    await sessionMutation.mutateAsync(contact).catch(() => null);
-  }
-
   return (
     <div className="min-h-screen bg-background px-4 py-6 text-foreground transition-colors sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1440px]">
@@ -337,7 +285,7 @@ export function TodayDialerView() {
 
         <div className="mt-6 grid divide-y divide-border/45 border-y border-border/45 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
           <Stat label="Actions à faire" value={unifiedActions.length} hint="Toute l’équipe · sans filtre SDR" icon={<ListTodo className="h-3.5 w-3.5" />} className="px-1 sm:px-4 first:sm:pl-0" />
-          <Stat label="Appels maintenant" value={results.length} hint="Joignables dans votre file" icon={<PhoneCall className="h-3.5 w-3.5" />} className="px-1 sm:px-4" />
+          <Stat label={callWindowOpen ? "Appels maintenant" : "Contacts à préparer"} value={results.length} hint={callWindowOpen ? "Joignables dans votre file" : "Ouverture selon les horaires France"} icon={<PhoneCall className="h-3.5 w-3.5" />} className="px-1 sm:px-4" />
           <Link href="/tasks" className="block transition-colors hover:bg-muted/20">
             <Stat label="En retard" value={openOverdueTasks.length} hint="Tâches à traiter" icon={<AlertTriangle className="h-3.5 w-3.5" />} className="px-1 sm:px-4" />
           </Link>
@@ -352,7 +300,7 @@ export function TodayDialerView() {
           <section className="overflow-hidden rounded-2xl border border-border bg-card">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
               <div><div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-primary">Priorité maintenant</div><div className="mt-1 text-[16px] font-semibold">Prochaine meilleure action</div></div>
-              <Badge variant="outline" className="rounded-md border-border bg-muted text-foreground">{results.length} appels dans la file</Badge>
+              <Badge variant="outline" className="rounded-md border-border bg-muted text-foreground">{results.length} contacts dans la file</Badge>
             </div>
 
             {loading ? (
@@ -382,9 +330,13 @@ export function TodayDialerView() {
                   </div>
 
                   <div className="mt-7 flex flex-wrap gap-2">
-                    <Button className="h-11 rounded-xl px-6" onClick={() => void openCallSession()} disabled={sessionMutation.isPending || !selectedNumber}>
-                      {sessionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Phone className="mr-2 h-4 w-4" />}Appeler maintenant
-                    </Button>
+                    {callWindowOpen && selectedNumber ? (
+                      <WithAlloCallButton phone={selectedNumber} label="Appeler maintenant avec Allo" className="h-11 rounded-xl px-6 text-sm" />
+                    ) : (
+                      <Button className="h-11 rounded-xl px-6" disabled>
+                        <Phone className="mr-2 h-4 w-4" />{selectedNumber ? "Hors créneau d’appels France" : "Numéro indisponible"}
+                      </Button>
+                    )}
                     {p.email ? <Button variant="outline" className="h-11 rounded-xl" asChild><a href={`mailto:${p.email}`}><Mail className="mr-2 h-4 w-4" />Email</a></Button> : null}
                     <Button variant="outline" className="h-11 rounded-xl" asChild><Link href={`/contacts/${selected.id}`}>Voir la fiche <ExternalLink className="ml-2 h-3.5 w-3.5" /></Link></Button>
                   </div>
@@ -470,7 +422,6 @@ export function TodayDialerView() {
         </div>
       </div>
 
-      {sessionCompany ? <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={[sessionCompany]} onOpenCompany={companyId => { window.location.href = `/companies/${companyId}`; }} /> : null}
     </div>
   );
 }

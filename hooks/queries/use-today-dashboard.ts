@@ -26,6 +26,8 @@ export type TodayPayload = {
   mineCount?: number;
   availableCount?: number;
   callableCount?: number;
+  readyCount?: number;
+  callWindowOpen?: boolean;
   totalActionable?: number;
   callWindow?: string;
   error?: string;
