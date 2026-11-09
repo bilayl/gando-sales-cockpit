@@ -185,6 +185,13 @@ export function CompanyFirstProspectionView() {
       && getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow;
   }), [actionableCompanies, assignmentByCompanyId, currentUserEmail, evaluationTime]);
 
+  const assignedTotalCount = assignments.filter(
+    assignment => String(assignment.assignee_cockpit_email || "").trim().toLowerCase() === currentUserEmail,
+  ).length;
+  const assignedInSelectionCount = baseFiltered.filter(
+    company => assignmentByCompanyId.get(company.id) === currentUserEmail,
+  ).length;
+
   const myAssignedCompanies = useMemo(
     () => actionableCompanies.filter(company => assignmentByCompanyId.get(company.id) === currentUserEmail),
     [actionableCompanies, assignmentByCompanyId, currentUserEmail],
@@ -276,7 +283,8 @@ export function CompanyFirstProspectionView() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.companies.detail(id) });
   }
 
-  const loading = companiesQuery.isPending || segmentsQuery.isPending || ownersQuery.isPending;
+  const loading = companiesQuery.isPending || segmentsQuery.isPending || ownersQuery.isPending
+    || currentUserQuery.isPending || assignmentsQuery.isPending;
   const queryError = [companiesQuery.error, segmentsQuery.error, ownersQuery.error, assignmentsQuery.error]
     .find(Boolean);
   const error = localError
@@ -323,6 +331,8 @@ export function CompanyFirstProspectionView() {
           activeFilter={workFilter}
           actionableCount={actionableCount}
           callableNowCount={sessionCandidates.length}
+          assignedTotalCount={assignedTotalCount}
+          assignedInSelectionCount={assignedInSelectionCount}
           blockedByTimingCount={blockedByTimingCount}
           unassignedCount={unassignedCount}
           opportunitiesCount={opportunities}

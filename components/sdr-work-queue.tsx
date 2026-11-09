@@ -12,6 +12,8 @@ type Props = {
   activeFilter: SdrWorkFilter;
   actionableCount: number;
   callableNowCount: number;
+  assignedTotalCount: number;
+  assignedInSelectionCount: number;
   blockedByTimingCount: number;
   unassignedCount: number;
   opportunitiesCount: number;
@@ -66,6 +68,8 @@ export function SdrWorkQueue({
   activeFilter,
   actionableCount,
   callableNowCount,
+  assignedTotalCount,
+  assignedInSelectionCount,
   blockedByTimingCount,
   unassignedCount,
   opportunitiesCount,
@@ -94,10 +98,11 @@ export function SdrWorkQueue({
             {segmentName ? <Badge variant="outline" className="max-w-[240px] truncate">{segmentName}</Badge> : null}
           </div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            <strong className="text-foreground">{callableNowCount} attribuée{callableNowCount > 1 ? "s" : ""} et joignable{callableNowCount > 1 ? "s" : ""} maintenant</strong>
-            {blockedByTimingCount ? ` · ${blockedByTimingCount} hors créneau local` : ""}
-            {unassignedCount ? ` · ${unassignedCount} non attribuée${unassignedCount > 1 ? "s" : ""}` : ""}.
-            {callableNowCount === 0 && !loading ? " Le bouton se réactive automatiquement sur les créneaux 09:30–12:00 et 14:00–17:00 du prospect." : ""}
+            <strong className="text-foreground">{callableNowCount} entreprise{callableNowCount > 1 ? "s" : ""} disponible{callableNowCount > 1 ? "s" : ""} pour les appels maintenant</strong>
+            {` · ${assignedTotalCount} attribuée${assignedTotalCount > 1 ? "s" : ""} à votre compte, dont ${assignedInSelectionCount} dans cette sélection`}
+            {blockedByTimingCount ? ` · ${blockedByTimingCount} hors créneau France` : ""}
+            {unassignedCount ? ` · ${unassignedCount} encore non attribuée${unassignedCount > 1 ? "s" : ""} dans cette sélection` : ""}.
+            {callableNowCount === 0 && !loading ? " Vérifiez les filtres et le segment. Les appels sont ouverts du lundi au vendredi de 9h à 12h et de 14h à 18h (heure de Paris)." : ""}
           </p>
         </div>
 

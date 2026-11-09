@@ -7,9 +7,14 @@ export type CallTiming = {
   reason: string;
 };
 
-export const CALL_WINDOW_START_HOUR = 8;
-export const CALL_WINDOW_END_HOUR = 19;
-export const CALL_WINDOW_LABEL = "08:00-19:00";
+export const CALL_TIMEZONE = "Europe/Paris";
+export const CALL_WINDOW_START_HOUR = 9;
+export const CALL_WINDOW_END_HOUR = 18;
+export const CALL_WINDOW_LABEL = "09:00–12:00 et 14:00–18:00";
+const CALL_WINDOWS_MINUTES = [
+  { start: 9 * 60, end: 12 * 60 },
+  { start: 14 * 60, end: 18 * 60 },
+] as const;
 
 function normalize(value: unknown) {
   return String(value || "")
@@ -64,39 +69,36 @@ function localParts(timezone: string, date: Date) {
   };
 }
 
+// The SDR's computer timezone and the prospect's timezone must never govern
+// whether the Gando calling button is enabled.
+export function isWithinFrenchCallWindow(date = new Date()) {
+  const france = localParts(CALL_TIMEZONE, date);
+  const minutes = france.hour * 60 + france.minute;
+  return !["Sat", "Sun"].includes(france.weekday)
+    && CALL_WINDOWS_MINUTES.some(window => minutes >= window.start && minutes < window.end);
+}
+
 export function getBestCallTimeForProperties(
   properties: Record<string, string | null | undefined>,
   date = new Date(),
 ): CallTiming {
   const resolved = resolveProspectTimezone(properties);
-  const recommendedWindows = [CALL_WINDOW_LABEL];
-  if (!resolved.timezone) {
-    return {
-      timezone: null,
-      localTime: null,
-      callNow: false,
-      recommendedWindows,
-      confidence: "low",
-      reason: "Fuseau horaire inconnu : localisation à compléter avant l’appel.",
-    };
-  }
+  const frenchTime = localParts(CALL_TIMEZONE, date);
+  const frenchWeekday = !["Sat", "Sun"].includes(frenchTime.weekday);
+  const callNow = isWithinFrenchCallWindow(date);
 
-  const local = localParts(resolved.timezone, date);
-  const minutes = local.hour * 60 + local.minute;
-  const weekday = !["Sat", "Sun"].includes(local.weekday);
-  const insideCallWindow = minutes >= CALL_WINDOW_START_HOUR * 60 && minutes < CALL_WINDOW_END_HOUR * 60;
-  const callNow = weekday && insideCallWindow;
-
+  // Keep the prospect's local time as information, but never use it to gate SDR calling.
+  const prospectTime = resolved.timezone ? localParts(resolved.timezone, date) : null;
   return {
     timezone: resolved.timezone,
-    localTime: local.display,
+    localTime: prospectTime?.display ?? null,
     callNow,
-    recommendedWindows,
-    confidence: resolved.source === "crm_timezone" ? "high" : "medium",
+    recommendedWindows: ["09:00–12:00", "14:00–18:00"],
+    confidence: resolved.source === "crm_timezone" ? "high" : resolved.timezone ? "medium" : "low",
     reason: callNow
-      ? `Appel autorisé : ${CALL_WINDOW_LABEL} en heure locale du prospect.`
-      : weekday
-        ? `Hors créneau : appeler entre ${CALL_WINDOW_LABEL} en heure locale du prospect.`
-        : "Week-end dans le fuseau du prospect.",
+      ? `Appel autorisé sur les créneaux ${CALL_WINDOW_LABEL} (heure de France).`
+      : frenchWeekday
+        ? `Hors créneau : appels ouverts de ${CALL_WINDOW_LABEL} (heure de France).`
+        : "Appels fermés le week-end (heure de France).",
   };
 }
