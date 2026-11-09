@@ -95,9 +95,9 @@ export function SdrWorkQueue({
           </div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             <strong className="text-foreground">{callableNowCount} attribuée{callableNowCount > 1 ? "s" : ""} et joignable{callableNowCount > 1 ? "s" : ""} maintenant</strong>
-            {blockedByTimingCount ? ` · ${blockedByTimingCount} hors créneau local` : ""}
+            {blockedByTimingCount ? ` · ${blockedByTimingCount} hors créneau horaire France` : ""}
             {unassignedCount ? ` · ${unassignedCount} non attribuée${unassignedCount > 1 ? "s" : ""}` : ""}.
-            {callableNowCount === 0 && !loading ? " Le bouton se réactive automatiquement sur les créneaux 09:30–12:00 et 14:00–17:00 du prospect." : ""}
+            {callableNowCount === 0 && !loading ? " Le bouton est disponible du lundi au vendredi, de 9h à 12h et de 14h à 18h (heure de France), dès qu'un prospect éligible est présent." : ""}
           </p>
         </div>
 
