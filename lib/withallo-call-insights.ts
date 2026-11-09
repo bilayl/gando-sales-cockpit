@@ -1,11 +1,19 @@
 import "server-only";
 import { withAlloRequest } from "@/lib/withallo";
 import { shapeWithAlloCallDetail } from "@/lib/withallo-call-detail";
+import { classifyAlloAnswer, isNrP } from "@/lib/call-outcome";
 
-type Item = { id?: string; result?: string | null; direction?: string | null; summary?: unknown; transcript?: unknown; };
+type Item = {
+  id?: string; result?: string | null; direction?: string | null;
+  summary?: unknown; transcript?: unknown; tags?: unknown;
+  call_tags?: unknown; label?: unknown; disposition?: unknown;
+  user?: {id?:string}; user_id?: string; allo_number?: string;
+};
 type SearchResult = { data?: Item[]; pagination?: { has_more?: boolean; total_count?: number } };
+export type AnswerGroup = { total: number; answered: number; unanswered: number; nrp: number };
 export type CallAnswerInsights = {
   answered: number;
+  nrp: number;
   missedOrVoicemail: number;
   unknownOutcome: number;
   transcribed: number;
@@ -15,6 +23,8 @@ export type CallAnswerInsights = {
   checkedCalls: number;
   partial: boolean;
   source: "Allo";
+  byUser: Record<string, AnswerGroup>;
+  byPhone: Record<string, AnswerGroup>;
 };
 
 export async function getAlloCallInsights(input: {
@@ -22,9 +32,9 @@ export async function getAlloCallInsights(input: {
   direction?: "INBOUND" | "OUTBOUND";
 }): Promise<CallAnswerInsights> {
   const accumulator: CallAnswerInsights = {
-    answered: 0, missedOrVoicemail: 0, unknownOutcome: 0,
+    answered: 0, nrp: 0, missedOrVoicemail: 0, unknownOutcome: 0,
     transcribed: 0, summarized: 0, actionedCalls: 0, actionSuggestions: 0,
-    checkedCalls: 0, partial: false, source: "Allo",
+    checkedCalls: 0, partial: false, source: "Allo", byUser: {}, byPhone: {},
   };
   const seen = new Set<string>();
   // Hard cap to control API latency and rate limits; a partial report is labelled.
@@ -44,10 +54,27 @@ export async function getAlloCallInsights(input: {
       if (!entry?.id || seen.has(entry.id)) continue;
       seen.add(entry.id);
       const detail = shapeWithAlloCallDetail(entry);
-      const outcome = String(entry.result || "").toUpperCase();
-      if (outcome === "ANSWERED" || outcome === "TRANSFERRED") accumulator.answered++;
-      else if (["VOICEMAIL", "MISSED", "NO_ANSWER", "BUSY", "CANCELED", "FAILED"].includes(outcome)) accumulator.missedOrVoicemail++;
+      const outcome = classifyAlloAnswer(entry);
+      const nrp = [
+        entry.tags, entry.call_tags, entry.label, entry.disposition, entry.result,
+      ].some(isNrP);
+      if (outcome === "answered") accumulator.answered++;
+      else if (outcome === "unanswered") accumulator.missedOrVoicemail++;
       else accumulator.unknownOutcome++;
+      if (nrp) accumulator.nrp++;
+      for (const [key, id] of [
+        ["user", entry.user?.id || entry.user_id || ""],
+        ["phone", entry.allo_number || ""],
+      ]) {
+        if (!id) continue;
+        const map = key === "user" ? accumulator.byUser : accumulator.byPhone;
+        const group = map[id] || {total: 0, answered: 0, unanswered: 0, nrp: 0};
+        group.total++;
+        if (outcome === "answered") group.answered++;
+        if (outcome === "unanswered") group.unanswered++;
+        if (nrp) group.nrp++;
+        map[id] = group;
+      }
       if (detail.transcriptText || detail.transcript.length) accumulator.transcribed++;
       if (detail.summary) accumulator.summarized++;
       if (detail.actions.length) {
