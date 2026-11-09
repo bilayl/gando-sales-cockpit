@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { getCallRecommendations } from "@/lib/call-recommendations";
-import { CALL_WINDOW_LABEL, getBestCallTimeForProperties } from "@/lib/call-timing";
+import { CALL_WINDOW_LABEL, getBestCallTimeForProperties, isWithinFrenchCallWindow } from "@/lib/call-timing";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +23,7 @@ export async function GET() {
     const email = String(access.email || "").trim().toLowerCase();
     const recommendations = await getCallRecommendations({ bucket: "ACTIONABLE", limit: 2000 });
     const now = new Date();
+    const callWindowOpen = isWithinFrenchCallWindow(now);
 
     const timed = recommendations.results.map(contact => {
       const original = contact.properties as ContactProperties;
@@ -54,8 +55,10 @@ export async function GET() {
       String(row.assignee_cockpit_email || "").trim().toLowerCase(),
     ]));
 
+    // Keep the contact queue visible for preparation during the 12h–14h break.
+    // Actual outbound dialing remains disabled in the UI until the France window opens.
     const callable = timed
-      .filter(contact => contact.timing.callNow)
+      .filter(contact => Boolean(String(contact.properties.phone || contact.properties.mobilephone || "").trim()))
       .map(contact => {
         const assignee = assignmentByContact.get(contact.id) || null;
         const ownership = assignee === email ? "MINE" : assignee ? "OTHER" : "UNASSIGNED";
@@ -74,7 +77,9 @@ export async function GET() {
       results: [...mine, ...available].slice(0, 250),
       mineCount: mine.length,
       availableCount: available.length,
-      callableCount: callable.length,
+      callableCount: callWindowOpen ? mine.length + available.length : 0,
+      readyCount: mine.length + available.length,
+      callWindowOpen,
       totalActionable: recommendations.summary.ACTIONABLE,
       callWindow: CALL_WINDOW_LABEL,
       generatedAt: now.toISOString(),
