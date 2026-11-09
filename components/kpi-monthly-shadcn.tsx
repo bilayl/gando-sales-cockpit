@@ -43,6 +43,18 @@ type ActivatedDeposit = {
   amountCents: number
 }
 
+type InsuranceMonth = {
+  month: string
+  partial: boolean
+  cautions: number
+  tdvCents: number
+  insuranceCostCents: number
+}
+type InsuranceDecisionResponse = {
+  actual?: InsuranceMonth[]
+  forecast?: { trailing?: { insuranceRateBps?: number; insuranceEffectiveFrom?: string } }
+}
+
 type NumericKey = Exclude<keyof KpiRow, "id" | "year" | "monthNumber" | "month">
 
 type Derived = {
@@ -174,12 +186,13 @@ function integer(value: number | null | undefined) {
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(value)
 }
 
-function euroCents(value: number | null | undefined) {
+function euroCents(value: number | null | undefined, digits = 0) {
   if (value == null || !Number.isFinite(value)) return "—"
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
     currency: "EUR",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(value / 100)
 }
 
@@ -261,6 +274,11 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
   const [activatedDeposits, setActivatedDeposits] = useState<ActivatedDeposit[]>([])
   const [activationsLoading, setActivationsLoading] = useState(false)
   const [activationsError, setActivationsError] = useState("")
+  const [insuranceMonths, setInsuranceMonths] = useState<InsuranceMonth[]>([])
+  const [insuranceRateBps, setInsuranceRateBps] = useState<number | null>(null)
+  const [insuranceEffectiveMonth, setInsuranceEffectiveMonth] = useState("2026-09")
+  const [insuranceLoading, setInsuranceLoading] = useState(true)
+  const [insuranceError, setInsuranceError] = useState("")
 
   async function load() {
     setLoading(true)
@@ -279,8 +297,45 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
 
   useEffect(() => { void load() }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const response = await fetch("/api/kpi/decision-intelligence", { cache: "no-store" })
+        const body = await response.json() as InsuranceDecisionResponse & { error?: string }
+        if (!response.ok) throw new Error(body.error || "Impossible de charger les primes d’assurance.")
+        if (cancelled) return
+        setInsuranceMonths(Array.isArray(body.actual) ? body.actual : [])
+        setInsuranceRateBps(body.forecast?.trailing?.insuranceRateBps ?? null)
+        setInsuranceEffectiveMonth(body.forecast?.trailing?.insuranceEffectiveFrom?.slice(0, 7) || "2026-09")
+        setInsuranceError("")
+      } catch (reason) {
+        if (!cancelled) setInsuranceError(reason instanceof Error ? reason.message : "Primes d’assurance indisponibles.")
+      } finally {
+        if (!cancelled) setInsuranceLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   const sortedRows = useMemo(() => [...rows].sort((a, b) => monthIndex(a) - monthIndex(b)), [rows])
   const actualRows = useMemo(() => sortedRows.filter(isFilled), [sortedRows])
+  const insuranceByMonth = useMemo(
+    () => new Map(insuranceMonths.filter(row => row.month >= insuranceEffectiveMonth).map(row => [row.month, row])),
+    [insuranceMonths, insuranceEffectiveMonth],
+  )
+
+  // Include insurance months even when the manually entered monthly KPI fields are blank.
+  const historyRows = useMemo(() => {
+    const byMonth = new Map(actualRows.map(row => [rowKey(row.year, row.monthNumber), row]))
+    for (const insurance of insuranceMonths) {
+      if (insurance.month < insuranceEffectiveMonth || byMonth.has(insurance.month)) continue
+      const [year, monthNumber] = insurance.month.split("-").map(Number)
+      if (!Number.isInteger(year) || !Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12) continue
+      byMonth.set(insurance.month, sortedRows.find(row => rowKey(row.year, row.monthNumber) === insurance.month) || blankRow(year, monthNumber))
+    }
+    return [...byMonth.values()].sort((a, b) => monthIndex(a) - monthIndex(b))
+  }, [actualRows, sortedRows, insuranceMonths, insuranceEffectiveMonth])
 
   useEffect(() => {
     if (selectedMonth || !actualRows.length) return
@@ -489,6 +544,12 @@ export function KpiMonthlyShadcn({ canEdit }: { canEdit: boolean }) {
                 <SelectContent>{sortedRows.map(row => <SelectItem key={rowKey(row.year, row.monthNumber)} value={rowKey(row.year, row.monthNumber)}>{row.month} {row.year}</SelectItem>)}</SelectContent>
               </Select>
               {selected ? <span className="text-[11px] text-muted-foreground">{SOURCE_FIELDS.filter(field => selected[field.key] != null).length}/{SOURCE_FIELDS.length} sources renseignées</span> : null}
+              {selected && selectedMonth >= insuranceEffectiveMonth ? (
+                <Badge variant="outline" className="h-7 text-[11px]">
+                  Prime assurance : {insuranceLoading ? "Calcul…" : euroCents(insuranceByMonth.get(selectedMonth)?.insuranceCostCents, 2)}
+                  {insuranceByMonth.get(selectedMonth)?.partial ? " · provisoire" : ""}
+                </Badge>
+              ) : null}
             </div>
             {canEdit ? <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setEditing(current => !current)}><Pencil size={14} />{editing ? "Fermer" : "Saisir / corriger"}</Button> : null}
           </div>
