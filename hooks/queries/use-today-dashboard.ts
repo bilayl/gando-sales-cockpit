@@ -67,6 +67,8 @@ export function useTodayDashboard() {
     queryKey: ["today", "dashboard"],
     queryFn: () => getJson<TodayPayload>("/api/today"),
     staleTime: 10_000,
+    // Refresh call eligibility when the Paris morning/afternoon windows open/close.
+    refetchInterval: 60_000,
   });
 
   const onoff = useQuery({
