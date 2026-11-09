@@ -374,7 +374,7 @@ export function CompanyFirstProspectionView() {
         open={sessionOpen}
         onOpenChange={setSessionOpen}
         companies={sessionCompanies}
-        onOpenCompany={id => router.push(`/companies/${id}`)}
+        onOpenCompany={id => window.open(`/companies/${encodeURIComponent(id)}`, "_blank", "noopener,noreferrer")}
       />
       <NewCompanyDialog
         open={newCompanyOpen}

@@ -416,7 +416,7 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
             <CallSessionPrep
               contact={currentSessionContact}
               remaining={sessionMeta?.remaining ?? filteredContacts.length}
-              onOpenContact={() => router.push(`/contacts/${currentSessionContact.id}`)}
+              onOpenContact={() => window.open(`/contacts/${encodeURIComponent(currentSessionContact.id)}`, "_blank", "noopener,noreferrer")}
             />
           ) : null}
 
@@ -471,7 +471,9 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
               contacts={filteredContacts}
               segmentId={segmentId}
               loading={loading}
-              onOpenContact={id => router.push(`/contacts/${id}`)}
+              onOpenContact={id => activeSessionId
+                ? window.open(`/contacts/${encodeURIComponent(id)}`, "_blank", "noopener,noreferrer")
+                : router.push(`/contacts/${id}`)}
               onStatusChange={handleBoardStatusChange}
               onError={setError}
             />
@@ -502,7 +504,9 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
                     const fullName = [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Sans nom";
                     const score = Number(p.db_call_score || 0);
                     return (
-                      <TableRow key={contact.id} className="cursor-pointer" onClick={() => router.push(`/contacts/${contact.id}`)}>
+                      <TableRow key={contact.id} className="cursor-pointer" onClick={() => activeSessionId
+                        ? window.open(`/contacts/${encodeURIComponent(contact.id)}`, "_blank", "noopener,noreferrer")
+                        : router.push(`/contacts/${contact.id}`)}>
                         <TableCell>
                           <div className="min-w-[210px]">
                             <div className="flex flex-wrap items-center gap-1.5">
