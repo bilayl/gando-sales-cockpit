@@ -392,7 +392,7 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
             <div className="flex items-center gap-2">
               {isRecommendationSegment && !activeSessionId && recommendationBucket === "ACTIONABLE" ? (
                 <Button size="sm" className="h-9 gap-1.5" onClick={() => void createSession()} disabled={sessionCreating || loading || filteredContacts.length === 0}>
-                  {sessionCreating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Préparer une session · {Math.min(filteredContacts.length, 80)} contacts
+                  {sessionCreating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Démarrer la session · {Math.min(filteredContacts.length, 80)} contacts
                 </Button>
               ) : null}
               {activeSessionId ? <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={leaveSession}><X size={14} /> Quitter la session</Button> : null}
