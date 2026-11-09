@@ -7,9 +7,7 @@ import { Building2, ListFilter, Loader2, MapPin, RefreshCw, Search, SquareKanban
 import { CompanyMultiFilter } from "@/components/company-multi-filter";
 import { NewCompanyDialog } from "@/components/new-company-dialog";
 import { CompanyProspectionBoard, COMPANY_PIPELINE, deriveCompanyStage, type CompanyStage } from "@/components/company-prospection-board";
-import { ProspectionSession } from "@/components/prospection-session";
 import { SdrWorkQueue } from "@/components/sdr-work-queue";
-import { ProspectionAssignmentManager } from "@/components/prospection-assignment-manager";
 import { PageHeader } from "@/components/cockpit/page-header";
 import { ProspectionPageSkeleton } from "@/components/prospection-page-skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -36,7 +34,7 @@ import {
 } from "@/lib/prospection-segment-preferences";
 import { queryKeys } from "@/lib/query/query-keys";
 import { formatDate } from "@/lib/utils";
-import { getBestCallTimeForProperties } from "@/lib/call-timing";
+import { isWithinFrenchCallWindow } from "@/lib/call-timing";
 
 const STAGE_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(column => [column.value, column.label]));
 
@@ -89,8 +87,6 @@ export function CompanyFirstProspectionView() {
   } = useCompanyProspectionParams();
 
   const [segmentPreferences, setSegmentPreferences] = useState<ProspectionSegmentPreferences>({});
-  const [sessionOpen, setSessionOpen] = useState(false);
-  const [sessionCompanies, setSessionCompanies] = useState<Company[]>([]);
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [localError, setLocalError] = useState("");
   const [assignedOnly, setAssignedOnly] = useState(false);
@@ -177,34 +173,6 @@ export function CompanyFirstProspectionView() {
     [classified, workFilter],
   );
 
-  const actionableCompanies = useMemo(
-    () => classified.filter(item => item.decision.bucket === "ACTIONABLE").map(item => item.company),
-    [classified],
-  );
-
-  const sessionCandidates = useMemo(() => actionableCompanies.filter(company => {
-    const assignee = assignmentByCompanyId.get(company.id);
-    return (!assignee || assignee === currentUserEmail)
-      && Boolean(String(company.properties.phone || company.properties.mobilephone || "").trim())
-      && getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow;
-  }), [actionableCompanies, assignmentByCompanyId, currentUserEmail, evaluationTime]);
-
-  const assignedTotalCount = assignments.filter(
-    assignment => String(assignment.assignee_cockpit_email || "").trim().toLowerCase() === currentUserEmail,
-  ).length;
-  const assignedInSelectionCount = baseFiltered.filter(
-    company => assignmentByCompanyId.get(company.id) === currentUserEmail,
-  ).length;
-
-  const myAssignedCompanies = useMemo(
-    () => actionableCompanies.filter(company => assignmentByCompanyId.get(company.id) === currentUserEmail),
-    [actionableCompanies, assignmentByCompanyId, currentUserEmail],
-  );
-
-  const blockedByTimingCount = myAssignedCompanies.filter(
-    company => !getBestCallTimeForProperties(company.properties, new Date(evaluationTime)).callNow,
-  ).length;
-  const unassignedCount = actionableCompanies.filter(company => !assignmentByCompanyId.has(company.id)).length;
   const currentList = visibleLists.find(item => item.listId === segmentId);
   const actionableCount = classified.filter(item => item.decision.bucket === "ACTIONABLE").length;
   const opportunities = classified.filter(item => item.decision.bucket === "OPPORTUNITY").length;
@@ -230,16 +198,9 @@ export function CompanyFirstProspectionView() {
     onError: error => setLocalError(error instanceof Error ? error.message : "Erreur de synchronisation"),
   });
 
-  // Opening a call session must NOT create or change a company assignment.
+  // Enter the contact-based session flow; never claim a company.
   function startSession() {
-    setLocalError("");
-    const selected = sessionCandidates.slice(0, 100);
-    if (!selected.length) {
-      setLocalError("Aucun compte joignable dans la sélection. Choisissez des contacts depuis le répertoire pour les attribuer manuellement.");
-      return;
-    }
-    setSessionCompanies(selected);
-    setSessionOpen(true);
+    router.push("/prospection?mode=contacts&start=1");
   }
 
   function handleStatusChange(id: string, stage: CompanyStage, updated?: Record<string, string | null | undefined>) {
@@ -308,11 +269,7 @@ export function CompanyFirstProspectionView() {
         <SdrWorkQueue
           activeFilter={workFilter}
           actionableCount={actionableCount}
-          callableNowCount={sessionCandidates.length}
-          assignedTotalCount={assignedTotalCount}
-          assignedInSelectionCount={assignedInSelectionCount}
-          blockedByTimingCount={blockedByTimingCount}
-          unassignedCount={unassignedCount}
+          callWindowOpen={isWithinFrenchCallWindow(new Date(evaluationTime))}
           opportunitiesCount={opportunities}
           snoozedCount={snoozed}
           excludedCount={excluded}
@@ -337,11 +294,6 @@ export function CompanyFirstProspectionView() {
           <Button variant={assignedOnly ? "secondary" : "outline"} size="sm" className="h-8 shrink-0" onClick={() => setAssignedOnly(value => !value)}>
             Mes entreprises
           </Button>
-          <ProspectionAssignmentManager
-            companies={classified.filter(item => item.decision.bucket === "ACTIONABLE").map(item => item.company)}
-            assignments={assignments}
-            onAssigned={() => void queryClient.invalidateQueries({ queryKey: queryKeys.prospection.assignments })}
-          />
           <div className="relative min-w-[180px] flex-1 sm:max-w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -431,7 +383,6 @@ export function CompanyFirstProspectionView() {
         ) : null}
       </div>
 
-      <ProspectionSession open={sessionOpen} onOpenChange={setSessionOpen} companies={sessionCompanies} onOpenCompany={id => router.push(`/companies/${id}`)} />
       <NewCompanyDialog
         open={newCompanyOpen}
         onOpenChange={setNewCompanyOpen}
