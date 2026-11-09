@@ -57,7 +57,7 @@ export async function createFilteredSalesCallSession(input?: {
         db_call_local_time: item.timing.localTime,
         db_call_timezone: item.timing.timezone,
         db_call_timing_reason: item.timing.reason,
-      },
+      } as Record<string, string | null | undefined>,
     }))
   // Manual contact ownership only. Unassigned contacts remain available in the pool.
   // Never claim or reassign a company when opening a call session.
