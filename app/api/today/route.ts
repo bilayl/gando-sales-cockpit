@@ -64,16 +64,19 @@ export async function GET() {
       return { ...contact, ownership, assignee };
     });
     const score = (contact: typeof sharedQueue[number]) => Number(contact.properties.db_call_score || 0);
-    const mine = sharedQueue.filter(contact => contact.ownership === "MINE").sort((a, b) => score(b) - score(a));
-    const available = sharedQueue.filter(contact => contact.ownership === "UNASSIGNED").sort((a, b) => score(b) - score(a));
-    const other = sharedQueue.filter(contact => contact.ownership === "OTHER").sort((a, b) => score(b) - score(a));
+    const mine = sharedQueue.filter(contact => contact.ownership === "MINE");
+    const available = sharedQueue.filter(contact => contact.ownership === "UNASSIGNED");
+    const other = sharedQueue.filter(contact => contact.ownership === "OTHER");
+    // Sort exclusively by sales priority, not by SDR ownership.
+    // In particular, the 250-result limit must not silently hide other SDRs' contacts.
+    const prioritized = [...sharedQueue].sort((a, b) => score(b) - score(a));
     const callable = sharedQueue.filter(contact =>
       contact.timing.callNow && Boolean(String(contact.properties.phone || contact.properties.mobilephone || "").trim())
     );
 
     return NextResponse.json({
       member: { email, role: access.role, displayName: access.displayName || null },
-      results: [...mine, ...available, ...other].slice(0, 250),
+      results: prioritized.slice(0, 1000),
       mineCount: mine.length,
       availableCount: available.length,
       otherCount: other.length,
