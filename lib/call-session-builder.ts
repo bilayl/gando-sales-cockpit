@@ -7,7 +7,7 @@ import {
   type ContactFilters,
 } from "@/lib/contact-multi-filters"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { getBestCallTimeForProperties, isWithinFrenchCallWindow, CALL_WINDOW_LABEL } from "@/lib/call-timing"
+import { getBestCallTimeForProperties } from "@/lib/call-timing"
 import { getWithAlloStatus } from "@/lib/withallo"
 
 export async function createFilteredSalesCallSession(input?: {
@@ -26,10 +26,6 @@ export async function createFilteredSalesCallSession(input?: {
 
   const legacyLocationNeedle = input?.location?.trim().toLocaleLowerCase("fr-FR") || ""
   const now = new Date()
-  // No outbound session is started outside the French SDR windows. Preparation remains accessible.
-  if (!isWithinFrenchCallWindow(now)) {
-    throw new Error(`Les appels sont ouverts du lundi au vendredi de ${CALL_WINDOW_LABEL} (heure de Paris). La file de contacts reste consultable entre les créneaux.`)
-  }
   const recommendations = await getCallRecommendations({
     bucket: "ACTIONABLE",
     limit: 2000,
@@ -48,7 +44,6 @@ export async function createFilteredSalesCallSession(input?: {
       return location.includes(legacyLocationNeedle)
     })
     .map(contact => ({ contact, timing: getBestCallTimeForProperties(contact.properties, now) }))
-    .filter(item => item.timing.callNow)
     .sort((a, b) => Number(b.contact.properties.db_call_score || 0) - Number(a.contact.properties.db_call_score || 0))
     .map(item => ({
       ...item.contact,
@@ -59,30 +54,12 @@ export async function createFilteredSalesCallSession(input?: {
         db_call_timing_reason: item.timing.reason,
       } as Record<string, string | null | undefined>,
     }))
-  // Manual contact ownership only. Unassigned contacts remain available in the pool.
-  // Never claim or reassign a company when opening a call session.
+  // Shared SDR queue: assignment is informational, never an exclusivity lock.
+  // Every SDR may open and prepare a contact even if it is assigned to someone else.
+  // No contact or company is assigned when a session starts.
   const supabase = getSupabaseAdmin()
-  const actorEmail = String(input?.createdBy || "").trim().toLowerCase()
-  if (!actorEmail) throw new Error("Reconnectez-vous au Cockpit pour ouvrir une session d’appels.")
-  const { data: assignedContacts, error: assignmentError } = await supabase
-    .from("cockpit_contact_assignments")
-    .select("contact_id,assignee_cockpit_email")
-  if (assignmentError) throw assignmentError
-  const assignments = new Map((assignedContacts || []).map(row => [
-    String(row.contact_id),
-    String(row.assignee_cockpit_email || "").trim().toLowerCase(),
-  ]))
   const selected = eligible
-    .filter(contact => {
-      const phone = String(contact.properties.phone || contact.properties.mobilephone || "").trim()
-      const assignee = assignments.get(String(contact.id))
-      return Boolean(phone) && (!assignee || assignee === actorEmail)
-    })
-    .sort((a, b) => {
-      const aMine = assignments.get(String(a.id)) === actorEmail ? 1 : 0
-      const bMine = assignments.get(String(b.id)) === actorEmail ? 1 : 0
-      return bMine - aMine || Number(b.properties.db_call_score || 0) - Number(a.properties.db_call_score || 0)
-    })
+    .filter(contact => Boolean(String(contact.properties.phone || contact.properties.mobilephone || "").trim()))
     .slice(0, targetCount)
 
   const hubspotIds = selected.map(contact => contact.id)
@@ -92,7 +69,7 @@ export async function createFilteredSalesCallSession(input?: {
       ? `Aucun contact disponible avec les filtres sélectionnés (${summaries.join(" · ")}).`
       : input?.location
         ? `Aucun contact disponible pour une session sur « ${input.location} ».`
-        : "Aucun contact joignable dans le créneau de France. Vérifiez les filtres et les numéros de téléphone.")
+        : "Aucun contact avec numéro dans la sélection. La prospection et les fiches restent consultables.")
   }
 
   const { data: contacts, error: contactsError } = await supabase
