@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, BarChart3, CalendarClock, Check, ClipboardList, Clock3, Copy, Headphones, Loader2, PhoneCall, PhoneIncoming, PhoneOutgoing, RefreshCw, Search, Sparkles, UserRound, Users, X } from "lucide-react";
 import { WithAlloRecordingPlayer } from "@/components/withallo-recording-player";
+import { WithAlloCrmSyncPanel } from "@/components/withallo-crm-sync-panel";
 import { WithAlloCallButton } from "@/components/withallo-call-button";
 import { WithAlloPostCallActions } from "@/components/withallo-postcall-actions";
 import type { AlloCallDetailView } from "@/lib/withallo-call-detail";
@@ -225,6 +226,7 @@ export function WithAlloCallsWorkspace() {
       <div><div className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">Gando · Téléphonie</div><h1 className="mt-1 text-2xl font-semibold tracking-tight">Appels</h1><p className="mt-1 text-sm text-muted-foreground">Enregistrements, résumés IA, transcriptions et prochaines actions de votre équipe, synchronisés avec Allo.</p></div>
       <div className="flex flex-wrap items-center gap-2"><Link href="/phone/stats" className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90"><BarChart3 size={14}/> Statistiques</Link><button type="button" onClick={()=>void reload()} disabled={loading} className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-muted disabled:opacity-50"><RefreshCw size={14} className={loading?"animate-spin":""}/> Actualiser</button></div>
     </div>
+    <WithAlloCrmSyncPanel />
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       <div className="rounded-xl border border-border bg-card p-3.5"><p className="text-[11px] text-muted-foreground">Appels récupérés</p><div className="mt-1 text-xl font-semibold">{calls.length}</div></div>
       <div className="rounded-xl border border-border bg-card p-3.5"><p className="text-[11px] text-muted-foreground">Sortants</p><div className="mt-1 text-xl font-semibold">{outbound}</div></div>
