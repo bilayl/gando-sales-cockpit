@@ -169,7 +169,6 @@ async function upsertPerson(row: Contact): Promise<"created_or_updated" | "uncha
   const state = await getState(resource);
   if (sourceUnchanged(state, row.hubspot_updated_at)) return "unchanged";
   const companyId = await companyForContact(row);
-  const properties = row.raw_data?.properties ?? {};
   const body = {
     ...(row.first_name ? { name: row.first_name.trim() } : {}),
     ...(row.last_name ? { last_name: row.last_name.trim() } : {}),
@@ -225,7 +224,8 @@ export async function syncCockpitContactsToAllo(limit = 30) {
   const pageSize = Math.min(40, Math.max(1, Math.floor(limit)));
   const db = getSupabaseAdmin();
   const progress = await getState(CURRENT);
-  const cursor = progress?.after_cursor || "company:0";
+  // Start with people: their linked companies are synchronized on demand.
+  const cursor = progress?.after_cursor || "contact:0";
   const [kind, offsetString] = cursor.split(":");
   const stage = kind === "contact" ? "contact" : "company";
   const offset = Math.max(0, Number(offsetString) || 0);
@@ -258,10 +258,10 @@ export async function syncCockpitContactsToAllo(limit = 30) {
   }
 
   const endOfPage = (data || []).length < pageSize;
-  const next = endOfPage ? (stage === "company" ? "contact:0" : "company:0") : `${stage}:${offset + pageSize}`;
-  await saveState(CURRENT, next, failed ? "partial_error" : endOfPage && stage === "contact" ? "complete" : "in_progress",
+  const next = endOfPage ? (stage === "contact" ? "company:0" : "contact:0") : `${stage}:${offset + pageSize}`;
+  await saveState(CURRENT, next, failed ? "partial_error" : endOfPage && stage === "company" ? "complete" : "in_progress",
     failed ? `${failed} fiches non synchronisées ; elles seront réessayées au prochain cycle.` : null);
-  return { stage, cursor: next, processed: (data || []).length, changed, skipped, failed, cycleComplete: endOfPage && stage === "contact" };
+  return { stage, cursor: next, processed: (data || []).length, changed, skipped, failed, cycleComplete: endOfPage && stage === "company" };
 }
 
 export async function getWithAlloCrmSyncStatus() {
