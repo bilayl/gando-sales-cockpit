@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Loader2, Mail, MapPin, Phone, RefreshCw, Search, UserRound, UserRoundCheck, UserRoundX } from "lucide-react";
 import { PageHeader } from "@/components/cockpit/page-header";
 import { ManualContactAssignmentManager } from "@/components/manual-contact-assignment-manager";
@@ -84,12 +84,49 @@ export function ProspectionContactsDirectory() {
     setDirectoryFilter,
   } = useContactDirectoryParams();
   const [localError, setLocalError] = useState("");
+  const [remoteQuery, setRemoteQuery] = useState("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setRemoteQuery(query.trim()), 350);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   const contactsQuery = useContacts(segmentId);
   const ownersQuery = useOwners();
   const segmentsQuery = useSegments();
 
-  const contacts = contactsQuery.data?.results ?? [];
+  const remoteContactsQuery = useQuery<{ results: Contact[] }>({
+    queryKey: ["hubspot-live-contacts", remoteQuery],
+    queryFn: async () => {
+      const response = await fetch(`/api/contacts?remoteSearch=${encodeURIComponent(remoteQuery)}`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Recherche HubSpot indisponible");
+      return payload as { results: Contact[] };
+    },
+    enabled: !segmentId && remoteQuery.length >= 3,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const contacts = useMemo(() => {
+    const local = contactsQuery.data?.results ?? [];
+    const fromHubspot = !segmentId && remoteQuery.length >= 3 ? (remoteContactsQuery.data?.results ?? []) : [];
+    const all = new Map(local.map(contact => [contact.id, contact]));
+    for (const contact of fromHubspot) if (!all.has(contact.id)) all.set(contact.id, contact);
+    return [...all.values()];
+  }, [contactsQuery.data?.results, remoteContactsQuery.data?.results, segmentId, remoteQuery]);
+  const syncStatusQuery = useQuery<{
+    status: string; delayed: boolean; lastSyncedAt: string | null; lastError: string | null;
+  }>({
+    queryKey: ["hubspot-sync-status"],
+    queryFn: async () => {
+      const response = await fetch("/api/sync/status", { cache: "no-store" });
+      if (!response.ok) throw new Error("État de synchronisation indisponible");
+      return response.json();
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    retry: false,
+  });
   const total = contactsQuery.data?.total ?? 0;
   const owners = ownersQuery.data ?? [];
   const lists = useMemo(
@@ -137,7 +174,7 @@ export function ProspectionContactsDirectory() {
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/sync?resource=all");
+      const response = await fetch("/api/sync?resource=contacts");
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Synchronisation impossible");
       return payload;
@@ -146,6 +183,7 @@ export function ProspectionContactsDirectory() {
       setLocalError("");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all }),
+        queryClient.invalidateQueries({ queryKey: ["hubspot-sync-status"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.companies.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.owners.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.segments.all }),
@@ -240,6 +278,15 @@ export function ProspectionContactsDirectory() {
             <Input value={query} onChange={event => void setQuery(event.target.value)} placeholder="Contact, entreprise, email…" className="h-8 border-0 bg-muted/45 pl-8 shadow-none focus-visible:ring-1" />
           </div>
 
+          {syncStatusQuery.data ? (
+            <span
+              className={`text-[11px] ${syncStatusQuery.data.status === "error" || syncStatusQuery.data.delayed ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+              title={syncStatusQuery.data.lastError || "Dernier passage de synchronisation HubSpot"}
+            >
+              {syncStatusQuery.data.status === "error" ? "HubSpot : erreur de synchro" : syncStatusQuery.data.delayed ? "HubSpot : synchro en retard" : "HubSpot synchronisé"}
+              {syncStatusQuery.data.lastSyncedAt ? ` · ${new Date(syncStatusQuery.data.lastSyncedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}
+            </span>
+          ) : null}
           <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
             {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Synchroniser
