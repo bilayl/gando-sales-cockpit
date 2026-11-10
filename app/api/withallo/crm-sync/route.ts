@@ -53,6 +53,10 @@ export async function POST(request: NextRequest) {
       const db = getSupabaseAdmin();
       const { data, error } = await db.rpc("lookup_cockpit_contacts_by_phone_suffix", { p_suffix: suffix });
       if (error) throw error;
+      // The phone lookup returns at most 51 rows. A truncated result cannot be treated as unique.
+      if (Array.isArray(data) && data.length >= 51) {
+        return NextResponse.json({ ok: true, skipped: true, reason: "too_many_phone_matches" });
+      }
       const candidates = (Array.isArray(data) ? data : []).filter(row =>
         [row.phone, row.mobilephone].some(value => normalizeWithAlloDialNumber(value) === phone));
       const matches = [...new Set(candidates.map(row => String(row.hubspot_id)).filter(id => /^\d{1,25}$/.test(id)))];
