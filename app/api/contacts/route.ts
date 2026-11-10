@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { hubspotJson } from "@/lib/hubspot";
+import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const createAllowed = ["firstname","lastname","email","phone","mobilephone","jobtitle","company","city","state","hubspot_owner_id"];
@@ -11,6 +12,26 @@ function toHubSpotRecord(row: any) {
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
+    if (url.searchParams.has("remoteSearch")) {
+      await requireCockpitAccess();
+      const needle = (url.searchParams.get("remoteSearch") ?? "").trim().slice(0, 100);
+      if (needle.length < 3) return NextResponse.json({ results: [], total: 0, paging: null });
+      const hubspot = await hubspotJson("/crm/objects/2026-03/contacts/search", {
+        method: "POST",
+        body: JSON.stringify({
+          query: needle,
+          limit: 30,
+          properties: ["firstname", "lastname", "email", "phone", "mobilephone", "company", "jobtitle", "hubspot_owner_id", "statut_de_lappel", "city", "state"],
+        }),
+      });
+      const results = (hubspot.results ?? []).map((record: { id: string; properties: Record<string, string | null> }) => ({
+        id: String(record.id),
+        properties: record.properties ?? {},
+      }));
+      return NextResponse.json({ results, total: results.length, paging: null }, {
+        headers: { "cache-control": "no-store" },
+      });
+    }
     const segmentId = url.searchParams.get("segmentId");
     const after = url.searchParams.get("after");
     if (segmentId) {
