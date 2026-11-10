@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncActivities, syncCompanies, syncContacts, syncDeals, syncTasks } from "@/lib/sync";
 import { refreshCompanyQualifications, syncCompanyContactLinks } from "@/lib/company-qualification-sync";
 import { refreshCallRecommendations } from "@/lib/call-recommendations";
-import { apiError, getHubSpotIdentity } from "@/lib/hubspot";
+import { apiError } from "@/lib/hubspot";
+import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { isAuthorizedGitHubSyncToken } from "@/lib/github-actions-oidc";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -76,8 +77,9 @@ async function isSyncRequestAuthorized(request: NextRequest) {
     }
   }
 
-  const identity = await getHubSpotIdentity().catch(() => null);
-  return identity?.mode === "oauth" || identity?.mode === "test_bypass";
+  // An authenticated Cockpit user can trigger a manual refresh without a HubSpot OAuth browser session.
+  const access = await requireCockpitAccess().catch(() => null);
+  return Boolean(access);
 }
 
 export async function GET(request: NextRequest) {

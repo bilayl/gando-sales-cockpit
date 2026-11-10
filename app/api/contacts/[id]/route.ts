@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hubspotJson } from "@/lib/hubspot";
+import { apiError, hubspotJson } from "@/lib/hubspot";
+import { syncContactById } from "@/lib/sync";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { refreshCallRecommendations } from "@/lib/call-recommendations";
 import { ensureContactProspectionOptions } from "@/lib/hubspot/qualification-schema";
@@ -164,9 +165,16 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   try {
     const { id } = await params;
     const supabase = getSupabaseAdmin();
-    const { data: contact, error } = await supabase.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
+    const { data: cached, error } = await supabase.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
     if (error) throw error;
-    if (!contact) return NextResponse.json({ error: "Contact introuvable dans Supabase. Lancez une synchronisation." }, { status: 404 });
+    let contact = cached;
+    if (!contact) {
+      await syncContactById(id);
+      const restored = await supabase.from("contacts").select("*").eq("hubspot_id", id).maybeSingle();
+      if (restored.error) throw restored.error;
+      contact = restored.data;
+    }
+    if (!contact) return NextResponse.json({ error: "Contact introuvable dans HubSpot." }, { status: 404 });
 
     const [companiesResult, activitiesResult, tasksResult, freshContact] = await Promise.all([
       contact.company_id
@@ -194,8 +202,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     return NextResponse.json({ contact: contactRecord, companies, notes, calls, tasks, meetings });
   } catch (error) {
-    const e = error as Error;
-    return NextResponse.json({ error: e.message || "Erreur Supabase", details: e }, { status: 500 });
+    return apiError(error);
   }
 }
 

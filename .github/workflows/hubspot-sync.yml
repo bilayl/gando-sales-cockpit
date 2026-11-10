@@ -3,6 +3,7 @@ name: HubSpot Sync
 on:
   schedule:
     - cron: "*/30 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -19,6 +20,7 @@ env:
 
 jobs:
   sync-primary:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/30 * * * *'
     name: Sync ${{ matrix.resource }}
     runs-on: ubuntu-latest
     strategy:
@@ -70,6 +72,34 @@ jobs:
           code=$(curl -sS --max-time 300 -o "$body" -w "%{http_code}" \
             -H "Authorization: Bearer $oidc_token" \
             "$SYNC_URL?resource=qualification")
+          echo "HTTP $code"
+          cat "$body"
+          rm "$body"
+          if [ "$code" != "200" ]; then
+            exit 1
+          fi
+
+  sync-contacts-fast:
+    name: Sync contacts (5-minute safety net)
+    if: github.event_name == 'schedule' && github.event.schedule == '*/5 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync contact directory
+        run: |
+          oidc_token=$(curl -sS \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}" \
+            | jq -r '.value // empty')
+          if [ -z "$oidc_token" ]; then
+            echo "Unable to obtain GitHub Actions OIDC token"
+            exit 1
+          fi
+          echo "::add-mask::$oidc_token"
+
+          body=$(mktemp)
+          code=$(curl -sS --max-time 300 -o "$body" -w "%{http_code}" \
+            -H "Authorization: Bearer $oidc_token" \
+            "$SYNC_URL?resource=contacts")
           echo "HTTP $code"
           cat "$body"
           rm "$body"

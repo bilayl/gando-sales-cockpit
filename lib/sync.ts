@@ -9,7 +9,7 @@ const COMPANY_PROPERTIES = [
   "ce_quil_apprecie_chez_gando","objections__retours","campagne_dacquisition","suite","taille_flotte","hs_country_code","solution_paiement_reservation",
 ];
 
-const CONTACT_PROPERTIES = [
+export const CONTACT_PROPERTIES = [
   "firstname","lastname","email","phone","mobilephone","company","jobtitle","hs_parent_company_id","hubspot_owner_id","statut_prospection","resultat_prospection",
   "statut_de_lappel","date_prochaine_relance","date_recyclage","minari_call_count","referly_call_outcome","referly_reason_to_reach_out","state","city",
   "hs_last_sales_activity_timestamp","notes_last_contacted","hs_object_source_label","createdate","ce_quil_apprecie_chez_gando","objections__retours","campagne_dacquisition",
@@ -183,6 +183,43 @@ export async function syncContacts(): Promise<SyncResult> {
       };
     });
   });
+}
+
+/** Restore one HubSpot contact on demand, without waiting for the bulk scheduler. */
+export async function syncContactById(id: string): Promise<HubSpotRecord> {
+  if (!/^\d{1,25}$/.test(id)) throw Object.assign(new Error("Identifiant HubSpot invalide"), { status: 400 });
+  const record = await hubspotJson(
+    `/crm/objects/2026-03/contacts/${encodeURIComponent(id)}?properties=${encodeURIComponent(CONTACT_PROPERTIES.join(","))}&associations=companies`,
+  ) as HubSpotRecord & { associations?: { companies?: { results?: Array<{ id: string }> } } };
+  const properties = record.properties ?? {};
+  const admin = getSupabaseAdmin();
+  const { data: original, error: originalError } = await admin.from("contacts")
+    .select("company_id").eq("hubspot_id", id).maybeSingle();
+  if (originalError) throw originalError;
+
+  let companyId: string | null = original?.company_id ?? null;
+  const companyHubSpotId = record.associations?.companies?.results?.[0]?.id || properties.hs_parent_company_id;
+  if (companyHubSpotId) {
+    const { data: company, error: companyError } = await admin.from("companies")
+      .select("id").eq("hubspot_id", String(companyHubSpotId)).maybeSingle();
+    if (companyError) throw companyError;
+    companyId = company?.id ?? companyId;
+  }
+
+  const { error } = await admin.from("contacts").upsert({
+    hubspot_id: String(record.id),
+    company_id: companyId,
+    first_name: properties.firstname ?? null,
+    last_name: properties.lastname ?? null,
+    email: properties.email ?? null,
+    phone: properties.phone || properties.mobilephone || null,
+    job_title: properties.jobtitle ?? null,
+    owner_hubspot_id: properties.hubspot_owner_id ?? null,
+    raw_data: record,
+    hubspot_updated_at: record.updatedAt ?? new Date().toISOString(),
+  }, { onConflict: "hubspot_id" });
+  if (error) throw error;
+  return record;
 }
 
 export async function syncDeals(): Promise<SyncResult> {

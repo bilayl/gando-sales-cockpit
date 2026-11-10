@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { hubspotJson } from "@/lib/hubspot";
+import { requireCockpitAccess } from "@/lib/cockpit-access";
 
 type SearchFilter = "all" | "contacts" | "companies";
 
@@ -82,9 +84,37 @@ export async function GET(request: NextRequest) {
     if (contactsResponse.error) throw contactsResponse.error;
     if (companiesResponse.error) throw companiesResponse.error;
 
+    const localContacts = (contactsResponse.data ?? []).map(contactResult);
+    const liveContacts: ReturnType<typeof contactResult>[] = [];
+    if (filter !== "companies" && query.length >= 3 && localContacts.length < 3) {
+      try {
+        await requireCockpitAccess();
+        const hubspot = await hubspotJson("/crm/objects/2026-03/contacts/search", {
+          method: "POST",
+          body: JSON.stringify({ query, limit: filter === "contacts" ? 12 : 6, properties: ["firstname", "lastname", "email", "phone", "jobtitle", "company"] }),
+        });
+        for (const record of hubspot.results ?? []) {
+          const properties = record.properties ?? {};
+          liveContacts.push(contactResult({
+            hubspot_id: record.id,
+            first_name: properties.firstname,
+            last_name: properties.lastname,
+            email: properties.email,
+            phone: properties.phone,
+            job_title: properties.jobtitle,
+            raw_data: record,
+          }));
+        }
+      } catch (error) {
+        console.warn("Recherche HubSpot directe indisponible", error);
+      }
+    }
+
+    const contactMap = new Map(localContacts.map(contact => [contact.id, contact]));
+    for (const contact of liveContacts) if (!contactMap.has(contact.id)) contactMap.set(contact.id, contact);
     const results = [
       ...(companiesResponse.data ?? []).map(companyResult),
-      ...(contactsResponse.data ?? []).map(contactResult),
+      ...[...contactMap.values()].slice(0, filter === "contacts" ? 12 : 6),
     ];
 
     return NextResponse.json(
