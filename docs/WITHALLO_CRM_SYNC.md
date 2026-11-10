@@ -33,7 +33,7 @@ Référence publique : https://www.withallo.com/integrations/custom-crm
 1. Vérifier dans Allo que la clé serveur `WITHALLO_API_KEY` possède le scope `CRM_WRITE`. Le compte sans ce scope continue à utiliser la téléphonie mais ne peut pas écrire les fiches CRM.
 2. Ouvrir **Téléphonie → Appels** dans le Cockpit. Les administrateurs ont un bouton **Synchroniser 40 fiches** pour tester puis lancer la reprise initiale par lots.
 3. Après validation des correspondances et absence de doublons, activer `WITHALLO_CRM_SYNC_ENABLED=true` dans l'environnement **Production** du projet Vercel du Cockpit. Cette variable est volontairement désactivée par défaut pour éviter un transfert massif non testé.
-4. Le workflow GitHub Actions `Allo CRM Sync` tente de synchroniser 40 fiches toutes les 5 minutes, en reprenant son curseur entre les exécutions. Les exécutions GitHub planifiées peuvent être décalées.
+4. Le workflow GitHub Actions `Allo CRM Sync` tente de synchroniser 40 fiches toutes les 5 minutes, en commençant par les **contacts** (et leurs entreprises liées), puis par les entreprises restantes. Il reprend son curseur entre les exécutions. Les exécutions GitHub planifiées peuvent être décalées.
 5. Les boutons **Appeler avec Allo** tentent également une synchronisation ciblée du numéro ; l'appel ne dépend jamais de la réussite de cette opération.
 6. Contrôler le statut, les compteurs et les erreurs dans **Téléphonie → Appels**. Les conflits sont conservés en erreur et seront réessayés au prochain passage du répertoire.
 
