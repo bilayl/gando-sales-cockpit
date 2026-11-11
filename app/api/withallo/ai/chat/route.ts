@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   try {
     await requireCockpitAccess();
     const length = Number(request.headers.get("content-length") || 0);
-    if (length > 16000) {
+    if (length > 30000) {
       return NextResponse.json({ error: "La conversation est trop longue." }, { status: 413 });
     }
     const body = await request.json().catch(() => ({}));
