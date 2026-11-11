@@ -189,6 +189,33 @@ export function FollowupsView() {
     const id = params.get(type === "contact" ? "contactId" : "companyId") || "";
     if (!type || !/^\d{1,25}$/.test(id)) return;
     setCreateOpen(true);
+    const team = params.get("team");
+    if (team === "AE" || team === "CSM") setKind(team);
+    const due = params.get("due");
+    if (due && !Number.isNaN(Date.parse(due))) setDueAt(due.slice(0, 16));
+
+    const callId = params.get("alloCall") || "";
+    const actionIndex = Number(params.get("actionIndex"));
+    if (/^cll[-_][a-zA-Z0-9_-]{3,120}$/.test(callId) &&
+        Number.isInteger(actionIndex) && actionIndex >= 0 && actionIndex < 40) {
+      // Never trust AI action text in the URL: retrieve it from Allo with
+      // the current user's authenticated per-call authorization.
+      void fetch("/api/withallo/calls/" + encodeURIComponent(callId), { cache: "no-store" })
+        .then(async response => {
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error || "Appel Allo indisponible");
+          const call = payload.call;
+          const action = call?.actions?.[actionIndex];
+          if (!action?.text) throw new Error("Cette recommandation n'est plus disponible dans Allo.");
+          setSubject(String(action.text).slice(0, 440));
+          setNotes([
+            "Proposition à vérifier et valider par le responsable.",
+            "Source : https://room.gando.pro/phone?call=" + encodeURIComponent(callId),
+            call.summary ? "Compte rendu Allo : " + String(call.summary).slice(0, 1000) : "",
+          ].filter(Boolean).join("\n"));
+        })
+        .catch(cause => setCreateError(cause instanceof Error ? cause.message : "Impossible de récupérer l'action Allo."));
+    }
     void fetch("/api/" + (type === "contact" ? "contacts" : "companies") + "/" + id, { cache: "no-store" })
       .then(response => response.ok ? response.json() : null)
       .then(result => {
