@@ -146,7 +146,7 @@ export function FollowupsView() {
     else setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ period });
+      const params = new URLSearchParams({ period, order: "desc" });
       if (after) params.set("after", after);
       const response = await fetch("/api/tasks?" + params.toString(), { cache: "no-store" });
       const data = await response.json();
