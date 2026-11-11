@@ -36,13 +36,13 @@ export async function POST(request: NextRequest) {
     }
     const body = await request.json().catch(() => ({}));
     const input = Array.isArray(body?.messages) ? body.messages : [];
-    const messages: AlloChatMessage[] = input.slice(-12).map((entry: unknown) => {
+    const messages: AlloChatMessage[] = input.slice(-12).map((entry: unknown): AlloChatMessage => {
       const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
       return {
         role: item.role === "assistant" ? "assistant" as const : "user" as const,
         content: typeof item.content === "string" ? item.content.trim().slice(0, 1600) : "",
       };
-    }).filter(message => message.content);
+    }).filter((message: AlloChatMessage) => Boolean(message.content));
     if (!messages.length || messages[messages.length - 1].role !== "user" ||
         messages[messages.length - 1].content.length < 2) {
       return NextResponse.json({ error: "Écris une question pour démarrer le chat." }, { status: 400 });
