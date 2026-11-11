@@ -36,16 +36,14 @@ function dateInput(date: Date) {
     "T" + [pad(date.getHours()), pad(date.getMinutes())].join(":");
 }
 
-function followupHref(kind: Kind, recordId: string, call: Insight, action: Action, team: "AE" | "CSM") {
+function followupHref(kind: Kind, recordId: string, call: Insight, action: Action, index: number, team: "AE" | "CSM") {
   const params = new URLSearchParams();
   params.set(kind === "contact" ? "contactId" : "companyId", recordId);
   params.set("team", team);
-  params.set("subject", action.text.slice(0, 440));
-  params.set("notes", [
-    "Action proposée à partir du compte rendu Allo. À vérifier avant validation.",
-    "Appel source : https://room.gando.pro/phone?call=" + encodeURIComponent(call.id),
-    "Résumé Allo : " + (call.summary || "Non disponible").slice(0, 900),
-  ].join("\n").slice(0, 1500));
+  // Keep the AI summary and conversation contents out of browser URLs.
+  // The follow-up screen retrieves the authorized action from Allo by call ID.
+  params.set("alloCall", call.id);
+  params.set("actionIndex", String(index));
   const sourceDue = action.dueAt ? new Date(action.dueAt) : null;
   const due = sourceDue && Number.isFinite(sourceDue.getTime()) && sourceDue.getTime() > Date.now()
     ? sourceDue : nextDayAtTen();
@@ -54,12 +52,13 @@ function followupHref(kind: Kind, recordId: string, call: Insight, action: Actio
 }
 
 export function WithAlloAiCrmPanel({
-  kind, recordId, compact = false, preferredTeam = "AE",
+  kind, recordId, compact = false, preferredTeam = "AE", onExpand,
 }: {
   kind: Kind;
   recordId: string;
   compact?: boolean;
   preferredTeam?: "AE" | "CSM";
+  onExpand?: () => void;
 }) {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -126,7 +125,7 @@ export function WithAlloAiCrmPanel({
           <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => void reload()} disabled={loading}>
             <RefreshCw size={13} className={loading ? "animate-spin" : ""}/> Actualiser
           </Button>
-          {compact ? <Link href={"#allo-ai"} className="text-xs font-semibold text-primary">Détails</Link> : null}
+          {compact && onExpand ? <button type="button" onClick={onExpand} className="text-xs font-semibold text-primary hover:underline">Détails</button> : null}
         </div>
       </header>
       {!compact ? <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
@@ -178,7 +177,7 @@ export function WithAlloAiCrmPanel({
                     {call.actions.slice(0, compact ? 2 : 12).map((action, index) => (
                       <div key={index} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 p-2.5">
                         <span className="min-w-0 flex-1 break-words text-xs leading-5">{action.text}</span>
-                        <Link href={followupHref(kind, recordId, call, action, compact ? preferredTeam : team)}
+                        <Link href={followupHref(kind, recordId, call, action, index, compact ? preferredTeam : team)}
                           className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-primary/25 px-2.5 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary/5">
                           <CalendarClock size={12}/> Préparer une relance
                         </Link>
