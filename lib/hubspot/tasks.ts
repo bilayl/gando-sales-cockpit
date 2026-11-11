@@ -13,6 +13,7 @@ export type TaskFilters = {
   owner?: string;
   after?: string;
   query?: string;
+  order?: "asc" | "desc";
 };
 
 function startOfDay(date = new Date()) {
@@ -116,7 +117,7 @@ export async function searchTasks(filters: TaskFilters = {}) {
   const body: Record<string, unknown> = {
     limit: 100,
     properties: TASK_PROPERTIES,
-    sorts: [{ propertyName: "hs_timestamp", direction: "ASCENDING" }],
+    sorts: [{ propertyName: "hs_timestamp", direction: filters.order === "desc" ? "DESCENDING" : "ASCENDING" }],
   };
   const selectedFilters = taskFilters(filters);
   if (selectedFilters.length) body.filterGroups = [{ filters: selectedFilters }];
