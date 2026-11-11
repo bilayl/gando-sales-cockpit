@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiError } from "@/lib/hubspot";
+import { requireCockpitAccess } from "@/lib/cockpit-access";
 import { createTask, searchTasks } from "@/lib/hubspot/tasks";
 import {
   enrichTasksWithCockpitAssignees,
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
       owner: p.get("owner")?.trim() || undefined,
       after: p.get("after")?.trim() || undefined,
       query: p.get("q")?.trim() || undefined,
+      order: p.get("order") === "desc" ? "desc" : "asc",
     });
 
     let assignees: Awaited<ReturnType<typeof listActiveCockpitTaskAssignees>> = [];
@@ -55,6 +57,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await requireCockpitAccess();
     const body = await request.json();
     const subject = String(body.subject || "").trim();
     const timestamp = new Date(String(body.timestamp || ""));
@@ -63,6 +66,17 @@ export async function POST(request: NextRequest) {
     if (!subject) return NextResponse.json({ error: "Le titre est obligatoire" }, { status: 400 });
     if (Number.isNaN(timestamp.getTime())) return NextResponse.json({ error: "Date invalide" }, { status: 400 });
     if (!TASK_TYPES.has(type) || !TASK_PRIORITIES.has(priority)) return NextResponse.json({ error: "Type ou priorité invalide" }, { status: 400 });
+
+    // A task can be attached to an actual HubSpot CRM record so that the
+    // AE/CSM follow-up is also visible on the associated contact/company.
+    const rawAssociation = body.association;
+    const kind = String(rawAssociation?.type || "");
+    const objectId = String(rawAssociation?.id || "").trim();
+    const associationTypes: Record<string, number> = { contact: 204, company: 192, deal: 216 };
+    if (rawAssociation !== undefined &&
+      (!Object.prototype.hasOwnProperty.call(associationTypes, kind) || !/^\d{1,25}$/.test(objectId))) {
+      return NextResponse.json({ error: "Fiche de contact, entreprise ou opportunité invalide." }, { status: 400 });
+    }
 
     const assignee = await resolveCockpitTaskAssignee(body.assigneeEmail ? String(body.assigneeEmail) : null);
     const properties: Record<string, string> = {
@@ -77,7 +91,9 @@ export async function POST(request: NextRequest) {
     if (assignee?.hubspotOwnerId) properties.hubspot_owner_id = assignee.hubspotOwnerId;
     else if (body.ownerId) properties.hubspot_owner_id = String(body.ownerId);
 
-    const task = await createTask(properties);
+    const task = await createTask(properties, rawAssociation
+      ? [{ id: objectId, associationTypeId: associationTypes[kind] }]
+      : []);
     if (assignee) await saveCockpitTaskAssignee(String(task.id), assignee.email);
 
     return NextResponse.json({ ...task, cockpitAssignee: assignee }, { status: 201 });
