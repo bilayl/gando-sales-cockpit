@@ -291,6 +291,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
           <div className="flex flex-wrap items-center gap-1.5">
             {effectivePhone ? <WithAlloCallButton phone={effectivePhone} className="h-8" /> : null}
             {effectiveEmail ? <Button asChild variant="outline" size="sm" className="h-8"><a href={`mailto:${effectiveEmail}`}><Mail size={13} /> Email</a></Button> : null}
+            <Button asChild variant="outline" size="sm" className="h-8"><Link href={"/relances?" + (kind === "contact" ? "contactId" : "companyId") + "=" + encodeURIComponent(recordId)}><CalendarClock size={13} /> Relance AE/CSM</Link></Button>
             <NewCRMNoteButton kind={kind} recordId={recordId} onCreated={async () => { setTab("notes"); await load(); }} />
             <ProfileSourcingButton entityType={kind} entityId={recordId} onCompleted={load} label="Enrichir" />
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void load()} disabled={loading}><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></Button>
