@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   AlarmClock, ArrowUpRight, CalendarClock, Check, CheckCircle2, ChevronDown,
-  ChevronRight, CirclePlus, Clock3, Loader2, Mail, Phone, RefreshCw, Search, Users,
+  ChevronRight, CirclePlus, Clock3, Loader2, RefreshCw, Search, Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+
 import { PageHeader } from "@/components/cockpit/page-header";
 
 type Assignee = { email: string; displayName: string; role: string; hubspotOwnerId: string | null };
@@ -532,7 +532,8 @@ export function FollowupsView() {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="followup-notes">Contexte et prochaine action</Label>
-              <Textarea id="followup-notes" rows={3} value={notes} onChange={event => setNotes(event.target.value)}
+              <textarea id="followup-notes" rows={3} value={notes} onChange={event => setNotes(event.target.value)}
+                className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 placeholder="Ce qui a été convenu, éléments en attente, prochaine étape…" />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
