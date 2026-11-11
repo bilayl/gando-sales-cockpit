@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
       owner: p.get("owner")?.trim() || undefined,
       after: p.get("after")?.trim() || undefined,
       query: p.get("q")?.trim() || undefined,
+      order: p.get("order") === "desc" ? "desc" : "asc",
     });
 
     let assignees: Awaited<ReturnType<typeof listActiveCockpitTaskAssignees>> = [];
