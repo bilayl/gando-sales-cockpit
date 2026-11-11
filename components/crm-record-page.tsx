@@ -1,6 +1,7 @@
 "use client";
 import { WithAlloCallButton } from "@/components/withallo-call-button";
 import { WithAlloHistoryView } from "@/components/withallo-history-view";
+import { WithAlloAiCrmPanel } from "@/components/withallo-ai-crm-panel";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -41,7 +42,7 @@ import { buildCallObjectionCoach } from "@/lib/call-objection-coach";
 import { formatDate, initials } from "@/lib/utils";
 
 type Kind = "contact" | "company";
-type WorkspaceTab = "overview" | "activity" | "calls" | "notes" | "tasks";
+type WorkspaceTab = "overview" | "activity" | "calls" | "ai" | "notes" | "tasks";
 
 type Props = {
   kind: Kind;
@@ -266,6 +267,7 @@ export function CRMRecordPage({ kind, recordId }: Props) {
     { value: "overview", label: "Vue d’ensemble", icon: LayoutDashboard },
     { value: "activity", label: "Activité", icon: Activity, count: timeline.length },
     { value: "calls", label: "Appels", icon: PhoneCall, count: counts.calls || 0 },
+    { value: "ai", label: "IA Allo", icon: Sparkles },
     { value: "notes", label: "Notes", icon: StickyNote, count: counts.notes || 0 },
     { value: "tasks", label: "Tâches", icon: ListTodo, count: counts.tasks || 0 },
   ];
@@ -380,6 +382,9 @@ export function CRMRecordPage({ kind, recordId }: Props) {
                     </div>
                   </section>
 
+                  <WithAlloAiCrmPanel kind={kind} recordId={recordId} compact
+                    preferredTeam={lifecycle === "Client" ? "CSM" : "AE"}
+                    onExpand={() => setTab("ai")} />
                   <CallObjectionCoachPanel coach={coach} />
 
                   <section className="rounded-xl border border-border">
@@ -414,6 +419,11 @@ export function CRMRecordPage({ kind, recordId }: Props) {
                 </div>
               ) : null}
 
+              {tab === "ai" ? (
+                <WithAlloAiCrmPanel kind={kind} recordId={recordId}
+                  preferredTeam={lifecycle === "Client" ? "CSM" : "AE"} />
+              ) : null}
+
               {tab === "activity" ? (
                 <section className="rounded-xl border border-border">
                   <div className="border-b border-border px-4 py-3"><div className="text-[13px] font-semibold">Toute l’activité</div><div className="mt-0.5 text-[10px] text-muted-foreground">Historique chronologique HubSpot + Allo</div></div>
@@ -422,7 +432,9 @@ export function CRMRecordPage({ kind, recordId }: Props) {
               ) : null}
 
               {tab === "calls" ? (
-                <div className="mb-4"><WithAlloHistoryView phone={effectivePhone || undefined} compact limit={50} /></div>
+                <div className="mb-4">{effectivePhone
+                  ? <WithAlloHistoryView phone={effectivePhone} compact limit={50} />
+                  : <p className="rounded-lg border border-border p-4 text-xs text-muted-foreground">Aucun numéro disponible : l'historique Allo de toute l'équipe n'est pas affiché sur cette fiche.</p>}</div>
               ) : null}
 
               {tab === "calls" ? (
