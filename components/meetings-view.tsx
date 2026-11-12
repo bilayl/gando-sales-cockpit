@@ -462,6 +462,10 @@ setMeetings(data.results || []);
               ...actionDialog.meeting,
               associations: {
                 ...actionDialog.meeting.associations,
+                contact: actionDialog.meeting.associations.contact || manualContacts[actionDialog.meeting.id] || null,
+                contacts: actionDialog.meeting.associations.contacts.length
+                  ? actionDialog.meeting.associations.contacts
+                  : manualContacts[actionDialog.meeting.id] ? [manualContacts[actionDialog.meeting.id]] : [],
                 company: actionDialog.meeting.associations.company || manualCompanies[actionDialog.meeting.id] || null,
                 companies: actionDialog.meeting.associations.companies.length
                   ? actionDialog.meeting.associations.companies
