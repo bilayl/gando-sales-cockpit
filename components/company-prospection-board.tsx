@@ -77,15 +77,6 @@ export function deriveCompanyStage(company: Company, now = Date.now()): CompanyS
   return "OPEN";
 }
 
-function callLabel(value?: string | null) {
-  const labels: Record<string, string> = {
-    interesse: "Intéressé", interesse_mais: "Intéressé mais", a_une_date_ulterieure: "À une date ultérieure",
-    a_rappeler: "À rappeler", pas_interesse: "Pas intéressé", occupe: "Occupé", nrp: "NRP",
-    hors_cible: "Hors cible", en_attente_decision: "En attente décision", numero_invalide: "Numéro invalide", autres: "Autres",
-  };
-  return value ? labels[value] || value : "Aucun appel";
-}
-
 export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpenCompany, onStatusChange, onError }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
@@ -201,7 +192,6 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                     const deals = Number(p.qualification_deals_count || p.num_associated_deals || 0);
                     const overdue = Number(p.qualification_overdue_tasks || 0);
                     const score = Number(p.qualification_score || 0);
-                    const lastCall = p.qualification_last_call_status || p.statut_de_lappel;
                     const reminder = p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date;
                     const lastActivity = p.qualification_last_activity_at || p.notes_last_updated || p.hs_last_sales_activity_timestamp;
                     return (
@@ -226,7 +216,6 @@ export function CompanyProspectionBoard({ companies, ownerNames, loading, onOpen
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground"><Users size={10} /> {contacts} contact{contacts > 1 ? "s" : ""}</Badge>
                           {deals > 0 ? <Badge variant="outline" className="text-[10px] text-primary">{deals} deal{deals > 1 ? "s" : ""}</Badge> : null}
-                          {lastCall ? <Badge variant="outline" className="text-[10px]">{callLabel(lastCall)}</Badge> : null}
                           {overdue > 0 ? <Badge variant="destructive" className="text-[10px]">{overdue} tâche{overdue > 1 ? "s" : ""} en retard</Badge> : null}
                         </div>
 

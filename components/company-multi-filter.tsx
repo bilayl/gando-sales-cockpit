@@ -36,7 +36,6 @@ const FILTER_ORDER: CompanyFilterKey[] = [
   "owner",
   "stage",
   "prospectionStatus",
-  "callStatus",
 ];
 
 const STAGE_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(item => [item.value, item.label]));

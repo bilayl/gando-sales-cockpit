@@ -32,7 +32,6 @@ const FILTER_ORDER: ContactFilterKey[] = [
   "company",
   "owner",
   "prospectionStatus",
-  "callStatus",
   "priority",
   "fleetSize",
 ];
@@ -53,7 +52,6 @@ function valuesForKey(properties: Contact["properties"], key: ContactFilterKey) 
     case "company": return [properties.company, properties.hs_parent_company_name];
     case "owner": return [properties.hubspot_owner_id];
     case "prospectionStatus": return [properties.statut_prospection];
-    case "callStatus": return [properties.statut_de_lappel];
     case "priority": return [properties.db_call_bucket];
     case "fleetSize": return [properties.taille_de_flo, properties.taille_flotte];
     default: return [];

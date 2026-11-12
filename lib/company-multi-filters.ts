@@ -7,7 +7,6 @@ export type CompanyFilterKey =
   | "owner"
   | "stage"
   | "prospectionStatus"
-  | "callStatus"
   | "fleetSize";
 
 export type CompanyFilters = Partial<Record<CompanyFilterKey, string[]>>;
@@ -21,7 +20,6 @@ export const COMPANY_FILTER_LABELS: Record<CompanyFilterKey, string> = {
   owner: "Commercial",
   stage: "Statut",
   prospectionStatus: "Statut prospection",
-  callStatus: "Statut d’appel",
   fleetSize: "Taille de flotte",
 };
 
@@ -56,7 +54,6 @@ export function companyPropertyValues(
     case "owner": return [properties.hubspot_owner_id];
     case "stage": return [stage];
     case "prospectionStatus": return [properties.statut_prospection, properties.prospecting_status];
-    case "callStatus": return [properties.statut_de_lappel, properties.qualification_last_call_status];
     case "fleetSize": return [properties.taille_flotte, properties.taille_de_flo];
     default: return [];
   }

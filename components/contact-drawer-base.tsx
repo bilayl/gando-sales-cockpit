@@ -721,13 +721,6 @@ export function ContactDrawer({ contactId, open, onOpenChange, onUpdated }: Prop
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Statut appel</Label>
-                      <Select value={p.statut_de_lappel || "none"} onValueChange={value => { void patch("statut_de_lappel", value === "none" ? "" : value); }}>
-                        <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                        <SelectContent><SelectItem value="none">—</SelectItem>{CALL_STATUSES.map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
                       <Label className="text-xs font-medium text-muted-foreground">Résultat prospection</Label>
                       <Select value={p.resultat_prospection || "none"} onValueChange={value => { void patch("resultat_prospection", value === "none" ? "" : value); }}>
                         <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>

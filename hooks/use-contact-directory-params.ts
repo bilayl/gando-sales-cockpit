@@ -11,7 +11,7 @@ export function useContactDirectoryParams() {
       q: parseAsString.withDefault(""),
       segment: parseAsString.withDefault(""),
       owner: parseAsString.withDefault(""),
-      call: parseAsString.withDefault(""),
+      prospection: parseAsString.withDefault(""),
       filter: parseAsStringLiteral(directoryFilters).withDefault("ALL"),
     },
     {
@@ -28,8 +28,8 @@ export function useContactDirectoryParams() {
     setSegmentId: (segment: string) => setParams({ segment: segment || null }),
     ownerFilter: params.owner,
     setOwnerFilter: (owner: string) => setParams({ owner: owner || null }),
-    callFilter: params.call,
-    setCallFilter: (call: string) => setParams({ call: call || null }),
+    prospectionFilter: params.prospection,
+    setProspectionFilter: (prospection: string) => setParams({ prospection: prospection || null }),
     directoryFilter: params.filter as ContactDirectoryFilter,
     setDirectoryFilter: (filter: ContactDirectoryFilter) => setParams({ filter }),
   };

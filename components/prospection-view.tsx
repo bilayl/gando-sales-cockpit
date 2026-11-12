@@ -32,25 +32,9 @@ const PROSPECTION_BADGES: Record<string, string> = {
 };
 
 const PROSPECTION_OPTIONS = ["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Perdu"];
-const CALL_OPTIONS = ["Intéressé", "A Rappeler", "NRP", "HORS CIBLE", "Occupé", "pas intéressé"];
-
-const CALL_BADGES: Record<string, string> = {
-  "NRP": "border-white/15 bg-white/5 text-slate-300",
-  "Occupé": "border-white/15 bg-white/5 text-slate-300",
-  "HORS CIBLE": "border-rose-400/30 bg-rose-400/10 text-rose-300",
-  "pas intéressé": "border-rose-400/30 bg-rose-400/10 text-rose-300",
-  "A Rappeler": "border-amber-400/30 bg-amber-400/10 text-amber-300",
-  "Intéressé": "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
-};
-
 function prospectionBadge(status?: string | null) {
   if (!status) return "border-white/10 bg-white/5 text-slate-400";
   return PROSPECTION_BADGES[status] || "border-white/10 bg-card text-slate-300";
-}
-
-function callBadge(status?: string | null) {
-  if (!status) return "border-white/10 bg-muted text-muted-foreground";
-  return CALL_BADGES[status] || "border-white/10 bg-muted/60 text-slate-300";
 }
 
 type PeriodPreset = "all" | "jour" | "semaine" | "mois" | "trimestre" | "annee" | "custom";
@@ -82,7 +66,6 @@ export function ProspectionView() {
   const [syncing, setSyncing] = useState(false);
   const [q, setQ] = useState("");
   const [owner, setOwner] = useState("");
-  const [callStatus, setCallStatus] = useState("");
   const [prospection, setProspection] = useState("");
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [companyDrawerId, setCompanyDrawerId] = useState<string | null>(null);
@@ -160,7 +143,6 @@ export function ProspectionView() {
       if (segmentId) p.set("segmentId", segmentId);
       if (q && !segmentId) p.set("q", q);
       if (owner && !segmentId) p.set("owner", owner);
-      if (callStatus && !segmentId) p.set("callStatus", callStatus);
       if (prospection && !segmentId) p.set("prospection", prospection);
       if (periodRange && !segmentId) { p.set("start", periodRange.start.toISOString()); p.set("end", periodRange.end.toISOString()); }
       const activeCursor = reset ? undefined : (cursor ?? after);
@@ -180,7 +162,7 @@ export function ProspectionView() {
             const t = toMs(props.hs_last_sales_activity_timestamp);
             if (Number.isNaN(t) || t < ps || t > pe) return false;
           }
-          return (!q || txt.includes(low)) && (!owner || props.hubspot_owner_id === owner) && (!callStatus || props.statut_de_lappel === callStatus) && (!prospection || props.statut_prospection === prospection);
+          return (!q || txt.includes(low)) && (!owner || props.hubspot_owner_id === owner) && (!prospection || props.statut_prospection === prospection);
         });
       }
       if (requestId !== loadRequestRef.current) return;
@@ -264,7 +246,7 @@ export function ProspectionView() {
     if (!metadataReady) return;
     const timeout = window.setTimeout(() => { void load(true); }, q ? 300 : 0);
     return () => window.clearTimeout(timeout);
-  }, [metadataReady, objectType, segmentId, owner, callStatus, prospection, periodRange, q]);
+  }, [metadataReady, objectType, segmentId, owner, prospection, periodRange, q]);
 
   const isCompany = objectType === "0-2";
   const activeLists = lists.filter(l => l.objectTypeId === objectType);
@@ -355,17 +337,10 @@ export function ProspectionView() {
                 {owners.map(o => <SelectItem key={o.id} value={o.id}>{[o.firstName, o.lastName].filter(Boolean).join(" ") || o.email || o.id}</SelectItem>)}
               </SelectContent>
             </Select>
-            {!isCompany ? <Select value={callStatus === "" ? "all" : callStatus} onValueChange={v => { setAfter(undefined); setCallStatus(v === "all" ? "" : v); }}>
-              <SelectTrigger className="h-9 w-[150px]"><SelectValue placeholder="Statut appel" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Statut appel</SelectItem>
-                {CALL_OPTIONS.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
-              </SelectContent>
-            </Select> : null}
             {!isCompany ? <Select value={prospection === "" ? "all" : prospection} onValueChange={v => { setAfter(undefined); setProspection(v === "all" ? "" : v); }}>
-              <SelectTrigger className="h-9 w-[150px]"><SelectValue placeholder="Prospection" /></SelectTrigger>
+              <SelectTrigger className="h-9 w-[150px]"><SelectValue placeholder="Statut de prospection" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Prospection</SelectItem>
+                <SelectItem value="all">Tous les statuts</SelectItem>
                 {PROSPECTION_OPTIONS.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
               </SelectContent>
             </Select> : null}
@@ -456,30 +431,27 @@ export function ProspectionView() {
           </div> : null}
 
           {view === "table" && !isCompany ? <div className="min-h-0 flex-1 overflow-auto border-t border-border minari-scrollbar">
-            <Table className="min-w-[1220px]">
+            <Table className="min-w-[1040px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-12 px-4"><input type="checkbox" className="accent-violet-400" /></TableHead>
-                  <TableHead className="px-3">Call status</TableHead>
                   <TableHead className="px-3">Calls</TableHead>
                   <TableHead className="px-3">Name</TableHead>
                   <TableHead className="px-3">Title</TableHead>
                   <TableHead className="px-3">Company</TableHead>
                   <TableHead className="px-3">Last call</TableHead>
-                  <TableHead className="px-3">Status</TableHead>
                   <TableHead className="px-3">Phone number</TableHead>
                   <TableHead className="px-3">Statut prospection</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? <TableRow className="hover:bg-transparent"><TableCell colSpan={10} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-violet-300" /></TableCell></TableRow>
+                {loading ? <TableRow className="hover:bg-transparent"><TableCell colSpan={8} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-violet-300" /></TableCell></TableRow>
                   : contacts.map(c => {
                       const p = c.properties;
                       const full = [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Sans nom";
                       return (
                         <TableRow key={c.id} className="group">
                           <TableCell className="px-4"><input type="checkbox" className="accent-violet-400" /></TableCell>
-                          <TableCell className="px-3"><Badge variant="outline" className={`font-medium ${callBadge(p.statut_de_lappel)}`}>{p.statut_de_lappel || "Pending"}</Badge></TableCell>
                           <TableCell className="px-3"><span className="inline-flex items-center gap-2 text-muted-foreground"><Phone size={14} /> {Number(p.minari_call_count || 0)}</span></TableCell>
                           <TableCell className="px-3">
                             <Button variant="ghost" size="sm" className="h-8 gap-2 rounded-md border border-border bg-card pl-1 pr-3 font-medium hover:bg-muted"
@@ -491,7 +463,6 @@ export function ProspectionView() {
                           <TableCell className="px-3 text-muted-foreground">{p.jobtitle || "—"}</TableCell>
                           <TableCell className="px-3 font-medium text-foreground">{p.company || "—"}</TableCell>
                           <TableCell className="px-3 font-mono text-xs text-muted-foreground">{formatDate(p.notes_last_contacted || p.hs_last_sales_activity_timestamp)}</TableCell>
-                          <TableCell className="px-3 text-muted-foreground">{p.resultat_prospection || "—"}</TableCell>
                           <TableCell className="px-3">
                             <a href={p.phone ? `tel:${p.phone}` : "#"}
                               className="phone-chip font-mono text-xs">
@@ -502,7 +473,7 @@ export function ProspectionView() {
                         </TableRow>
                       );
                     })}
-                {!loading && !contacts.length ? <TableRow className="hover:bg-transparent"><TableCell colSpan={10} className="h-48 text-center text-muted-foreground">Aucun contact pour ces filtres.</TableCell></TableRow> : null}
+                {!loading && !contacts.length ? <TableRow className="hover:bg-transparent"><TableCell colSpan={8} className="h-48 text-center text-muted-foreground">Aucun contact pour ces filtres.</TableCell></TableRow> : null}
               </TableBody>
             </Table>
 

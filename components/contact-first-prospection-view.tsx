@@ -63,29 +63,6 @@ type SessionMeta = { id: string; name: string; remaining: number; totalItems: nu
 
 const CALL_RECOMMENDATIONS_SEGMENT = "__database_call_recommendations__";
 const EMPTY_SUMMARY: RecommendationSummary = { ACTIONABLE: 0, OPPORTUNITY: 0, SNOOZED: 0, EXCLUDED: 0 };
-const CALL_LABELS: Record<string, string> = {
-  interesse: "Intéressé",
-  "intéressé": "Intéressé",
-  "intéressé mais": "Intéressé mais",
-  "a rappeler": "À rappeler",
-  "à rappeler": "À rappeler",
-  nrp: "NRP",
-  occupe: "Occupé",
-  "occupé": "Occupé",
-  "hors cible": "Hors cible",
-  "pas intéressé": "Pas intéressé",
-  "pas interesse": "Pas intéressé",
-  "en attente décision": "En attente décision",
-  "en attente decision": "En attente décision",
-  "numéro invalide": "Numéro invalide",
-  "numero invalide": "Numéro invalide",
-};
-
-function callLabel(value?: string | null) {
-  if (!value) return "—";
-  return CALL_LABELS[String(value).trim().toLowerCase()] || value;
-}
-
 function reminderValue(properties: Record<string, string | null | undefined>) {
   return properties.date_prochaine_relance
     || properties.qualification_next_action_at
@@ -489,7 +466,6 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
                     <TableHead>Entreprise</TableHead>
                     <TableHead>Localisation</TableHead>
                     <TableHead>Statut prospection</TableHead>
-                    <TableHead>Dernier appel</TableHead>
                     <TableHead>Téléphone</TableHead>
                     <TableHead>Prochaine relance</TableHead>
                     <TableHead>Commercial</TableHead>
@@ -498,7 +474,7 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? <TableRow><TableCell colSpan={isRecommendationSegment ? 11 : 10} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filteredContacts.map(contact => {
+                  {loading ? <TableRow><TableCell colSpan={isRecommendationSegment ? 10 : 9} className="h-64 text-center"><Loader2 className="mx-auto animate-spin text-primary" /></TableCell></TableRow> : filteredContacts.map(contact => {
                     const p = contact.properties;
                     const decision = isRecommendationSegment ? databaseDecision(contact) : getContactProspectionDecision(contact);
                     const fullName = [p.firstname, p.lastname].filter(Boolean).join(" ") || p.email || "Sans nom";
@@ -527,7 +503,6 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
                         <TableCell>{p.company || "—"}</TableCell>
                         <TableCell className="text-xs text-muted-foreground"><span className="inline-flex items-center gap-1.5"><MapPin size={12} />{contactLocation(p)}</span></TableCell>
                         <TableCell><Badge variant="outline">{p.statut_prospection || "À prospecter"}</Badge></TableCell>
-                        <TableCell>{callLabel(p.statut_de_lappel)}</TableCell>
                         <TableCell>{p.phone || p.mobilephone ? <a href={`tel:${p.phone || p.mobilephone}`} onClick={event => event.stopPropagation()} className="phone-chip font-mono text-xs"><Phone size={12} />{p.phone || p.mobilephone}</a> : "—"}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{reminderValue(p) ? formatDate(reminderValue(p)) : "—"}</TableCell>
                         <TableCell>{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "—" : "—"}</TableCell>
@@ -551,7 +526,7 @@ export function ContactFirstProspectionView({ autoStart = false }: { autoStart?:
                       </TableRow>
                     );
                   })}
-                  {!loading && !filteredContacts.length ? <TableRow><TableCell colSpan={isRecommendationSegment ? 11 : 10} className="h-40 text-center text-muted-foreground">{activeSessionId ? "Aucun contact dans un créneau d’appel actuellement. Les contacts hors horaires restent dans le CRM et réapparaissent automatiquement dès que leur heure locale le permet." : "Aucun contact pour ces filtres."}</TableCell></TableRow> : null}
+                  {!loading && !filteredContacts.length ? <TableRow><TableCell colSpan={isRecommendationSegment ? 10 : 9} className="h-40 text-center text-muted-foreground">{activeSessionId ? "Aucun contact dans un créneau d’appel actuellement. Les contacts hors horaires restent dans le CRM et réapparaissent automatiquement dès que leur heure locale le permet." : "Aucun contact pour ces filtres."}</TableCell></TableRow> : null}
                 </TableBody>
               </Table>
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Briefcase, Check, FileText, Globe, Loader2, MapPin, Pencil, PhoneCall, SlidersHorizontal, X } from "lucide-react";
+import { Briefcase, Check, FileText, Globe, Loader2, MapPin, Pencil, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "sonner";
 import { CompanyLaterFollowupDialog, type LaterFollowupPayload } from "@/components/company-later-followup-dialog";
 import { CRMProspectionStatusEditor } from "@/components/crm-prospection-status-editor";
@@ -43,7 +43,6 @@ function fieldSpecs(kind: Kind): FieldSpec[] {
   const common: FieldSpec[] = [
     { key: "appreciation", property: "ce_quil_apprecie_chez_gando", fallbackLabel: "Ce qu’il apprécie chez Gando", icon: FileText },
     { key: "objections", property: "objections__retours", fallbackLabel: "Objections / Retours", icon: FileText },
-    { key: "call", property: "statut_de_lappel", fallbackLabel: "Statut de l’appel", icon: PhoneCall },
     { key: "zip", property: "zip", fallbackLabel: "Code postal", icon: MapPin },
     { key: "campaign", property: "campagne_dacquisition", fallbackLabel: "Campagne d’acquisition", icon: Briefcase },
     { key: "fleet", property: company ? "taille_flotte" : "taille_de_flo", fallbackProperty: "taille_de_flo", fallbackLabel: "Taille de flotte", icon: Briefcase },
@@ -88,9 +87,9 @@ function companyStatusProperties(value: string) {
     "À contacter": { statut_prospection: value, hs_lead_status: "OPEN", lifecyclestage: "" },
     "Tentative": { statut_prospection: value, hs_lead_status: "ATTEMPTED_TO_CONTACT", lifecyclestage: "" },
     "Contact établi": { statut_prospection: value, hs_lead_status: "CONNECTED", lifecyclestage: "" },
-    "À relancer": { statut_prospection: value, hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_rappeler", lifecyclestage: "" },
-    "Ultérieur": { statut_prospection: value, hs_lead_status: "BAD_TIMING", statut_de_lappel: "a_une_date_ulterieure", lifecyclestage: "" },
-    "Démo prévue": { statut_prospection: value, hs_lead_status: "CONNECTED", statut_de_lappel: "interesse", lifecyclestage: "" },
+    "À relancer": { statut_prospection: value, hs_lead_status: "BAD_TIMING", lifecyclestage: "" },
+    "Ultérieur": { statut_prospection: value, hs_lead_status: "BAD_TIMING", lifecyclestage: "" },
+    "Démo prévue": { statut_prospection: value, hs_lead_status: "CONNECTED", lifecyclestage: "" },
     "Opportunité": { statut_prospection: value, hs_lead_status: "OPEN_DEAL", lifecyclestage: "opportunity" },
     "Gagné": { statut_prospection: value, hs_lead_status: "OPEN_DEAL", lifecyclestage: "customer" },
     "Perdu": { statut_prospection: value, hs_lead_status: "UNQUALIFIED", lifecyclestage: "" },
@@ -377,7 +376,6 @@ export function QualificationProperties({ kind, properties, fallbackProperties =
         };
         if (pendingFollowupStatus === "À recycler") {
           patchProperties.date_recyclage = payload.reminderAt;
-          patchProperties.statut_de_lappel = "a_une_date_ulterieure";
         }
 
         const response = await fetch(`/api/contacts/${selfId}`, {

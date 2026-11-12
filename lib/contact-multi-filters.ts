@@ -7,7 +7,6 @@ export type ContactFilterKey =
   | "prospectionStatus"
   | "company"
   | "priority"
-  | "callStatus"
   | "fleetSize";
 
 export type ContactFilters = Partial<Record<ContactFilterKey, string[]>>;
@@ -21,7 +20,6 @@ export const CONTACT_FILTER_LABELS: Record<ContactFilterKey, string> = {
   prospectionStatus: "Statut prospection",
   company: "Entreprise",
   priority: "Priorité",
-  callStatus: "Statut d’appel",
   fleetSize: "Taille de flotte",
 };
 
@@ -53,8 +51,6 @@ function propertyValues(properties: Record<string, string | null | undefined>, k
       return [properties.company, properties.hs_parent_company_name];
     case "priority":
       return [properties.db_call_bucket];
-    case "callStatus":
-      return [properties.statut_de_lappel];
     case "fleetSize":
       return [properties.taille_de_flo, properties.taille_flotte];
     default:

@@ -108,7 +108,7 @@ export function ProspectsView() {
                       </td>
                       <td className="max-w-[240px] truncate px-4 py-3.5 text-muted-foreground">{p.email || "—"}</td>
                       <td className="px-4 py-3.5 text-muted-foreground">{[p.city, p.state, p.country].filter(Boolean).join(" · ") || "—"}</td>
-                      <td className="px-4 py-3.5"><Badge variant="outline" className="rounded-md border-border bg-muted text-foreground">{p.statut_prospection || p.statut_de_lappel || "À qualifier"}</Badge></td>
+                      <td className="px-4 py-3.5"><Badge variant="outline" className="rounded-md border-border bg-muted text-foreground">{p.statut_prospection || "À qualifier"}</Badge></td>
                     </tr>
                   );
                 })}

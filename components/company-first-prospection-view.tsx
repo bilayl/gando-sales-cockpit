@@ -34,23 +34,6 @@ import { isWithinFrenchCallWindow } from "@/lib/call-timing";
 
 const STAGE_LABELS = Object.fromEntries(COMPANY_PIPELINE.map(column => [column.value, column.label]));
 
-function callLabel(value?: string | null) {
-  const labels: Record<string, string> = {
-    interesse: "Intéressé",
-    interesse_mais: "Intéressé mais",
-    a_une_date_ulterieure: "À une date ultérieure",
-    a_rappeler: "À rappeler",
-    pas_interesse: "Pas intéressé",
-    occupe: "Occupé",
-    nrp: "NRP",
-    hors_cible: "Hors cible",
-    en_attente_decision: "En attente décision",
-    numero_invalide: "Numéro invalide",
-    autres: "Autres",
-  };
-  return value ? labels[value] || value : "—";
-}
-
 function companyLocation(properties: Record<string, string | null | undefined>) {
   return [properties.zip || properties.postal_code, properties.city, properties.state, properties.country].filter(Boolean).join(" · ") || "—";
 }
@@ -320,9 +303,8 @@ export function CompanyFirstProspectionView() {
                   <TableHead className="hidden w-[90px] 2xl:table-cell">Priorité</TableHead>
                   <TableHead className="hidden w-[190px] xl:table-cell">Prochaine action</TableHead>
                   <TableHead>Entreprise</TableHead>
-                  <TableHead className="hidden 2xl:table-cell">Dernier appel</TableHead>
                   <TableHead className="hidden 2xl:table-cell">Localisation</TableHead>
-                  <TableHead className="w-[120px]">Statut</TableHead>
+                  <TableHead className="w-[150px]">Statut prospection</TableHead>
                   <TableHead className="hidden w-[150px] lg:table-cell">Rappel prévu</TableHead>
                   <TableHead className="hidden 2xl:table-cell">Contacts</TableHead>
                   <TableHead className="hidden 2xl:table-cell">Deals</TableHead>
@@ -331,7 +313,7 @@ export function CompanyFirstProspectionView() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={10} className="h-52 text-center"><Loader2 className="mx-auto animate-spin text-muted-foreground" /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="h-52 text-center"><Loader2 className="mx-auto animate-spin text-muted-foreground" /></TableCell></TableRow>
                 ) : filtered.map(company => {
                   const p = company.properties;
                   const stage = deriveCompanyStage(company);
@@ -351,7 +333,6 @@ export function CompanyFirstProspectionView() {
                           <div className="min-w-0"><div className="truncate font-medium">{p.name || "Sans nom"}</div><div className="truncate text-[11px] text-muted-foreground">{p.domain || "—"}</div></div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden 2xl:table-cell">{callLabel(p.statut_de_lappel)}</TableCell>
                       <TableCell className="hidden text-xs text-muted-foreground 2xl:table-cell"><span className="inline-flex items-center gap-1.5"><MapPin size={12} />{companyLocation(p)}</span></TableCell>
                       <TableCell><Badge variant="outline">{STAGE_LABELS[stage]}</Badge></TableCell>
                       <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">{stage === "LATER" || stage === "FOLLOW_UP" ? formatDate(p.qualification_next_action_at || p.date_de_rappel || p.notes_next_activity_date) : "—"}</TableCell>
@@ -362,7 +343,7 @@ export function CompanyFirstProspectionView() {
                   );
                 })}
                 {!loading && !filtered.length ? (
-                  <TableRow><TableCell colSpan={10} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="h-40 text-center text-muted-foreground">Aucune entreprise pour ces filtres.</TableCell></TableRow>
                 ) : null}
               </TableBody>
             </Table>

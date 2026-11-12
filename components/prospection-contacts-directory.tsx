@@ -20,27 +20,10 @@ import { formatDate, initials } from "@/lib/utils";
 
 type Contact = { id: string; properties: Record<string, string | null | undefined> };
 
-const FOLLOW_UP_STATUSES = new Set(["a_rappeler", "a_une_date_ulterieure", "interesse_mais", "en_attente_decision"]);
+const FOLLOW_UP_STATUSES = new Set(["À recycler", "À rappeler"]);
 
 function contactName(properties: Contact["properties"]) {
   return [properties.firstname, properties.lastname].filter(Boolean).join(" ") || properties.email || properties.phone || properties.mobilephone || "Contact sans nom";
-}
-
-function callStatus(value?: string | null) {
-  const labels: Record<string, string> = {
-    interesse: "Intéressé",
-    interesse_mais: "Intéressé mais",
-    a_une_date_ulterieure: "À une date ultérieure",
-    a_rappeler: "À rappeler",
-    pas_interesse: "Pas intéressé",
-    occupe: "Occupé",
-    nrp: "NRP",
-    hors_cible: "Hors cible",
-    en_attente_decision: "En attente décision",
-    numero_invalide: "Numéro invalide",
-    autres: "Autres",
-  };
-  return value ? labels[value] || value : "—";
 }
 
 function contactLocation(properties: Contact["properties"]) {
@@ -53,6 +36,12 @@ function hasCompany(contact: Contact) {
 
 function hasPhone(contact: Contact) {
   return Boolean((contact.properties.phone || contact.properties.mobilephone)?.trim());
+}
+
+function needsFollowUp(contact: Contact) {
+  const p = contact.properties;
+  return FOLLOW_UP_STATUSES.has(p.statut_prospection || "")
+    || Boolean(p.date_prochaine_relance || p.date_recyclage || p.date_de_rappel);
 }
 
 const directoryFilters: Array<{
@@ -78,8 +67,8 @@ export function ProspectionContactsDirectory() {
     setSegmentId,
     ownerFilter,
     setOwnerFilter,
-    callFilter,
-    setCallFilter,
+    prospectionFilter,
+    setProspectionFilter,
     directoryFilter,
     setDirectoryFilter,
   } = useContactDirectoryParams();
@@ -149,14 +138,14 @@ export function ProspectionContactsDirectory() {
         .toLocaleLowerCase("fr-FR");
       if (needle && !haystack.includes(needle)) return false;
       if (ownerFilter && p.hubspot_owner_id !== ownerFilter) return false;
-      if (callFilter && p.statut_de_lappel !== callFilter) return false;
+      if (prospectionFilter && p.statut_prospection !== prospectionFilter) return false;
       return true;
     });
-  }, [contacts, query, ownerFilter, callFilter]);
+  }, [contacts, query, ownerFilter, prospectionFilter]);
 
   const counts = useMemo(() => ({
     CALLABLE: baseFiltered.filter(hasPhone).length,
-    FOLLOW_UP: baseFiltered.filter(contact => FOLLOW_UP_STATUSES.has(contact.properties.statut_de_lappel || "")).length,
+    FOLLOW_UP: baseFiltered.filter(needsFollowUp).length,
     LINKED: baseFiltered.filter(hasCompany).length,
     UNLINKED: baseFiltered.filter(contact => !hasCompany(contact)).length,
     ALL: baseFiltered.length,
@@ -164,7 +153,7 @@ export function ProspectionContactsDirectory() {
 
   const filtered = useMemo(() => baseFiltered.filter(contact => {
     if (directoryFilter === "CALLABLE") return hasPhone(contact);
-    if (directoryFilter === "FOLLOW_UP") return FOLLOW_UP_STATUSES.has(contact.properties.statut_de_lappel || "");
+    if (directoryFilter === "FOLLOW_UP") return needsFollowUp(contact);
     if (directoryFilter === "LINKED") return hasCompany(contact);
     if (directoryFilter === "UNLINKED") return !hasCompany(contact);
     return true;
@@ -257,21 +246,15 @@ export function ProspectionContactsDirectory() {
             </SelectContent>
           </Select>
 
-          <Select value={callFilter || "__all__"} onValueChange={value => void setCallFilter(value === "__all__" ? "" : value)}>
-            <SelectTrigger className="h-8 w-full border-0 bg-muted/45 shadow-none sm:w-[165px]"><SelectValue placeholder="Dernier appel" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Tous les résultats</SelectItem>
-              <SelectItem value="interesse">Intéressé</SelectItem>
-              <SelectItem value="interesse_mais">Intéressé mais</SelectItem>
-              <SelectItem value="a_rappeler">À rappeler</SelectItem>
-              <SelectItem value="a_une_date_ulterieure">À une date ultérieure</SelectItem>
-              <SelectItem value="en_attente_decision">En attente décision</SelectItem>
-              <SelectItem value="nrp">NRP</SelectItem>
-              <SelectItem value="occupe">Occupé</SelectItem>
-              <SelectItem value="pas_interesse">Pas intéressé</SelectItem>
-              <SelectItem value="hors_cible">Hors cible</SelectItem>
-            </SelectContent>
-          </Select>
+          <Select value={prospectionFilter || "__all__"} onValueChange={value => void setProspectionFilter(value === "__all__" ? "" : value)}>
+             <SelectTrigger className="h-8 w-full border-0 bg-muted/45 shadow-none sm:w-[185px]"><SelectValue placeholder="Statut de prospection" /></SelectTrigger>
+             <SelectContent>
+               <SelectItem value="__all__">Tous les statuts</SelectItem>
+               {["À prospecter", "En prospection", "Conversation", "RDV booké", "À recycler", "Non qualifié", "Pas intéressé", "Perdu", "Gagné"].map(status => (
+                 <SelectItem key={status} value={status}>{status}</SelectItem>
+               ))}
+             </SelectContent>
+           </Select>
 
           <div className="relative min-w-[180px] flex-1 sm:max-w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -307,7 +290,7 @@ export function ProspectionContactsDirectory() {
                 <TableHead className="hidden 2xl:table-cell">Fonction</TableHead>
                 <TableHead className="hidden lg:table-cell">Téléphone</TableHead>
                 <TableHead className="hidden 2xl:table-cell">Email</TableHead>
-                <TableHead className="w-[140px]">Dernier appel</TableHead>
+                <TableHead className="w-[160px]">Statut prospection</TableHead>
                 <TableHead className="hidden w-[145px] lg:table-cell">Rappel prévu</TableHead>
                 <TableHead className="hidden 2xl:table-cell">Localisation</TableHead>
                 <TableHead className="hidden xl:table-cell">Commercial</TableHead>
@@ -333,7 +316,7 @@ export function ProspectionContactsDirectory() {
                     <TableCell className="hidden text-sm text-muted-foreground 2xl:table-cell">{p.jobtitle || "—"}</TableCell>
                     <TableCell className="hidden lg:table-cell">{phone ? <a href={`tel:${phone}`} onClick={event => event.stopPropagation()} className="inline-flex items-center gap-1.5 text-sm hover:text-primary"><Phone size={13} /> {phone}</a> : "—"}</TableCell>
                     <TableCell className="hidden 2xl:table-cell">{p.email ? <a href={`mailto:${p.email}`} onClick={event => event.stopPropagation()} className="inline-flex items-center gap-1.5 text-sm hover:text-primary"><Mail size={13} /> {p.email}</a> : "—"}</TableCell>
-                    <TableCell><Badge variant="outline">{callStatus(p.statut_de_lappel)}</Badge></TableCell>
+                    <TableCell><Badge variant="outline">{p.statut_prospection || "À qualifier"}</Badge></TableCell>
                     <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">{nextFollowup ? formatDate(nextFollowup) : "—"}</TableCell>
                     <TableCell className="hidden text-xs text-muted-foreground 2xl:table-cell"><span className="inline-flex items-center gap-1.5"><MapPin size={12} />{contactLocation(p)}</span></TableCell>
                     <TableCell className="hidden text-xs text-muted-foreground xl:table-cell">{p.hubspot_owner_id ? ownerNames[p.hubspot_owner_id] || "Commercial" : "Non assigné"}</TableCell>
