@@ -77,17 +77,6 @@ export function getCompanyProspectionDecision(
     return { bucket: "EXCLUDED", priority: 98, priorityLabel: "Pas intéressé", reason: "Prospect non intéressé" };
   }
 
-  if (stage === "LOST" || containsAny(statusText, HARD_EXCLUSION_TERMS)) {
-    const reason = containsAny(statusText, ["pas interesse", "ne souhaite pas donner suite"])
-      ? "Pas intéressé / ne souhaite pas donner suite"
-      : containsAny(statusText, ["hors cible", "non qualifie"])
-        ? "Hors cible / non qualifié"
-        : containsAny(statusText, ["numero invalide"])
-          ? "Numéro invalide"
-          : "Compte perdu / clôturé";
-    return { bucket: "EXCLUDED", priority: 99, priorityLabel: "Exclu", reason };
-  }
-
   // A missed meeting is an urgent SDR callback, never a dormant lead. Even
   // when the HubSpot task is due slightly later today, keep it in Prospection.
   if (stage === "FOLLOW_UP" && p.qualification_source === "meeting_no_show") {
@@ -97,6 +86,17 @@ export function getCompanyProspectionDecision(
       priorityLabel: "P1 · RDV manqué",
       reason: p.qualification_reason || "Prospect absent au rendez-vous — le SDR doit rappeler pour reprogrammer",
     };
+  }
+
+  if (stage === "LOST" || containsAny(statusText, HARD_EXCLUSION_TERMS)) {
+    const reason = containsAny(statusText, ["pas interesse", "ne souhaite pas donner suite"])
+      ? "Pas intéressé / ne souhaite pas donner suite"
+      : containsAny(statusText, ["hors cible", "non qualifie"])
+        ? "Hors cible / non qualifié"
+        : containsAny(statusText, ["numero invalide"])
+          ? "Numéro invalide"
+          : "Compte perdu / clôturé";
+    return { bucket: "EXCLUDED", priority: 99, priorityLabel: "Exclu", reason };
   }
 
   if (stage === "DEMO_SCHEDULED") {
