@@ -4,6 +4,7 @@ import { hubspotJson } from "@/lib/hubspot";
 import { getBrevoMeetingScope, isBrevoMeeting, isGandoPresentationMeeting } from "@/lib/hubspot/brevo";
 import { createTask } from "@/lib/hubspot/tasks";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { resolveCockpitTaskAssignee, saveCockpitTaskAssignee, type CockpitTaskAssignee } from "@/lib/cockpit-task-assignment";
 import { getAllGoogleCalendarEvents, isGoogleConfigured, type GoogleCalendarEvent } from "@/lib/google";
 import { applyGoogleOutcomes, GCAL_SYNC_SOURCE, saveGoogleOutcome, type GoogleMeetingStatus } from "@/lib/gcal-status";
 
@@ -778,6 +779,32 @@ async function reactivateNoShowProspection(meeting: EnrichedMeeting, warnings: s
   }
 }
 
+async function resolveNoShowSdr(meeting: EnrichedMeeting, warnings: string[]): Promise<CockpitTaskAssignee | null> {
+  const contactIds = unique(meeting.associations.contacts.map(contact => contact.id));
+  const companyIds = unique(meeting.associations.companies.map(company => company.id));
+  try {
+    const supabase = getSupabaseAdmin();
+    let email: string | null = null;
+    // The Cockpit's current SDR assignment model is contact-first.
+    if(contactIds.length){
+      const {data,error}=await supabase.from("cockpit_contact_assignments")
+        .select("contact_id,assignee_cockpit_email").in("contact_id",contactIds);
+      if(error)throw error;
+      email=(data||[]).find(row=>row.assignee_cockpit_email)?.assignee_cockpit_email||null;
+    }
+    if(!email && companyIds.length){
+      const {data,error}=await supabase.from("cockpit_company_assignments")
+        .select("company_id,assignee_cockpit_email").in("company_id",companyIds);
+      if(error)throw error;
+      email=(data||[]).find(row=>row.assignee_cockpit_email)?.assignee_cockpit_email||null;
+    }
+    return email ? await resolveCockpitTaskAssignee(email) : null;
+  }catch(error){
+    warnings.push(`SDR du contact introuvable dans les attributions Cockpit : tâche confiée au responsable CRM. ${error instanceof Error ? error.message : ""}`);
+    return null;
+  }
+}
+
 async function createNextAction(meeting: EnrichedMeeting, input: MeetingActionInput, warnings: string[], options: { callTask?: boolean } = {}) {
   const nextAction = options.callTask && !input.nextAction?.trim() ? "Appeler pour replacer le rendez-vous" : requiredText(input.nextAction, "Prochaine action");
   const dueAt = options.callTask
@@ -787,22 +814,27 @@ async function createNextAction(meeting: EnrichedMeeting, input: MeetingActionIn
   const contact = meeting.associations.contact?.properties;
   const contactName = [contact?.firstname, contact?.lastname].filter(Boolean).join(" ");
   const taskType = options.callTask ? "CALL" : /appel|call/i.test(nextAction) ? "CALL" : /mail|email/i.test(nextAction) ? "EMAIL" : "TODO";
+  const sdr = options.callTask ? await resolveNoShowSdr(meeting,warnings) : null;
+  const ownerId = options.callTask
+    ? (sdr?.hubspotOwnerId || input.taskOwnerId || meeting.associations.company?.properties.hubspot_owner_id || meeting.associations.contact?.properties.hubspot_owner_id || meeting.properties.hubspot_owner_id)
+    : meeting.properties.hubspot_owner_id;
 
-  await createTask({
+  const createdTask = await createTask({
     hs_task_subject: `${nextAction} — ${companyName}${contactName ? ` — ${contactName}` : ""}`,
     hs_task_body: `Action créée depuis le rendez-vous « ${meeting.properties.hs_meeting_title || "Sans titre"} » dans Gando Sales Cockpit.${options.callTask ? " Prospect absent : le SDR doit rappeler pour proposer un nouveau créneau. Ce n’est pas un refus commercial." : ""}`,
     hs_timestamp: dueAt.toISOString(),
     hs_task_status: "NOT_STARTED",
     hs_task_priority: "HIGH",
     hs_task_type: taskType,
-    ...((options.callTask
-      ? (input.taskOwnerId || meeting.associations.company?.properties.hubspot_owner_id || meeting.associations.contact?.properties.hubspot_owner_id || meeting.properties.hubspot_owner_id)
-      : meeting.properties.hubspot_owner_id)
-      ? { hubspot_owner_id: (options.callTask
-          ? (input.taskOwnerId || meeting.associations.company?.properties.hubspot_owner_id || meeting.associations.contact?.properties.hubspot_owner_id || meeting.properties.hubspot_owner_id)
-          : meeting.properties.hubspot_owner_id)! }
-      : {}),
+    ...(ownerId ? { hubspot_owner_id: ownerId } : {}),
   }, taskAssociations(meeting));
+  if(sdr){
+    try {
+      await saveCockpitTaskAssignee(String(createdTask.id),sdr.email);
+    }catch(error){
+      warnings.push(`Tâche créée, mais attribution visible dans Cockpit non synchronisée avec ${sdr.email}: ${error instanceof Error ? error.message : "erreur"}.`);
+    }
+  }
 
   for (const deal of meeting.associations.deals) {
     try {
