@@ -188,7 +188,7 @@ export function CallStatsDashboard() {
             <button type="button" aria-pressed={breakdown==="phone"} disabled={source==="allo"&&data?.canCompareTeam===false} onClick={()=>setGrouping("phone")} title={source==="allo"&&data?.canCompareTeam===false?"Comparaison réservée aux administrateurs":undefined} className={"rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-35 "+(breakdown==="phone"?"bg-card text-foreground shadow-sm":"text-muted-foreground")}>By Phone</button>
           </div>
           <select aria-label={breakdown==="user"?"Filtrer par commercial":"Filtrer par ligne"} value={selected} onChange={e=>setSelected(e.target.value)} className="h-9 min-w-32 max-w-56 rounded-lg border border-border bg-card px-2 text-xs font-medium">
-            <option value="">Toute l’équipe</option>
+            <option value="">{data?.canCompareTeam===false?"Mes appels":"Toute l’équipe"}</option>
             {options.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
           <button type="button" onClick={()=>setRefresh(v=>v+1)} disabled={loading} aria-label="Actualiser les statistiques" className="grid h-9 w-9 place-items-center rounded-lg border border-border hover:bg-muted disabled:opacity-40"><RefreshCw size={14} className={loading?"animate-spin":""}/></button>
@@ -209,7 +209,7 @@ export function CallStatsDashboard() {
         {view==="power" ? <div className="rounded-2xl border border-border bg-card p-6"><h2 className="text-base font-semibold">Power Dialer</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Les sources disponibles ne distinguent pas encore de manière fiable l’historique des appels lancés spécifiquement par Power Dialer. Ce rapport reste volontairement vide pour éviter des statistiques trompeuses.</p><a href="https://web.withallo.com/" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">Ouvrir les rapports Allo <ArrowUpRight size={13}/></a></div> :
         <>
           <section>
-            <h2 className="mb-3 text-base font-semibold">Résumé de l’équipe</h2>
+            <h2 className="mb-3 text-base font-semibold">{data.canCompareTeam?"Résumé de l’équipe":"Mes appels"}</h2>
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               {METRICS.map(item=><MetricCard key={item.key} label={item.label} metricKey={item.key} metricValue={data.metrics[item.key]}/>)}
             </div>
