@@ -811,6 +811,17 @@ export async function processMeetingAction(id: string, input: MeetingActionInput
   } catch {
     meeting = null;
   }
+  if (meeting && input.source?.associations) {
+    // A manual company/contact association made in Rendez-vous must also be
+    // visible to the no-show reactivation and task-creation workflow.
+    const supplied = input.source.associations;
+    if (!meeting.associations.company && supplied.company) meeting.associations.company = supplied.company;
+    if (!meeting.associations.contact && supplied.contact) meeting.associations.contact = supplied.contact;
+    const merge = <T extends {id:string}>(left:T[],right:T[]) =>
+      [...new Map([...left,...right].map(item=>[item.id,item])).values()];
+    meeting.associations.companies = merge(meeting.associations.companies,supplied.companies || (supplied.company?[supplied.company]:[]));
+    meeting.associations.contacts = merge(meeting.associations.contacts,supplied.contacts || (supplied.contact?[supplied.contact]:[]));
+  }
   if (!meeting && input.source) {
     googleOnly = true;
     const source = input.source;
