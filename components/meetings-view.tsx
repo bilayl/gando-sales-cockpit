@@ -438,7 +438,7 @@ setMeetings(data.results || []);
     setError("");
     setMessage("");
     setNextAction(action === "no_show" ? "Appeler pour replacer le rendez-vous" : action === "cancel" ? "Recontacter pour proposer un nouveau créneau" : "Envoyer le compte-rendu et confirmer la prochaine étape");
-    setDueAt(toDateTimeLocal());
+    setDueAt(toDateTimeLocal(action === "no_show" ? new Date(Date.now() + 5 * 60_000) : undefined));
     setNewStart(toDateTimeLocal());
     setMessage("");
   }
@@ -458,7 +458,16 @@ setMeetings(data.results || []);
             qualified,
             nextAction,
             dueAt: new Date(dueAt).toISOString(),
-            ...(actionDialog.meeting.derived.isGoogle ? { source: actionDialog.meeting } : {}),
+            source: {
+              ...actionDialog.meeting,
+              associations: {
+                ...actionDialog.meeting.associations,
+                company: actionDialog.meeting.associations.company || manualCompanies[actionDialog.meeting.id] || null,
+                companies: actionDialog.meeting.associations.companies.length
+                  ? actionDialog.meeting.associations.companies
+                  : manualCompanies[actionDialog.meeting.id] ? [manualCompanies[actionDialog.meeting.id]] : [],
+              },
+            },
           };
       const response = await fetch(`/api/meetings/${actionDialog.meeting.id}`, {
         method: "POST",
@@ -751,7 +760,7 @@ setMeetings(data.results || []);
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <Label>Rendez-vous non honoré (no-show)</Label>
-                        <Select value={noShow ? "true" : "false"} onValueChange={value => { const checked = value === "true"; setNoShow(checked); if (checked) setNextAction("Appeler pour replacer le rendez-vous"); }}>
+                        <Select value={noShow ? "true" : "false"} onValueChange={value => { const checked = value === "true"; setNoShow(checked); if (checked) { setNextAction("Appeler pour replacer le rendez-vous"); setDueAt(toDateTimeLocal(new Date(Date.now() + 5 * 60_000))); } }}>
                           <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="false">Non</SelectItem>
@@ -760,7 +769,7 @@ setMeetings(data.results || []);
                         </Select>
                       </div>
                       {noShow ? (
-                        <p className="text-xs text-muted-foreground">Le rendez-vous sera marqué comme no-show : il comptera dans le taux d’absence, restera visible pour une replanification, et une tâche d’appel téléphonique « Appeler pour replacer le rendez-vous » sera créée (échéance : 3 jours).</p>
+                        <p className="text-xs text-muted-foreground">Le prospect sera marqué absent. Une tâche prioritaire de rappel sera créée pour le SDR aujourd’hui ; l’entreprise reviendra dans Prospection avec le motif « absent au rendez-vous ». Le rendez-vous restera à traiter dans Actions.</p>
                       ) : (
                         <div className="grid gap-4 sm:grid-cols-2">
                           <div className="space-y-2">
@@ -794,7 +803,7 @@ setMeetings(data.results || []);
                         <Label htmlFor="dueAt">{isNoShowFlow ? "Date d’échéance (facultatif)" : "Date d’échéance"}</Label>
                         <Input id="dueAt" type="datetime-local" value={dueAt} onChange={event => setDueAt(event.target.value)} />
                       </div>
-                      {isNoShowFlow ? <p className="text-xs leading-5 text-muted-foreground">Une tâche d’appel téléphonique « Appeler pour replacer le rendez-vous » sera créée automatiquement (échéance par défaut : 3 jours).</p> : <p className="text-xs leading-5 text-muted-foreground">Une tâche HubSpot sera créée et associée au contact, à la société et au deal liés au rendez-vous.</p>}
+                      {isNoShowFlow ? <p className="text-xs leading-5 text-muted-foreground">La relance sera créée aujourd’hui et la fiche entreprise sera réactivée dans Prospection pour rappeler le prospect absent.</p> : <p className="text-xs leading-5 text-muted-foreground">Une tâche HubSpot sera créée et associée au contact, à la société et au deal liés au rendez-vous.</p>}
                     </>
                   ) : null}
                 </>
