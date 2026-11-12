@@ -22,4 +22,5 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: node --experimental-strip-types --test tests/quick-deal-economics.test.mjs
       - run: node --experimental-strip-types --test tests/call-timing.test.mjs
+      - run: node --experimental-strip-types --test tests/call-volume.test.mjs
       - run: npm run build
