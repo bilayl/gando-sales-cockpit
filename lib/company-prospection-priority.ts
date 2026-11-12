@@ -88,6 +88,10 @@ export function getCompanyProspectionDecision(
     };
   }
 
+  if (stage === "DEMO_SCHEDULED") {
+    return { bucket: "OPPORTUNITY", priority: 88, priorityLabel: "Démo prévue", reason: "Démo déjà planifiée : sortir de la prospection active" };
+  }
+
   if (stage === "LOST" || containsAny(statusText, HARD_EXCLUSION_TERMS)) {
     const reason = containsAny(statusText, ["pas interesse", "ne souhaite pas donner suite"])
       ? "Pas intéressé / ne souhaite pas donner suite"
@@ -97,10 +101,6 @@ export function getCompanyProspectionDecision(
           ? "Numéro invalide"
           : "Compte perdu / clôturé";
     return { bucket: "EXCLUDED", priority: 99, priorityLabel: "Exclu", reason };
-  }
-
-  if (stage === "DEMO_SCHEDULED") {
-    return { bucket: "OPPORTUNITY", priority: 88, priorityLabel: "Démo prévue", reason: "Démo déjà planifiée : sortir de la prospection active" };
   }
 
   if (stage === "OPEN_DEAL" || containsAny(statusText, OPPORTUNITY_TERMS)) {
