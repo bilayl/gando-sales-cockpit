@@ -98,7 +98,7 @@ function inferredQualification(meeting: EnrichedMeeting): {
     return { status: "not_qualified", reason: "Résultat commercial négatif enregistré", outcome, result: "not_qualified" };
   }
   if (meeting.derived.status === "NO_SHOW") {
-    return { status: "not_qualified", reason: "Rendez-vous no-show", outcome, result: "no_show" };
+    return { status: "pending", reason: "Prospect absent au rendez-vous : SDR doit rappeler pour reprogrammer", outcome, result: "no_show" };
   }
   if (meeting.derived.status === "CANCELED") {
     return { status: "not_qualified", reason: "Rendez-vous annulé", outcome, result: "not_qualified" };
@@ -122,12 +122,15 @@ function meetingBucket(
   result: SetterCommercialResult | null,
   nextActionAt: string | null,
 ): SetterMeetingBucket {
-  // A follow-up without a scheduled task remains visible in Actions so it cannot be forgotten.
+  // A no-show is not a disqualification: the SDR must see it in Actions until
+  // the meeting is rebooked or its commercial result is explicitly changed.
+  if (result === "no_show") return "to_qualify";
   if (result === "follow_up" && !nextActionAt) return "to_qualify";
   if (result) return "history";
   const start = meeting.derived.startAt ? Date.parse(meeting.derived.startAt) : NaN;
   if (Number.isFinite(start) && start > Date.now() && !["CANCELED", "NO_SHOW"].includes(meeting.derived.status)) return "upcoming";
-  if (["CANCELED", "NO_SHOW"].includes(meeting.derived.status)) return "history";
+  if (meeting.derived.status === "NO_SHOW") return "to_qualify";
+  if (meeting.derived.status === "CANCELED") return "history";
   return "to_qualify";
 }
 
@@ -234,10 +237,7 @@ async function readCallAttemptMetrics(rows: MeetingWithTracking[]) {
 }
 
 function defaultTaskDueAt() {
-  const date = new Date();
-  date.setDate(date.getDate() + 3);
-  date.setHours(9, 0, 0, 0);
-  return date;
+  return new Date(Date.now() + 5 * 60 * 1000);
 }
 
 export async function GET(request: NextRequest) {
@@ -364,17 +364,21 @@ export async function POST(request: NextRequest) {
     const reviewNote = String(body?.reviewNote || "").trim().slice(0, 1000) || null;
     const setterOwnerId = String(body?.setterOwnerId || "").trim().slice(0, 120) || null;
     const legacyNextActionAt = String(body?.nextActionAt || "").trim() || null;
-    const createTask = body?.createTask === true
-      || (typeof body?.createTask === "undefined" && (commercialResult === "no_show" || Boolean(legacyNextActionAt)));
+    const createTask = commercialResult === "no_show" || body?.createTask === true
+      || (typeof body?.createTask === "undefined" && Boolean(legacyNextActionAt));
     const taskTitle = String(body?.taskTitle || "").trim().slice(0, 180)
-      || (commercialResult === "qualified" ? "Prochaine action après RDV qualifié" : "Relancer après le rendez-vous");
+      || (commercialResult === "no_show" ? "Rappeler le prospect absent et reprogrammer son rendez-vous"
+        : commercialResult === "qualified" ? "Prochaine action après RDV qualifié" : "Relancer après le rendez-vous");
     let nextActionAt: string | null = null;
 
     let qualificationStatus: SetterQualificationStatus = legacyQualification || "pending";
     if (commercialResult === "qualified") qualificationStatus = "qualified";
-    if (commercialResult === "not_qualified" || commercialResult === "no_show") qualificationStatus = "not_qualified";
+    if (commercialResult === "not_qualified") qualificationStatus = "not_qualified";
+    if (commercialResult === "no_show") qualificationStatus = "pending";
     if (commercialResult === "follow_up") qualificationStatus = "pending";
 
+    let taskCreated = false;
+    let actionWarnings: string[] = [];
     if (createTask) {
       const rawTaskDueAt = String(body?.taskDueAt || legacyNextActionAt || "").trim();
       const parsed = rawTaskDueAt ? new Date(rawTaskDueAt) : commercialResult === "no_show" ? defaultTaskDueAt() : null;
@@ -385,13 +389,29 @@ export async function POST(request: NextRequest) {
 
       const cockpit = await getMeetingsCockpit({ view: "all" });
       const meeting = cockpit.results.find(item => item.id === meetingId);
-      const actionResult = await processMeetingAction(meetingId, {
-        action: "next_action",
-        nextAction: taskTitle,
-        dueAt: nextActionAt,
-        ...(meeting ? { source: meetingSource(meeting) } : {}),
-      });
-      nextActionAt = typeof actionResult?.nextActionAt === "string" ? actionResult.nextActionAt : nextActionAt;
+      if (!meeting) throw Object.assign(new Error("Rendez-vous introuvable ou non associé au CRM."), { status: 404 });
+      const { data: oldReview } = await getSupabaseAdmin()
+        .from("setter_meeting_reviews").select("review_note,setter_owner_id").eq("meeting_id",meetingId).maybeSingle();
+      const old = parseStoredReview(oldReview?.review_note);
+      if (commercialResult === "no_show" && old?.result === "no_show" && old.nextActionAt) {
+        // The no-show was already recorded: keep the existing callback task
+        // rather than creating duplicates when an AE edits the note.
+        nextActionAt = old.nextActionAt;
+        actionWarnings = ["La relance existante est conservée pour éviter les doublons."];
+      } else {
+        const taskOwnerId = (setterOwnerId || oldReview?.setter_owner_id || "").trim();
+        const actionResult = await processMeetingAction(meetingId, {
+          action: commercialResult === "no_show" ? "no_show" : "next_action",
+          nextAction: taskTitle,
+          dueAt: nextActionAt,
+          notes: reviewNote || "",
+          ...(commercialResult === "no_show" && /^\d+$/.test(taskOwnerId) ? { taskOwnerId } : {}),
+          source: meetingSource(meeting),
+        });
+        taskCreated = actionResult?.taskCreated === true;
+        actionWarnings = Array.isArray(actionResult?.warnings) ? actionResult.warnings : [];
+        nextActionAt = typeof actionResult?.nextActionAt === "string" ? actionResult.nextActionAt : nextActionAt;
+      }
     }
 
     const now = new Date().toISOString();
@@ -413,7 +433,7 @@ export async function POST(request: NextRequest) {
       .single();
     if (error) throw error;
 
-    return NextResponse.json({ review: data, commercialResult, taskCreated: createTask, nextActionAt });
+    return NextResponse.json({ review: data, commercialResult, taskCreated, nextActionAt, warnings: actionWarnings });
   } catch (error) {
     return apiError(error);
   }
