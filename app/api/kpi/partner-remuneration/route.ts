@@ -30,6 +30,7 @@ type EligibleItem = {
 };
 
 const SUCCESSFUL_STATUSES = new Set(["active", "close", "captured"]);
+const ACTIVATED_STATUSES = new Set(["active", "close", "captured", "capture_issue"]);
 const FEE_MATCH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const PARTNER_API_SOURCE = "partner_api";
 const SOURCE_PAGE_SIZE = 500;
@@ -266,6 +267,10 @@ export async function GET() {
         if (calculationMode === "active_volume_rate") {
           if (deposit.status !== "active" || rateBps <= 0) return [];
           dueCents = rateReward(deposit.amountCents, rateBps);
+        } else if (calculationMode === "activated_volume_rate") {
+          // Revenue share: amount of each activated, paid deposit, even after closure.
+          if (deposit.startAt == null || !ACTIVATED_STATUSES.has(deposit.status) || rateBps <= 0) return [];
+          dueCents = rateReward(deposit.amountCents, rateBps);
         } else {
           if (!SUCCESSFUL_STATUSES.has(deposit.status)) return [];
           dueCents = rewardForDeposit(deposit.amountCents, tiers);
@@ -302,11 +307,12 @@ export async function GET() {
       const breakdown = [...breakdownMap.values()].sort((a, b) => b.dueCents - a.dueCents || a.accountName.localeCompare(b.accountName));
 
       const activatedDeposits = actorDeposits.filter(deposit => deposit.startAt != null);
-      const ineligibleStatuses = activatedDeposits.filter(deposit => {
-        return !SUCCESSFUL_STATUSES.has(deposit.status);
-      }).length;
+      const acceptedStatuses = calculationMode === "activated_volume_rate" ? ACTIVATED_STATUSES : SUCCESSFUL_STATUSES;
+      const ineligibleStatuses = activatedDeposits.filter(deposit =>
+        !acceptedStatuses.has(deposit.status),
+      ).length;
       const missingSecuringFees = activatedDeposits.filter(deposit =>
-        SUCCESSFUL_STATUSES.has(deposit.status) && !feeByDeposit.has(deposit.id),
+        acceptedStatuses.has(deposit.status) && !feeByDeposit.has(deposit.id),
       ).length;
 
       return {
@@ -330,7 +336,7 @@ export async function GET() {
         calculationMode,
         rateBps: rateBps || null,
         tiers: actorKey === "rl" ? tiers : [],
-        depositDetails: actorKey === "rl" ? eligible.map(item => ({
+        depositDetails: (actorKey === "rl" || actorKey === "resa-jumploc") ? eligible.map(item => ({
           id: item.deposit.id,
           status: item.deposit.status,
           activatedAt: item.deposit.startAt != null ? new Date(item.deposit.startAt).toISOString() : null,

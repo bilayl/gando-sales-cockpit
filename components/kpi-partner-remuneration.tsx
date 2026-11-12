@@ -136,6 +136,7 @@ export function KpiPartnerRemuneration() {
   const fleetee = data.rows.find(row => row.actorKey === "fleetee")
   const lr = data.rows.find(row => row.actorKey === "lr")
   const rl = data.rows.find(row => row.actorKey === "rl")
+  const jumploc = data.rows.find(row => row.actorKey === "resa-jumploc")
   const fleeteeCurrentMonth = fleetee?.monthly.find(row => row.month === data.currentMonth)
   const lastSync = data.source.lastSyncedAt
     ? new Date(data.source.lastSyncedAt).toLocaleString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
@@ -233,6 +234,101 @@ export function KpiPartnerRemuneration() {
               </tbody>
             </table>
           </div>
+        </Card>
+      ) : null}
+
+
+      {jumploc?.configured ? (
+        <Card className="overflow-hidden">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary">JumpLoc</div>
+              <div className="mt-0.5 text-sm font-semibold">Redevance sur les cautions activées</div>
+              <p className="mt-1 max-w-3xl text-[11px] leading-5 text-muted-foreground">
+                {percentBps(jumploc.rateBps)} HT du montant de chaque caution activée, avec frais de sécurisation encaissés.
+                Les cautions clôturées ou capturées restent comptabilisées ; les cautions en attente ou incomplètes sont exclues.
+                Les mois correspondent à l’encaissement des frais. Ces montants sont calculés, sans confirmation de versement.
+              </p>
+            </div>
+            <Badge variant="secondary" className="h-6 text-[10px]">Calcul automatique</Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
+            <div className="bg-card px-4 py-4">
+              <div className="text-[10px] font-medium text-muted-foreground">Cautions rémunérées</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">{integer(jumploc.eligibleDeposits)}</div>
+              <div className="mt-1 text-[10px] text-muted-foreground">{integer(jumploc.diagnostics?.sourceDeposits)} cautions créées au total</div>
+            </div>
+            <div className="bg-card px-4 py-4">
+              <div className="text-[10px] font-medium text-muted-foreground">Volume de caution éligible</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums">{euroCents(jumploc.eligibleTdvCents, 0)}</div>
+              <div className="mt-1 text-[10px] text-muted-foreground">Base de calcul de la redevance</div>
+            </div>
+            <div className="col-span-2 bg-card px-4 py-4 sm:col-span-1">
+              <div className="text-[10px] font-medium text-muted-foreground">Redevance cumulée HT</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums text-primary">{euroCents(jumploc.dueCents)}</div>
+              <div className="mt-1 text-[10px] text-muted-foreground">À rapprocher des versements réels</div>
+            </div>
+          </div>
+          <div className="border-b border-border px-4 py-3 text-xs font-semibold">Historique mensuel JumpLoc</div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[660px] text-left text-xs">
+              <thead className="bg-muted/20 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2.5 font-semibold">Mois du frais encaissé</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Cautions</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Volume éligible</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Taux</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Redevance HT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jumploc.monthly.length ? jumploc.monthly.map(row => (
+                  <tr key={row.month} className="border-t border-border">
+                    <td className="px-4 py-3 font-semibold capitalize">{monthLabel(row.month)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{integer(row.deposits)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{euroCents(row.tdvCents, 0)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{percentBps(jumploc.rateBps)}</td>
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums">{euroCents(row.dueCents)}</td>
+                  </tr>
+                )) : (
+                  <tr className="border-t border-border"><td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">Aucune caution JumpLoc éligible.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {jumploc.depositDetails?.length ? (
+            <details className="border-t border-border">
+              <summary className="cursor-pointer px-4 py-3 text-xs font-semibold hover:bg-muted/30">
+                Voir les {integer(jumploc.depositDetails.length)} cautions rémunérées
+              </summary>
+              <div className="max-h-[400px] overflow-auto">
+                <table className="w-full min-w-[760px] text-left text-[11px]">
+                  <thead className="sticky top-0 bg-muted text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2">Caution</th>
+                      <th className="px-4 py-2">Statut</th>
+                      <th className="px-4 py-2">Activation</th>
+                      <th className="px-4 py-2">Mois de redevance</th>
+                      <th className="px-4 py-2 text-right">Montant caution</th>
+                      <th className="px-4 py-2 text-right">Redevance HT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {jumploc.depositDetails.map(detail => (
+                      <tr key={detail.id} className="border-t border-border">
+                        <td className="px-4 py-2 font-mono" title={detail.id}>{detail.id}</td>
+                        <td className="px-4 py-2">{detail.status}</td>
+                        <td className="px-4 py-2">{detail.activatedAt ? new Date(detail.activatedAt).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—"}</td>
+                        <td className="px-4 py-2 capitalize">{monthLabel(detail.month)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{euroCents(detail.amountCents, 0)}</td>
+                        <td className="px-4 py-2 text-right font-semibold tabular-nums">{euroCents(detail.dueCents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ) : null}
         </Card>
       ) : null}
 
