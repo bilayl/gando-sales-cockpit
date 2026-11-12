@@ -88,6 +88,17 @@ export function getCompanyProspectionDecision(
     return { bucket: "EXCLUDED", priority: 99, priorityLabel: "Exclu", reason };
   }
 
+  // A missed meeting is an urgent SDR callback, never a dormant lead. Even
+  // when the HubSpot task is due slightly later today, keep it in Prospection.
+  if (stage === "FOLLOW_UP" && p.qualification_source === "meeting_no_show") {
+    return {
+      bucket: "ACTIONABLE",
+      priority: 1,
+      priorityLabel: "P1 · RDV manqué",
+      reason: p.qualification_reason || "Prospect absent au rendez-vous — le SDR doit rappeler pour reprogrammer",
+    };
+  }
+
   if (stage === "DEMO_SCHEDULED") {
     return { bucket: "OPPORTUNITY", priority: 88, priorityLabel: "Démo prévue", reason: "Démo déjà planifiée : sortir de la prospection active" };
   }
