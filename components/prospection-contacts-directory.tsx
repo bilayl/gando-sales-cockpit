@@ -20,7 +20,8 @@ import { formatDate, initials } from "@/lib/utils";
 
 type Contact = { id: string; properties: Record<string, string | null | undefined> };
 
-const FOLLOW_UP_STATUSES = new Set(["À recycler", "À rappeler"]);
+const FOLLOW_UP_CALL_OUTCOMES = new Set(["a_rappeler", "a_une_date_ulterieure", "interesse_mais", "en_attente_decision"]);
+const FOLLOW_UP_PROSPECTION_STATUSES = new Set(["À recycler", "À rappeler"]);
 
 function contactName(properties: Contact["properties"]) {
   return [properties.firstname, properties.lastname].filter(Boolean).join(" ") || properties.email || properties.phone || properties.mobilephone || "Contact sans nom";
@@ -40,8 +41,9 @@ function hasPhone(contact: Contact) {
 
 function needsFollowUp(contact: Contact) {
   const p = contact.properties;
-  return FOLLOW_UP_STATUSES.has(p.statut_prospection || "")
-    || Boolean(p.date_prochaine_relance || p.date_recyclage || p.date_de_rappel);
+  // Keep legacy reminders from call outcomes without exposing a second CRM status.
+  return FOLLOW_UP_PROSPECTION_STATUSES.has(p.statut_prospection || "")
+    || FOLLOW_UP_CALL_OUTCOMES.has(p.statut_de_lappel || "");
 }
 
 const directoryFilters: Array<{
