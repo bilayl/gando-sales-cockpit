@@ -271,7 +271,7 @@ export function AnalyticsView() {
 
   const k = data?.kpis;
   const metrics = [
-    { label: "Appels", value: k?.calls ?? 0, suffix: "", icon: PhoneCall },
+    { label: "Appels enregistrés HubSpot", value: k?.calls ?? 0, suffix: "", icon: PhoneCall },
     { label: "Contacts travaillés", value: k?.worked ?? 0, suffix: "", icon: UsersRound },
     { label: "RDV bookés", value: k?.meetings ?? 0, suffix: "", icon: CalendarCheck2 },
     { label: "Conversion", value: k ? `${k.conversion}` : "—", suffix: k ? "%" : "", icon: TrendingUp },
@@ -283,7 +283,7 @@ export function AnalyticsView() {
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-[-0.035em]">Statistiques</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Performance commerciale et historique complet des appels synchronisés avec HubSpot.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Indicateurs et historique HubSpot. Les appels Allo pas encore synchronisés sont comptés séparément dans les statistiques téléphoniques.</p>
           </div>
           <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1">
             {presets.map(item => (
