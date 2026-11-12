@@ -188,6 +188,39 @@ export async function withAlloCallAnalytics(args:{
         },
       };
     }) : [];
+    if(breakdown==="user" && insights){
+      // The analytics breakdown may itself be stale or omit unassigned calls.
+      // Reconcile the visible SDR rows against all individually verified calls.
+      const known=new Set(rows.map(row=>row.id));
+      for(const id of new Set([...Object.keys(insights.byUser),...Object.keys(previousInsights?.byUser||{})])){
+        if(known.has(id))continue;
+        const user=users.find(item=>item.id===id);
+        const currentGroup=insights.byUser[id]||null;
+        const oldGroup=previousInsights?.byUser[id]||null;
+        const metrics=emptyMetrics();
+        metrics.calls=verifiedCallVolume(
+          {checkedCalls:currentGroup?.total||0,partial:insights.partial},
+          previousInsights?{checkedCalls:oldGroup?.total||0,partial:previousInsights.partial}:null,
+        );
+        metrics.answerRate=verifiedRate(currentGroup,oldGroup,fullCurrent,fullPrevious);
+        rows.push({id,name:user?.name||user?.email||"Utilisateur Allo",subtitle:user?.email||null,metrics});
+        known.add(id);
+      }
+      const currentAssigned=Object.values(insights.byUser).reduce((sum,group)=>sum+group.total,0);
+      const previousAssigned=previousInsights?Object.values(previousInsights.byUser).reduce((sum,group)=>sum+group.total,0):0;
+      const unassigned=Math.max(0,insights.checkedCalls-currentAssigned);
+      const oldUnassigned=previousInsights?Math.max(0,previousInsights.checkedCalls-previousAssigned):0;
+      if(unassigned>0 || oldUnassigned>0){
+        const metrics=emptyMetrics();
+        metrics.calls=verifiedCallVolume(
+          {checkedCalls:unassigned,partial:insights.partial},
+          previousInsights?{checkedCalls:oldUnassigned,partial:previousInsights.partial}:null,
+        );
+        metrics.answerRate=metric(null,null);
+        rows.push({id:"unassigned",name:"Appels non attribués",subtitle:"Aucun utilisateur identifié sur l’appel",metrics});
+      }
+      rows.sort((a,b)=>(b.metrics.calls.value||0)-(a.metrics.calls.value||0)||a.name.localeCompare(b.name,"fr"));
+    }
     let partial=false;
     if(breakdown==="phone"&&canCompareTeam){
       const relevant=selectedNumber?lines.filter(l=>l.number===selectedNumber):lines;
