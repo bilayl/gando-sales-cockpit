@@ -3,6 +3,7 @@ import "server-only";
 import { hubspotJson } from "@/lib/hubspot";
 import { getBrevoMeetingScope, isBrevoMeeting, isGandoPresentationMeeting } from "@/lib/hubspot/brevo";
 import { createTask } from "@/lib/hubspot/tasks";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getAllGoogleCalendarEvents, isGoogleConfigured, type GoogleCalendarEvent } from "@/lib/google";
 import { applyGoogleOutcomes, GCAL_SYNC_SOURCE, saveGoogleOutcome, type GoogleMeetingStatus } from "@/lib/gcal-status";
 
@@ -33,6 +34,7 @@ const CONTACT_PROPERTIES = [
 
 const COMPANY_PROPERTIES = [
   "name", "domain", "phone", "city", "industry", "hubspot_owner_id", "tier_compte",
+  "statut_prospection", "hs_lead_status", "lifecyclestage",
   "notes_last_updated", "hs_last_sales_activity_timestamp", "notes_next_activity_date",
 ];
 
@@ -170,6 +172,7 @@ export type MeetingActionInput = {
   qualified?: boolean;
   nextAction?: string;
   dueAt?: string;
+  taskOwnerId?: string;
   newStart?: string;
   durationMinutes?: number;
   source?: {
@@ -665,12 +668,101 @@ async function updateObject(type: "contacts" | "deals", id: string, properties: 
 }
 
 function defaultRescheduleCallDueAt() {
-  return new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  // The task belongs in Today's Actions immediately after marking a no-show.
+  return new Date(Date.now() + 5 * 60 * 1000);
+}
+
+const NO_SHOW_REASONS = "Prospect absent au rendez-vous — SDR : rappeler pour proposer un nouveau créneau";
+
+async function noShowCompanyIds(meeting: EnrichedMeeting, warnings: string[]) {
+  const direct = unique(meeting.associations.companies.map(company => company.id));
+  if (direct.length) return direct;
+  const fromContacts: string[] = [];
+  for (const contact of meeting.associations.contacts) {
+    try {
+      const result = await hubspotJson(`/crm/v3/objects/contacts/${encodeURIComponent(contact.id)}?associations=companies`);
+      for (const association of result.associations?.companies?.results || []) {
+        if (association.id) fromContacts.push(String(association.id));
+      }
+    } catch {
+      warnings.push(`Entreprise introuvable pour le contact ${contact.id} : la tâche reste créée, mais le retour en prospection doit être vérifié.`);
+    }
+  }
+  return unique(fromContacts);
+}
+
+async function reactivateNoShowProspection(meeting: EnrichedMeeting, warnings: string[]) {
+  const companyIds = await noShowCompanyIds(meeting, warnings);
+  if (!companyIds.length) {
+    warnings.push("Aucune entreprise associée au rendez-vous : associer une entreprise pour que le SDR retrouve la relance dans Prospection.");
+    return;
+  }
+
+  const occurredAt = new Date().toISOString();
+  const meetingName = meeting.properties.hs_meeting_title || "Rendez-vous";
+  const reason = `${NO_SHOW_REASONS}. RDV : ${meetingName}.`;
+  for (const id of companyIds) {
+    const enriched = meeting.associations.companies.find(company => company.id === id);
+    const stage = enriched?.properties;
+    if (stage?.lifecyclestage?.toLowerCase() === "customer" || stage?.statut_prospection === "Gagné") {
+      warnings.push(`Entreprise ${id} déjà cliente : statut conservé, tâche de rappel créée.`);
+      continue;
+    }
+
+    const patch = { hs_lead_status: "BAD_TIMING", statut_prospection: "À relancer" };
+    try {
+      await hubspotJson(`/crm/objects/2026-03/companies/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ properties: patch }),
+      });
+    } catch (error) {
+      warnings.push(`Le statut de prospection HubSpot de l’entreprise ${id} n’a pas été synchronisé : ${error instanceof Error ? error.message : "erreur HubSpot"}.`);
+    }
+
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data: existing, error: readError } = await supabase.from("companies")
+        .select("hubspot_id,raw_data").eq("hubspot_id",id).maybeSingle();
+      if (readError) throw readError;
+      if (!existing) {
+        warnings.push(`Entreprise ${id} absente du cache Cockpit : la mise à jour apparaîtra après synchronisation HubSpot.`);
+        continue;
+      }
+      const raw = existing.raw_data || {};
+      const properties = { ...(raw.properties || {}), ...patch };
+      const { error: updateError } = await supabase.from("companies").update({
+        raw_data: { ...raw, properties, updatedAt: occurredAt },
+        hubspot_updated_at: occurredAt,
+        prospecting_status: "À relancer",
+        qualification_status: "À relancer",
+        qualification_score: 95,
+        qualification_reason: reason,
+        qualification_next_action_at: new Date(Date.now() - 60_000).toISOString(),
+        qualification_source: "meeting_no_show",
+      }).eq("hubspot_id", id);
+      if (updateError) throw updateError;
+    } catch (error) {
+      warnings.push(`La file de prospection Cockpit n’a pas été actualisée pour l’entreprise ${id} : ${error instanceof Error ? error.message : "erreur"}.`);
+    }
+  }
+  // Keep associated contacts in the SDR follow-up workflow instead of leaving
+  // them marked "RDV booké" after a meeting nobody attended.
+  for (const contact of meeting.associations.contacts) {
+    const status = contact.properties.statut_prospection;
+    if (status === "Gagné" || status === "Perdu") continue;
+    try {
+      await updateObject("contacts",contact.id,{statut_prospection:"À recycler"});
+    } catch {
+      warnings.push(`Contact ${contact.id} : statut à recycler non actualisé.`);
+    }
+  }
 }
 
 async function createNextAction(meeting: EnrichedMeeting, input: MeetingActionInput, warnings: string[], options: { callTask?: boolean } = {}) {
   const nextAction = options.callTask && !input.nextAction?.trim() ? "Appeler pour replacer le rendez-vous" : requiredText(input.nextAction, "Prochaine action");
-  const dueAt = options.callTask && !input.dueAt ? defaultRescheduleCallDueAt() : validFutureDate(input.dueAt, "Date de prochaine action");
+  const dueAt = options.callTask
+    ? (dateValue(input.dueAt)?.getTime() || 0) > Date.now() ? dateValue(input.dueAt)! : defaultRescheduleCallDueAt()
+    : validFutureDate(input.dueAt, "Date de prochaine action");
   const companyName = meeting.associations.company?.properties.name || "Compte sans société";
   const contact = meeting.associations.contact?.properties;
   const contactName = [contact?.firstname, contact?.lastname].filter(Boolean).join(" ");
@@ -678,12 +770,18 @@ async function createNextAction(meeting: EnrichedMeeting, input: MeetingActionIn
 
   await createTask({
     hs_task_subject: `${nextAction} — ${companyName}${contactName ? ` — ${contactName}` : ""}`,
-    hs_task_body: `Action créée depuis le rendez-vous « ${meeting.properties.hs_meeting_title || "Sans titre"} » dans Gando Sales Cockpit.${options.callTask ? " Le rendez-vous n’a pas été honoré : l’appel vise à replacer un créneau." : ""}`,
+    hs_task_body: `Action créée depuis le rendez-vous « ${meeting.properties.hs_meeting_title || "Sans titre"} » dans Gando Sales Cockpit.${options.callTask ? " Prospect absent : le SDR doit rappeler pour proposer un nouveau créneau. Ce n’est pas un refus commercial." : ""}`,
     hs_timestamp: dueAt.toISOString(),
     hs_task_status: "NOT_STARTED",
     hs_task_priority: "HIGH",
     hs_task_type: taskType,
-    ...(meeting.properties.hubspot_owner_id ? { hubspot_owner_id: meeting.properties.hubspot_owner_id } : {}),
+    ...((options.callTask
+      ? (input.taskOwnerId || meeting.associations.company?.properties.hubspot_owner_id || meeting.associations.contact?.properties.hubspot_owner_id || meeting.properties.hubspot_owner_id)
+      : meeting.properties.hubspot_owner_id)
+      ? { hubspot_owner_id: (options.callTask
+          ? (input.taskOwnerId || meeting.associations.company?.properties.hubspot_owner_id || meeting.associations.contact?.properties.hubspot_owner_id || meeting.properties.hubspot_owner_id)
+          : meeting.properties.hubspot_owner_id)! }
+      : {}),
   }, taskAssociations(meeting));
 
   for (const deal of meeting.associations.deals) {
@@ -807,6 +905,11 @@ export async function processMeetingAction(id: string, input: MeetingActionInput
   const notes = isNoShow ? (input.notes || "").trim() : requiredText(input.notes, "Notes");
   const commercialOutcome = input.action === "complete" ? requiredText(input.commercialOutcome, "Résultat commercial") : null;
   if (commercialOutcome && !COMMERCIAL_OUTCOMES.has(commercialOutcome)) throw new Error("Résultat commercial invalide");
+  if (isNoShow && meeting.derived.status === "NO_SHOW") {
+    // Repeated submissions must not create multiple SDR callback tasks.
+    await reactivateNoShowProspection(meeting,warnings);
+    return { meetingId:id, status, taskCreated:false, nextActionAt:meeting.derived.nextActionAt, warnings };
+  }
   const action = await createNextAction(meeting, input, warnings, { callTask: isNoShow });
   const noteLines = [
     `Statut : ${status}`,
@@ -841,6 +944,8 @@ export async function processMeetingAction(id: string, input: MeetingActionInput
       }),
     });
   }
+
+  if (isNoShow) await reactivateNoShowProspection(meeting,warnings);
 
   if (commercialOutcome) {
     const contactProperties: Record<string, string> = { statut_prospection: CONTACT_STATUS_BY_OUTCOME[commercialOutcome] };
