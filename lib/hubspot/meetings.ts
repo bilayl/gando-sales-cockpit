@@ -691,6 +691,26 @@ async function noShowCompanyIds(meeting: EnrichedMeeting, warnings: string[]) {
   return unique(fromContacts);
 }
 
+async function hydrateNoShowCompanies(meeting: EnrichedMeeting, warnings: string[]) {
+  if (meeting.associations.companies.length) return;
+  for (const id of await noShowCompanyIds(meeting, warnings)) {
+    try {
+      const company = await hubspotJson(
+        `/crm/objects/2026-03/companies/${encodeURIComponent(id)}?properties=name,hubspot_owner_id,lifecyclestage,statut_prospection`,
+      ) as HubSpotObject;
+      meeting.associations.companies.push(company);
+      if (!meeting.associations.company) meeting.associations.company = company;
+    } catch {
+      // Even if company details are temporarily unavailable, the action should
+      // still be linked to this verified company ID in HubSpot.
+      const company: HubSpotObject = { id, properties: {name:null,hubspot_owner_id:null,lifecyclestage:null,statut_prospection:null} };
+      meeting.associations.companies.push(company);
+      if (!meeting.associations.company) meeting.associations.company = company;
+      warnings.push(`Fiche entreprise ${id} partiellement chargée : association de la relance conservée.`);
+    }
+  }
+}
+
 async function reactivateNoShowProspection(meeting: EnrichedMeeting, warnings: string[]) {
   const companyIds = await noShowCompanyIds(meeting, warnings);
   if (!companyIds.length) {
@@ -913,6 +933,7 @@ export async function processMeetingAction(id: string, input: MeetingActionInput
 
   const status = input.action === "complete" ? "COMPLETED" : input.action === "no_show" ? "NO_SHOW" : "CANCELED";
   const isNoShow = status === "NO_SHOW";
+  if(isNoShow)await hydrateNoShowCompanies(meeting,warnings);
   const notes = isNoShow ? (input.notes || "").trim() : requiredText(input.notes, "Notes");
   const commercialOutcome = input.action === "complete" ? requiredText(input.commercialOutcome, "Résultat commercial") : null;
   if (commercialOutcome && !COMMERCIAL_OUTCOMES.has(commercialOutcome)) throw new Error("Résultat commercial invalide");
