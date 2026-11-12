@@ -104,7 +104,7 @@ const EMPTY_METRICS: ApiResponse["metrics"] = {
 };
 
 const VIEW_META: Record<MeetingBucket, { label: string; description: string }> = {
-  to_qualify: { label: "Actions", description: "Rendez-vous passés à statuer, ou relances sans tâche programmée." },
+  to_qualify: { label: "Actions", description: "Rendez-vous à traiter, notamment les absences nécessitant une nouvelle prise de contact SDR." },
   upcoming: { label: "À venir", description: "Prochains rendez-vous à préparer." },
   history: { label: "Historique", description: "Rendez-vous déjà traités avec un statut commercial." },
 };
@@ -113,7 +113,7 @@ const RESULT_META: Record<CommercialResult, { label: string; description: string
   qualified: { label: "Qualifié", description: "Le rendez-vous ouvre une vraie opportunité.", icon: Check },
   follow_up: { label: "À relancer", description: "Le loueur reste intéressant mais nécessite une nouvelle action.", icon: CalendarClock },
   not_qualified: { label: "Non qualifié", description: "Le rendez-vous ne mérite pas de poursuite commerciale.", icon: UserX },
-  no_show: { label: "No show", description: "Le rendez-vous n’a pas eu lieu.", icon: PhoneCall },
+  no_show: { label: "No show", description: "Prospect absent : relance SDR et retour immédiat en prospection.", icon: PhoneCall },
 };
 
 function formatDate(value?: string | null) {
@@ -143,6 +143,12 @@ function tomorrowAtNine() {
   date.setHours(9, 0, 0, 0);
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function callbackInFiveMinutes() {
+  const date = new Date(Date.now() + 5 * 60_000);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0,16);
 }
 
 function personName(object: HubSpotObject | null) {
@@ -250,9 +256,10 @@ export function SetterMeetingsPanel() {
     setActionMeeting(meeting);
     setSelectedResult(meeting.setterTracking.commercialResult || "");
     setActionNote(meeting.setterTracking.reviewNote || "");
-    setCreateTask(false);
-    setTaskTitle("");
-    setTaskDueAt(tomorrowAtNine());
+    const missed = meeting.setterTracking.commercialResult === "no_show";
+    setCreateTask(missed);
+    setTaskTitle(missed ? "Rappeler le prospect absent et reprogrammer son rendez-vous" : "");
+    setTaskDueAt(missed ? callbackInFiveMinutes() : tomorrowAtNine());
   }
 
   function closeAction() {
@@ -267,7 +274,13 @@ export function SetterMeetingsPanel() {
 
   function chooseResult(result: CommercialResult) {
     setSelectedResult(result);
-    if (!taskTitle) {
+    if (result === "no_show") {
+      setCreateTask(true);
+      setTaskTitle("Rappeler le prospect absent et reprogrammer son rendez-vous");
+      setTaskDueAt(callbackInFiveMinutes());
+      return;
+    }
+    if (!taskTitle || taskTitle === "Rappeler le prospect absent et reprogrammer son rendez-vous") {
       setTaskTitle(result === "qualified" ? "Prochaine action après RDV qualifié" : "Relancer après le rendez-vous");
     }
   }
@@ -292,9 +305,12 @@ export function SetterMeetingsPanel() {
       if (!response.ok) throw new Error(data.message || data.error || "Modification impossible");
 
       const label = RESULT_META[selectedResult].label;
-      toast.success(createTask
-        ? `${label} enregistré — tâche créée pour le ${formatDateTime(data.nextActionAt || taskDueAt)}.`
-        : `${label} enregistré — aucune tâche créée.`);
+      toast.success(data.taskCreated
+        ? `${label} : relance SDR créée pour le ${formatDateTime(data.nextActionAt || taskDueAt)} et entreprise renvoyée en prospection.`
+        : selectedResult === "no_show"
+          ? "Absence enregistrée — relance existante conservée dans Actions."
+          : `${label} enregistré — ${createTask ? "tâche existante conservée" : "aucune tâche créée"}.`);
+      if(Array.isArray(data.warnings) && data.warnings.length) toast.warning(data.warnings.join(" "));
       setActionMeeting(null);
       setSelectedResult("");
       setActionNote("");
@@ -391,6 +407,7 @@ export function SetterMeetingsPanel() {
                       <ResultBadge result={meeting.setterTracking.commercialResult} />
                       {meeting.setterTracking.nextActionAt ? <span className="text-xs font-medium text-primary">Tâche : {formatDateTime(meeting.setterTracking.nextActionAt)}</span> : null}
                       {meeting.setterTracking.commercialResult === "follow_up" && !meeting.setterTracking.nextActionAt ? <span className="text-xs font-medium text-amber-700">Aucune tâche programmée</span> : null}
+                      {meeting.setterTracking.commercialResult === "no_show" ? <span className="text-xs font-semibold text-amber-700">Prospect absent · SDR : rappeler et reprogrammer</span> : null}
                     </div>
                     {meeting.setterTracking.reviewNote ? <div className="mt-1 truncate text-xs text-muted-foreground">{meeting.setterTracking.reviewNote}</div> : null}
                   </div>
@@ -425,7 +442,7 @@ export function SetterMeetingsPanel() {
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Action rendez-vous</DialogTitle>
-            <DialogDescription>Choisis le statut commercial. La création d’une tâche est facultative.</DialogDescription>
+            <DialogDescription>Choisis le résultat du rendez-vous. Un no-show crée automatiquement une action de rappel et réactive la société dans Prospection.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5 py-1">
@@ -463,11 +480,12 @@ export function SetterMeetingsPanel() {
                 type="checkbox"
                 checked={createTask}
                 onChange={event => setCreateTask(event.target.checked)}
+                disabled={selectedResult === "no_show"}
                 className="mt-0.5 h-4 w-4 accent-primary"
               />
               <span>
                 <span className="block text-sm font-semibold">Créer une tâche de suivi</span>
-                <span className="block text-xs text-muted-foreground">Optionnel. À utiliser uniquement lorsqu’une prochaine action doit être planifiée.</span>
+                <span className="block text-xs text-muted-foreground">{selectedResult === "no_show" ? "Obligatoire pour un prospect absent : une tâche d’appel est créée pour le SDR." : "Optionnel pour les autres résultats."}</span>
               </span>
             </label>
 
