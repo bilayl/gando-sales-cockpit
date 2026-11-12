@@ -23,6 +23,16 @@ export function fromAlloMetric(value: unknown): CallMetric {
   const delta = o.change == null ? null : Number(o.change);
   return metric(current, prev, delta);
 }
+// Counts from individual, deduplicated Allo call IDs take priority over cached provider summaries.
+export function verifiedCallVolume(
+  current: { checkedCalls: number; partial: boolean } | null,
+  previous: { checkedCalls: number; partial: boolean } | null,
+): CallMetric {
+  return metric(
+    current && !current.partial ? current.checkedCalls : null,
+    previous && !previous.partial ? previous.checkedCalls : null,
+  );
+}
 export function row(id: string, name: string, subtitle: string | null, data: CallMetrics): CallStatsRow {
   return { id, name, subtitle, metrics: data };
 }

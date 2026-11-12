@@ -2,7 +2,7 @@ import "server-only";
 import { getAlloCallInsights, type CallAnswerInsights, type AnswerGroup } from "@/lib/withallo-call-insights";
 import { classifyAlloAnswer } from "@/lib/call-outcome";
 import { withAlloRequest, listWithAlloNumbers, WithAlloError } from "@/lib/withallo";
-import { emptyMetrics, fromAlloMetric, metric, metricsFromRecords, recordsBreakdown, type CallRecord } from "@/lib/call-analytics-math";
+import { emptyMetrics, fromAlloMetric, metric, metricsFromRecords, recordsBreakdown, verifiedCallVolume, type CallRecord } from "@/lib/call-analytics-math";
 import type { CallAnalyticsRange, CallAnalyticsResponse, CallAnalyticsView, CallAnalyticsBreakdown, CallMetrics, CallStatsRow, CallFunnelItem } from "@/lib/call-analytics-types";
 import type { CockpitAccess } from "@/lib/cockpit-access";
 
@@ -91,13 +91,22 @@ async function outbound(range:CallAnalyticsRange,filter:Record<string,string[]>)
 }
 async function searchCalls(range:{from:string;to:string},direction:"INBOUND"|"OUTBOUND",userId:string|null,number:string|null){
   const calls:AlloCall[]=[];
+  const seen=new Set<string>();
   let partial=false;
   for(let page=1;page<=10;page++){
     const query={type:"CALL",direction,sort:"DATE_DESC",date:range,page,size:100,...(userId?{user_id:userId}:{}),...(number?{allo_number:number}:{})};
     const response=await withAlloRequest<{data?:AlloCall[];pagination?:{has_more?:boolean}}>("/v2/api/conversations/items/search",{method:"POST",body:JSON.stringify(query)});
     const results=Array.isArray(response.data)?response.data:[];
-    calls.push(...results);
-    if(!response.pagination?.has_more)break;
+    for(const call of results){
+      if(!call.id || seen.has(call.id))continue;
+      seen.add(call.id);
+      calls.push(call);
+    }
+    if(!response.pagination?.has_more){
+      const reported=(response.pagination as {total_count?:number}|undefined)?.total_count;
+      if(Number.isFinite(reported)&&Number(reported)>seen.size)partial=true;
+      break;
+    }
     if(page===10)partial=true;
   }
   return {calls,partial};
@@ -157,17 +166,26 @@ export async function withAlloCallAnalytics(args:{
     if(insights?.partial)notes.push("Plus de 400 appels : seuls les appels vérifiés sont comptés dans le détail et le taux de réponse est indisponible.");
     const official=toMetrics(base);
     const expectedCurrent=official.calls.value;
-    const expectedPrevious=official.calls.previous;
-    const fullCurrent=Boolean(insights && !insights.partial && expectedCurrent !== null && insights.checkedCalls === expectedCurrent);
-    const fullPrevious=Boolean(previousInsights && !previousInsights.partial && expectedPrevious !== null && previousInsights.checkedCalls === expectedPrevious);
+    const verifiedCalls=verifiedCallVolume(insights,previousInsights);
+    const fullCurrent=Boolean(insights && !insights.partial);
+    const fullPrevious=Boolean(previousInsights && !previousInsights.partial);
+    if(fullCurrent && expectedCurrent!==verifiedCalls.value)notes.push(
+      `Écart Allo : Analytics annonce ${expectedCurrent} appels ; ${verifiedCalls.value} appels uniques trouvés dans l’historique. Le KPI utilise l’historique vérifié.`,
+    );
+    if(!fullCurrent)notes.push("Total d’appels non vérifiable : historique Allo indisponible ou incomplet. Aucun total non vérifié n’est affiché.");
     const rows=breakdown==="user" ? toRows(base).map(row=>{
       const currentGroup=insights?.byUser?.[row.id] || null;
       const oldGroup=previousInsights?.byUser?.[row.id] || null;
       return {
         ...row,
-        metrics:{...row.metrics,answerRate:verifiedRate(currentGroup,oldGroup,
-          fullCurrent && currentGroup?.total===row.metrics.calls.value,
-          fullPrevious)},
+        metrics:{
+          ...row.metrics,
+          calls:verifiedCallVolume(
+            insights?{checkedCalls:currentGroup?.total||0,partial:insights.partial}:null,
+            previousInsights?{checkedCalls:oldGroup?.total||0,partial:previousInsights.partial}:null,
+          ),
+          answerRate:verifiedRate(currentGroup,oldGroup,fullCurrent,fullPrevious),
+        },
       };
     }) : [];
     let partial=false;
@@ -181,9 +199,12 @@ export async function withAlloCallAnalytics(args:{
           id:sampled[i].number,name:sampled[i].name||sampled[i].number,subtitle:sampled[i].number,
           metrics:{
             ...toMetrics(item.value),
+            calls:verifiedCallVolume(
+              insights?{checkedCalls:insights.byPhone?.[sampled[i].number]?.total||0,partial:insights.partial}:null,
+              previousInsights?{checkedCalls:previousInsights.byPhone?.[sampled[i].number]?.total||0,partial:previousInsights.partial}:null,
+            ),
             answerRate:verifiedRate(insights?.byPhone?.[sampled[i].number]||null,previousInsights?.byPhone?.[sampled[i].number]||null,
-              fullCurrent && insights?.byPhone?.[sampled[i].number]?.total===toMetrics(item.value).calls.value,
-              fullPrevious),
+              fullCurrent,fullPrevious),
           },
         });
         else partial=true;
@@ -194,15 +215,15 @@ export async function withAlloCallAnalytics(args:{
       if(!lines.length)notes.push("L’accès à la liste des lignes nécessite la permission NUMBERS_READ sur la clé Allo.");
     }
     if(breakdown==="phone"&&!canCompareTeam)notes.push("La comparaison par ligne est réservée aux administrateurs pour ne pas exposer l’activité de collègues.");
-    if(rows.length===0 && breakdown==="user" && selectedUser && toMetrics(base).calls.value>0){
+    if(rows.length===0 && breakdown==="user" && selectedUser && verifiedCalls.available!==false && verifiedCalls.value>0){
       const u=users.find(x=>x.id===selectedUser);
       rows.push({id:selectedUser,name:u?.name||u?.email||"Mes appels",subtitle:u?.email||null,metrics:{
-        ...official,answerRate:summaryRate(insights,previousInsights,fullCurrent,fullPrevious),
+        ...official,calls:verifiedCalls,answerRate:summaryRate(insights,previousInsights,fullCurrent,fullPrevious),
       }});
     }
     notes.push("Le taux de réponse Gando utilise les résultats individuels, en excluant NRP et messagerie même si Allo indique ANSWERED.");
     return {source:"allo",view,breakdown,period:range,
-      metrics:{...official,answerRate:summaryRate(insights,previousInsights,fullCurrent,fullPrevious)},
+      metrics:{...official,calls:verifiedCalls,answerRate:summaryRate(insights,previousInsights,fullCurrent,fullPrevious)},
       rows,userOptions,phoneOptions,
       filterId:selectedUser||selectedNumber,canCompareTeam,updatedAt:base.last_updated||null,funnel:[],insights,notes,partial:partial||Boolean(insights?.partial)};
   }
@@ -222,10 +243,21 @@ export async function withAlloCallAnalytics(args:{
   const previous=p.calls.map(call=>toCallRecord(call,names));
   const rows=recordsBreakdown(current,previous,breakdown).map(row=>({
     ...row,
-    metrics:{...row.metrics,answerRate:c.partial||p.partial?metric(null,null):row.metrics.answerRate},
+    metrics:{
+      ...row.metrics,
+      calls:verifiedCallVolume(
+        {checkedCalls:current.filter(call=>(breakdown==="user"?call.ownerKey:call.phoneKey)===row.id).length,partial:c.partial},
+        {checkedCalls:previous.filter(call=>(breakdown==="user"?call.ownerKey:call.phoneKey)===row.id).length,partial:p.partial},
+      ),
+      answerRate:c.partial||p.partial?metric(null,null):row.metrics.answerRate,
+    },
   }));
   const stats=metricsFromRecords(current,previous);
   if(c.partial||p.partial) stats.answerRate=metric(null,null);
+  stats.calls=verifiedCallVolume(
+    {checkedCalls:current.length,partial:c.partial},
+    {checkedCalls:previous.length,partial:p.partial},
+  );
   if(c.partial||p.partial)notes.push("La liste dépasse 1 000 appels par période : choisissez une période plus courte pour obtenir des chiffres complets.");
   if(view==="outbound")notes.push("L’entonnoir sortant Allo mesure des connexions téléphoniques, y compris parfois répondeurs et NRP ; le taux de réponse Gando corrigé les exclut.");
   if(view==="inbound")notes.push("Les appels marqués NRP, manqués ou messagerie sont exclus des répondus, même en présence du résultat technique ANSWERED.");

@@ -24,7 +24,7 @@ const VIEWS: {id:CallAnalyticsView;label:string}[]=[
   {id:"power",label:"Power dialer"},
 ];
 const METRICS: {key:CallMetricKey;label:string;short:string}[]=[
-  {key:"calls",label:"Total des appels",short:"Appels"},
+  {key:"calls",label:"Total des appels vérifiés",short:"Appels"},
   {key:"talkSeconds",label:"Temps de conversation",short:"Conversation"},
   {key:"longCalls",label:"Appels de plus d’1 min",short:"> 1 min"},
   {key:"answerRate",label:"Taux de réponse",short:"Réponse"},
@@ -158,7 +158,7 @@ export function CallStatsDashboard() {
           <Link href="/phone" className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"><ArrowLeft size={13}/> Retour aux appels</Link>
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Téléphonie · CRM Gando</div>
           <h1 className="mt-1 text-2xl font-semibold tracking-[-0.04em]">Statistiques d’appels</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Performance commerciale, conversations et comparaison avec la période précédente.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Une tentative Allo = un appel unique (y compris NRP et sans réponse). Dates en heure de Paris.</p>
         </div>
         <Link href="/phone" className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-muted"><Headphones size={14}/> Enregistrements et transcriptions</Link>
       </div>
@@ -196,7 +196,7 @@ export function CallStatsDashboard() {
       </div>
 
       {data ? <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-        <div className="flex flex-wrap items-center gap-1.5"><span className="font-semibold text-foreground">{source==="allo"?"Source : Allo (Analytics)":"Source : activités HubSpot CRM"}</span><span>·</span><span>{rangeLabel(data.period.from,data.period.to)}</span><span>vs.</span><span>{rangeLabel(data.period.previousFrom,data.period.previousTo)}</span></div>
+        <div className="flex flex-wrap items-center gap-1.5"><span className="font-semibold text-foreground">{source==="allo"?"Source : historique Allo · appels dédoublonnés":"Source : activités HubSpot CRM"}</span><span>·</span><span>{rangeLabel(data.period.from,data.period.to)}</span><span>vs.</span><span>{rangeLabel(data.period.previousFrom,data.period.previousTo)}</span></div>
         <span>Mis à jour {data.updatedAt?new Intl.DateTimeFormat("fr-FR",{dateStyle:"short",timeStyle:"short"}).format(new Date(data.updatedAt)):"au chargement"} · Consultation {loadedAt?new Intl.DateTimeFormat("fr-FR",{timeStyle:"short"}).format(new Date(loadedAt)):"—"}</span>
       </div>:null}
 
@@ -204,6 +204,7 @@ export function CallStatsDashboard() {
       {error?<p role="alert" className="rounded-xl border border-destructive/40 bg-card px-4 py-3 text-sm text-destructive">{error}</p>:null}
 
       {data ? <>
+        {source==="allo" && view!=="power" && data.metrics.calls.available===false ? <p role="status" className="text-xs text-amber-700">Total non vérifiable pour la période : chiffre masqué afin d’éviter une statistique inexacte.</p> : null}
         {loading?<div role="status" className="text-xs text-muted-foreground"><Loader2 size={12} className="mr-1 inline animate-spin"/>Actualisation…</div>:null}
         {view==="power" ? <div className="rounded-2xl border border-border bg-card p-6"><h2 className="text-base font-semibold">Power Dialer</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Les sources disponibles ne distinguent pas encore de manière fiable l’historique des appels lancés spécifiquement par Power Dialer. Ce rapport reste volontairement vide pour éviter des statistiques trompeuses.</p><a href="https://web.withallo.com/" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">Ouvrir les rapports Allo <ArrowUpRight size={13}/></a></div> :
         <>

@@ -83,7 +83,13 @@ export async function getAlloCallInsights(input: {
       }
       accumulator.checkedCalls++;
     }
-    if (!result.pagination?.has_more) break;
+    if (!result.pagination?.has_more) {
+      // Treat an incomplete page reported by the provider as partial data,
+      // even if has_more is missing.
+      if (Number.isFinite(result.pagination?.total_count) &&
+          Number(result.pagination?.total_count) > seen.size) accumulator.partial = true;
+      break;
+    }
     if (page === 4) accumulator.partial = true;
   }
   return accumulator;
