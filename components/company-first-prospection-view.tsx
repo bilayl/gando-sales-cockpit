@@ -39,6 +39,7 @@ function companyLocation(properties: Record<string, string | null | undefined>) 
 }
 
 function companySuggestion(stage: CompanyStage, decision: ReturnType<typeof getCompanyProspectionDecision>) {
+  if (decision.priorityLabel === "P1 · RDV manqué") return "Rappeler le prospect absent pour reprogrammer";
   if (decision.bucket === "SNOOZED") return "Attendre la prochaine relance";
   if (decision.bucket === "OPPORTUNITY") return "Préparer le RDV / deal";
   if (decision.bucket === "EXCLUDED") return "Ne pas appeler";
