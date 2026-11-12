@@ -27,7 +27,6 @@ const parsers = {
   owner: parseAsArrayOf(parseAsString).withDefault([]),
   stage: parseAsArrayOf(parseAsString).withDefault([]),
   prospectionStatus: parseAsArrayOf(parseAsString).withDefault([]),
-  callStatus: parseAsArrayOf(parseAsString).withDefault([]),
   fleetSize: parseAsArrayOf(parseAsString).withDefault([]),
 };
 
@@ -40,7 +39,6 @@ const FILTER_KEYS: CompanyFilterKey[] = [
   "owner",
   "stage",
   "prospectionStatus",
-  "callStatus",
   "fleetSize",
 ];
 
@@ -79,7 +77,6 @@ export function useCompanyProspectionParams() {
       owner: filters.owner?.length ? filters.owner : null,
       stage: filters.stage?.length ? filters.stage : null,
       prospectionStatus: filters.prospectionStatus?.length ? filters.prospectionStatus : null,
-      callStatus: filters.callStatus?.length ? filters.callStatus : null,
       fleetSize: filters.fleetSize?.length ? filters.fleetSize : null,
     });
   }
