@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CalendarDays, ChevronDown, ChevronRight, Loader2, RefreshCw, Save, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -262,7 +262,7 @@ export function KpiRenterGuaranteeBalance() {
             </TableHeader>
             <TableBody>
               {rows.map(row => (
-                <React.Fragment key={row.accountId}><TableRow className="group">
+                <Fragment key={row.accountId}><TableRow className="group">
                   <TableCell className="pr-0">
                     {row.guarantees.length > 0 ? <button type="button" aria-label={"Détails garanties " + row.name}
                       onClick={() => setExpanded(old => ({ ...old, [row.accountId]: !old[row.accountId] }))}
@@ -295,7 +295,7 @@ export function KpiRenterGuaranteeBalance() {
                       <GuaranteeEditor key={item.captureId} item={item} accountId={row.accountId}
                         canEdit={report.canEdit} onSaved={load}/>)}</div>
                   </TableCell>
-                </TableRow> : null}</React.Fragment>
+                </TableRow> : null}</Fragment>
               ))}
               {!rows.length ? <TableRow><TableCell colSpan={9} className="h-24 text-center text-xs text-muted-foreground">Aucun loueur pour cette sélection.</TableCell></TableRow> : null}
             </TableBody>
