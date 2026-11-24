@@ -7,6 +7,7 @@ import { WithAlloRecordingPlayer } from "@/components/withallo-recording-player"
 import { WithAlloCrmSyncPanel } from "@/components/withallo-crm-sync-panel";
 import { WithAlloAiSearch } from "@/components/withallo-ai-search";
 import { WithAlloCallButton } from "@/components/withallo-call-button";
+import { WithAlloObjections } from "@/components/withallo-objections";
 import { WithAlloPostCallActions } from "@/components/withallo-postcall-actions";
 import type { AlloCallDetailView } from "@/lib/withallo-call-detail";
 
@@ -27,7 +28,7 @@ type ListCall = {
   recordingAvailable: boolean;
 };
 
-type Tab = "summary" | "transcript" | "actions" | "agents";
+type Tab = "summary" | "transcript" | "objections" | "actions" | "agents";
 
 const dateFmt = (text: string | null) => {
   const d = new Date(text || "");
@@ -75,6 +76,7 @@ function CallDetails({ call, loading, error, onRefresh }: {
   const tabDefs: { id: Tab; text: string; icon: typeof Sparkles; count?: number }[] = [
     { id:"summary", text:"Résumé", icon:Sparkles },
     { id:"transcript", text:"Transcription", icon:ClipboardList },
+    { id:"objections", text:"Objections", icon:Sparkles },
     { id:"actions", text:"Actions", icon:Check, count:call.actions.length },
     { id:"agents", text:"Agents", icon:Users, count:call.agents.length },
   ];
@@ -134,6 +136,7 @@ function CallDetails({ call, loading, error, onRefresh }: {
               <p className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">Transcription indisponible dans Allo pour cet appel.</p>}
           </section>
         ) : null}
+        {tab === "objections" ? <section role="tabpanel"><WithAlloObjections key={call.id} callId={call.id}/></section> : null}
         {tab === "actions" ? (
           <section role="tabpanel">
             <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="font-semibold">Actions identifiées par Allo</h3><p className="mt-1 text-xs text-muted-foreground">Éléments extraits du compte rendu Allo, sans création automatique de tâches.</p></div>
@@ -229,6 +232,7 @@ export function WithAlloCallsWorkspace() {
     </div>
     <WithAlloCrmSyncPanel />
     <WithAlloAiSearch />
+    <WithAlloObjections />
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       <div className="rounded-xl border border-border bg-card p-3.5"><p className="text-[11px] text-muted-foreground">Appels récupérés</p><div className="mt-1 text-xl font-semibold">{calls.length}</div></div>
       <div className="rounded-xl border border-border bg-card p-3.5"><p className="text-[11px] text-muted-foreground">Sortants</p><div className="mt-1 text-xl font-semibold">{outbound}</div></div>
